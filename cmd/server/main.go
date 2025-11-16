@@ -1,0 +1,123 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
+	_ "modernc.org/sqlite"
+
+	"github.com/base48/member-portal/internal/auth"
+	"github.com/base48/member-portal/internal/config"
+	"github.com/base48/member-portal/internal/handler"
+)
+
+func main() {
+	// Load .env file if exists
+	godotenv.Load()
+
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Connect to database
+	db, err := sql.Open("sqlite", cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	// Enable foreign keys for SQLite
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		log.Fatalf("Failed to enable foreign keys: %v", err)
+	}
+
+	// Initialize authenticator
+	ctx := context.Background()
+	authenticator, err := auth.New(ctx, cfg)
+	if err != nil {
+		log.Fatalf("Failed to create authenticator: %v", err)
+	}
+
+	// Initialize handlers
+	h, err := handler.New(authenticator, db, "web/templates")
+	if err != nil {
+		log.Fatalf("Failed to create handler: %v", err)
+	}
+
+	// Setup router
+	r := chi.NewRouter()
+
+	// Middleware
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Timeout(60 * time.Second))
+
+	// Static files
+	fileServer := http.FileServer(http.Dir("web/static"))
+	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
+
+	// Public routes
+	r.Get("/", h.HomeHandler)
+
+	// Auth routes
+	r.Route("/auth", func(r chi.Router) {
+		r.Get("/login", authenticator.LoginHandler)
+		r.Get("/callback", authenticator.CallbackHandler)
+		r.Get("/logout", authenticator.LogoutHandler)
+	})
+
+	// Protected routes
+	r.Group(func(r chi.Router) {
+		r.Use(authenticator.RequireAuth)
+		r.Get("/dashboard", h.DashboardHandler)
+		r.Get("/profile", h.ProfileHandler)
+		r.Post("/profile", h.ProfileHandler)
+	})
+
+	// Create server
+	srv := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in goroutine
+	go func() {
+		log.Printf("Starting server on port %s", cfg.Port)
+		log.Printf("Base URL: %s", cfg.BaseURL)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
+
+	// Graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	fmt.Println("Server stopped")
+}

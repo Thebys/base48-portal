@@ -1,0 +1,24 @@
+{{template "layout.html" .}}
+
+{{define "content"}}
+<div class="px-4 py-6 sm:px-0">
+    <div class="text-center">
+        <h1 class="text-4xl font-bold text-gray-900 mb-4">
+            Base48 Member Portal
+        </h1>
+        <p class="text-xl text-gray-600 mb-8">
+            Správa členství v hackerspace Base48
+        </p>
+        
+        {{if .User}}
+        <a href="/dashboard" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+            Přejít na Dashboard
+        </a>
+        {{else}}
+        <a href="/auth/login" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+            Přihlásit se přes Keycloak
+        </a>
+        {{end}}
+    </div>
+</div>
+{{end}}
