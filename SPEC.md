@@ -44,7 +44,7 @@ Level (úrovně členství)
 
 User (členové)
 ├── ID
-├── KeycloakID (string, unique) - propojení s Keycloak
+├── KeycloakID (string, unique, nullable) - propojení s Keycloak, NULL pro importované uživatele
 ├── Email (string, unique)
 ├── Realname (string, optional)
 ├── Phone (string, optional)
@@ -57,7 +57,9 @@ User (členové)
 ├── KeysReturned (timestamp, optional)
 ├── State (enum: awaiting, accepted, rejected, exmember, suspended)
 ├── IsCouncil (bool)
-└── IsStaff (bool)
+├── IsStaff (bool)
+├── CreatedAt (timestamp)
+└── UpdatedAt (timestamp)
 
 Payment (platby)
 ├── ID
@@ -81,8 +83,13 @@ Fee (očekávané poplatky)
 
 UNIQUE CONSTRAINTS:
 - Level: Name
-- User: KeycloakID, Email, PaymentsID (nullable)
+- User: KeycloakID (nullable), Email, PaymentsID (nullable)
 - Payment: (Kind, KindID)
+
+NOTES:
+- KeycloakID je nullable - umožňuje import uživatelů ze staré databáze
+- Při prvním přihlášení přes Keycloak se automaticky linkuje pomocí LinkKeycloakID query
+- Partial index na keycloak_id WHERE keycloak_id IS NOT NULL pro výkon
 ```
 
 ## Scope - CO NEDĚLÁME ❌
@@ -97,37 +104,45 @@ UNIQUE CONSTRAINTS:
 
 ## Technický stack
 
-- **Jazyk:** Go 1.21+
+- **Jazyk:** Go 1.24
 - **Web framework:** Chi router (lehký, idiomatický)
-- **Templates:** templ (type-safe, fast)
-- **CSS:** Tailwind CSS (utility-first, minimální)
-- **Databáze:** SQLite (jednoduché) nebo PostgreSQL (produkce)
+- **Templates:** html/template (stdlib, simple)
+- **CSS:** Tailwind CSS (via CDN, utility-first)
+- **Databáze:** SQLite (modernc.org/sqlite - pure Go, bez CGO)
 - **ORM:** sqlc (type-safe SQL, žádná magie)
 - **Auth:** go-oidc (Keycloak OIDC)
 - **Session:** gorilla/sessions
-- **Decimal:** shopspring/decimal (přesná aritmetika)
+- **Config:** kelseyhightower/envconfig
 
 ## Architektura
 
 ```
 base48-portal/
 ├── cmd/
-│   └── server/          # Main aplikace
+│   ├── server/          # Main aplikace
+│   └── import/          # Import tool ze staré databáze (rememberportal)
 ├── internal/
-│   ├── config/          # Konfigurace
+│   ├── config/          # Konfigurace (envconfig)
 │   ├── auth/            # Keycloak OIDC
 │   ├── db/              # Database layer (sqlc generated)
-│   ├── handler/         # HTTP handlery
-│   ├── middleware/      # Auth middleware
-│   ├── model/           # Domain modely
-│   └── service/         # Business logika
+│   └── handler/         # HTTP handlery
 ├── web/
-│   ├── templates/       # templ komponenty
-│   └── static/          # CSS, JS, assets
+│   ├── templates/       # html/template soubory
+│   │   ├── layout.html  # Shared layout
+│   │   ├── home.html
+│   │   ├── dashboard.html
+│   │   └── profile.html
+│   └── static/          # (budoucí) CSS, JS, assets
 ├── migrations/          # SQL migrace
+│   ├── 001_initial_schema.sql
+│   ├── 002_allow_null_keycloak_id.sql
+│   ├── 002_import_old_data.sql
+│   └── rememberportal.sqlite3 (gitignored)
+├── data/                # SQLite databáze (gitignored)
 ├── sqlc.yaml            # sqlc konfigurace
 ├── go.mod
 ├── go.sum
+├── SPEC.md
 └── README.md
 ```
 
@@ -135,9 +150,10 @@ base48-portal/
 
 1. **DRY** - žádná duplikace, sdílené komponenty
 2. **Explicitní > Implicitní** - žádná magie, čitelný kód
-3. **Type-safe** - sqlc pro DB, templ pro templates
+3. **Type-safe** - sqlc pro DB, html/template pro UI
 4. **Minimální dependencies** - pouze to co potřebujeme
 5. **Easy to deploy** - single binary + static files
+6. **Pure Go** - žádný CGO, běží všude (modernc.org/sqlite)
 
 ## Fáze implementace
 
@@ -149,12 +165,19 @@ base48-portal/
 - [x] Základní server setup
 - [x] Authentication middleware
 - [x] Session management
+- [x] Template rendering (html/template s layout pattern)
+- [x] Auto-registration při prvním přihlášení
+- [x] Import tool ze staré rememberportal databáze
+- [x] Automatické linkování Keycloak ID pro importované uživatele
+- [x] Dashboard s přehledem členství, plateb a poplatků
+- [x] Profile view/edit (realname, phone, alt_contact)
 
-### Fáze 2: Core features
-- [ ] User profile view/edit
+### Fáze 2: Core features (ČÁSTEČNĚ DOKONČENO)
+- [x] User profile view/edit
+- [x] Payment history view (v dashboardu)
+- [x] Fee overview (v dashboardu)
 - [ ] Member listing (staff only)
-- [ ] Payment history view
-- [ ] Fee overview
+- [ ] Payment balance calculation improvements
 
 ### Fáze 3: Admin features
 - [ ] Member state management
@@ -171,22 +194,41 @@ base48-portal/
 
 ```bash
 # Server
-PORT=8080
-BASE_URL=http://localhost:8080
+PORT=4848
+BASE_URL=http://localhost:4848
 
 # Database
-DATABASE_URL=sqlite:///data/portal.db
-# nebo: postgres://user:pass@localhost/base48
+DATABASE_URL=file:./data/portal.db?_fk=1
+# SQLite s foreign key constraints enabled
 
 # Keycloak
-KEYCLOAK_URL=https://auth.base48.cz
-KEYCLOAK_REALM=base48
-KEYCLOAK_CLIENT_ID=member-portal
-KEYCLOAK_CLIENT_SECRET=xxx
+KEYCLOAK_URL=https://sso.base48.cz
+KEYCLOAK_REALM=master
+KEYCLOAK_CLIENT_ID=go-member-portal-dev
+KEYCLOAK_CLIENT_SECRET=your-secret-here
 
 # Session
-SESSION_SECRET=random-32-bytes-here
+SESSION_SECRET=generate-with-openssl-rand-base64-32
 ```
+
+## Data Import
+
+Pro import ze staré rememberportal databáze:
+
+```bash
+# 1. Zkopíruj starou databázi
+cp /path/to/rememberportal.sqlite3 migrations/
+
+# 2. Spusť import
+go build -o import.exe cmd/import/main.go
+./import.exe
+```
+
+Import automaticky:
+- Naimportuje všechny membership levels (12 úrovní)
+- Naimportuje všechny uživatele (152 users)
+- Nastaví keycloak_id na NULL
+- Při prvním přihlášení se keycloak_id automaticky linkuje
 
 ## Security considerations
 
@@ -197,8 +239,42 @@ SESSION_SECRET=random-32-bytes-here
 - XSS prevention (templ auto-escaping)
 - Rate limiting (optional)
 
+## Implementované Features
+
+### ✅ Authentication & Authorization
+- Keycloak OIDC SSO integrace
+- Session management (gorilla/sessions)
+- Auto-registration nových uživatelů
+- Auto-linking importovaných uživatelů
+
+### ✅ User Management
+- Dashboard s přehledem členství
+- Profile edit (realname, phone, alt_contact)
+- Zobrazení stavu členství (accepted/awaiting/suspended/exmember/rejected)
+- Zobrazení úrovně členství a částky
+
+### ✅ Payment & Fee Display
+- Historie plateb (datum, částka, zdroj)
+- Přehled poplatků (období, částka)
+- Výpočet balance (payments - fees)
+- Barevné indikátory (zelená/červená pro přeplatek/dluh)
+
+### ✅ Data Migration
+- Import tool pro migraci ze staré databáze
+- 152 uživatelů naimportováno
+- 12 membership levels
+- Zachování všech dat (state, level, payments_id, atd.)
+
+### 🚧 TODO
+- Member listing (staff only)
+- Manual payment assignment (staff)
+- Level management (staff)
+- Payment import z FIO API
+- Email notifikace
+
 ---
 
-**Verze:** 0.1.0-draft
-**Datum:** 2025-01-XX
+**Verze:** 0.2.0-alpha
+**Datum:** 2025-11-16
 **Autor:** Base48 team
+**Status:** Funkční prototyp s importovanými daty
