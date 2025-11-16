@@ -51,7 +51,7 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	}
 
 	// Try to find by Keycloak ID first
-	dbUser, err := h.queries.GetUserByKeycloakID(ctx, kcUser.ID)
+	dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{String: kcUser.ID, Valid: true})
 	if err == nil {
 		log("Found by Keycloak ID")
 		return &dbUser, nil
@@ -68,7 +68,7 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		log("Found by email! Linking Keycloak ID...")
 		// Found by email! Link the Keycloak ID
 		linkedUser, err := h.queries.LinkKeycloakID(ctx, db.LinkKeycloakIDParams{
-			KeycloakID: kcUser.ID,
+			KeycloakID: sql.NullString{String: kcUser.ID, Valid: true},
 			Email:      kcUser.Email,
 		})
 		if err != nil {
@@ -86,7 +86,7 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	// User doesn't exist - create new one
 	log("User not found, creating new user...")
 	newUser, err := h.queries.CreateUser(ctx, db.CreateUserParams{
-		KeycloakID:        kcUser.ID,
+		KeycloakID:        sql.NullString{String: kcUser.ID, Valid: true},
 		Email:             kcUser.Email,
 		Realname:          sql.NullString{String: kcUser.Name, Valid: kcUser.Name != ""},
 		Phone:             sql.NullString{},

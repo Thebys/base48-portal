@@ -66,11 +66,38 @@ go build -o portal.exe cmd/server/main.go
 
 Server běží na `http://localhost:4848` (nebo PORT z .env)
 
+## Data Import (from old rememberportal)
+
+Pro import dat ze staré databáze:
+
+```bash
+# 1. Zkopíruj starou databázi do migrations/
+cp /path/to/rememberportal.sqlite3 migrations/
+
+# 2. Zkompiluj a spusť import tool
+go build -o import.exe cmd/import/main.go
+./import.exe
+```
+
+Import automaticky:
+- Naimportuje všechny levels (úrovně členství)
+- Naimportuje všechny uživatele s daty (email, jméno, telefon, stav, atd.)
+- Přeskočí duplicitní emaily (OR IGNORE)
+- Nastaví `keycloak_id` na NULL - bude napojen při prvním přihlášení
+
+Když se importovaný uživatel poprvé přihlásí přes Keycloak:
+1. Systém ho nenajde podle Keycloak ID (je NULL)
+2. Najde ho podle emailu
+3. Automaticky naváže Keycloak ID pomocí `LinkKeycloakID`
+4. Příště už ho najde podle Keycloak ID
+
 ## Project Structure
 
 ```
 base48-portal/
-├── cmd/server/          # Main aplikace
+├── cmd/
+│   ├── server/          # Main aplikace
+│   └── import/          # Import tool ze staré databáze
 ├── internal/
 │   ├── auth/            # Keycloak OIDC
 │   ├── config/          # Environment konfigurace
@@ -79,7 +106,7 @@ base48-portal/
 ├── web/
 │   ├── templates/       # HTML templates
 │   └── static/          # CSS, JS, assets
-├── migrations/          # SQL schema
+├── migrations/          # SQL schema & migrations
 ├── sqlc.yaml            # sqlc konfigurace
 └── SPEC.md              # Detailní specifikace
 ```

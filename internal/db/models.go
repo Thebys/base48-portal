@@ -43,7 +43,7 @@ type Payment struct {
 
 type User struct {
 	ID                int64          `json:"id"`
-	KeycloakID        string         `json:"keycloak_id"`
+	KeycloakID        sql.NullString `json:"keycloak_id"`
 	Email             string         `json:"email"`
 	Realname          sql.NullString `json:"realname"`
 	Phone             sql.NullString `json:"phone"`

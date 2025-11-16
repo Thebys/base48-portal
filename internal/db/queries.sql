@@ -11,7 +11,7 @@ SELECT * FROM users WHERE email = ? LIMIT 1;
 UPDATE users SET
     keycloak_id = ?,
     updated_at = CURRENT_TIMESTAMP
-WHERE email = ? AND keycloak_id = ''
+WHERE email = ? AND keycloak_id IS NULL
 RETURNING *;
 
 -- name: ListUsers :many

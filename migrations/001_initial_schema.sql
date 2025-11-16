@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS levels (
 -- Users/Members
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    keycloak_id TEXT NOT NULL UNIQUE,
+    keycloak_id TEXT UNIQUE,  -- Nullable for imported users, linked on first login
     email TEXT NOT NULL UNIQUE,
     realname TEXT,
     phone TEXT,

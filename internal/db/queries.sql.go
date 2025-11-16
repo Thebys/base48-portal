@@ -196,7 +196,7 @@ RETURNING id, keycloak_id, email, realname, phone, alt_contact, level_id, level_
 `
 
 type CreateUserParams struct {
-	KeycloakID        string         `json:"keycloak_id"`
+	KeycloakID        sql.NullString `json:"keycloak_id"`
 	Email             string         `json:"email"`
 	Realname          sql.NullString `json:"realname"`
 	Phone             sql.NullString `json:"phone"`
@@ -385,7 +385,7 @@ const getUserByKeycloakID = `-- name: GetUserByKeycloakID :one
 SELECT id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE keycloak_id = ? LIMIT 1
 `
 
-func (q *Queries) GetUserByKeycloakID(ctx context.Context, keycloakID string) (User, error) {
+func (q *Queries) GetUserByKeycloakID(ctx context.Context, keycloakID sql.NullString) (User, error) {
 	row := q.db.QueryRowContext(ctx, getUserByKeycloakID, keycloakID)
 	var i User
 	err := row.Scan(
@@ -414,13 +414,13 @@ const linkKeycloakID = `-- name: LinkKeycloakID :one
 UPDATE users SET
     keycloak_id = ?,
     updated_at = CURRENT_TIMESTAMP
-WHERE email = ? AND keycloak_id = ''
+WHERE email = ? AND keycloak_id IS NULL
 RETURNING id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
 `
 
 type LinkKeycloakIDParams struct {
-	KeycloakID string `json:"keycloak_id"`
-	Email      string `json:"email"`
+	KeycloakID sql.NullString `json:"keycloak_id"`
+	Email      string         `json:"email"`
 }
 
 func (q *Queries) LinkKeycloakID(ctx context.Context, arg LinkKeycloakIDParams) (User, error) {
