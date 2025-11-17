@@ -225,11 +225,15 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build Keycloak account URL
+	keycloakAccountURL := fmt.Sprintf("%s/realms/%s/account", h.config.KeycloakURL, h.config.KeycloakRealm)
+
 	data := map[string]interface{}{
-		"Title":   "My Profile",
-		"User":    user,
-		"DBUser":  dbUser,
-		"Success": r.URL.Query().Get("success") == "1",
+		"Title":             "My Profile",
+		"User":              user,
+		"DBUser":            dbUser,
+		"Success":           r.URL.Query().Get("success") == "1",
+		"KeycloakAccountURL": keycloakAccountURL,
 	}
 
 	h.render(w, "profile.html", data)
