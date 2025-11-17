@@ -1,33 +1,62 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"html/template"
 	"net/http"
 
 	"github.com/base48/member-portal/internal/auth"
+	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 )
 
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
-	auth      *auth.Authenticator
-	queries   *db.Queries
-	templates *template.Template
+	auth           *auth.Authenticator
+	queries        *db.Queries
+	templates      *template.Template
+	config         *config.Config
+	serviceAccount *auth.ServiceAccountClient
 }
 
 // New creates a new Handler instance
-func New(authenticator *auth.Authenticator, database *sql.DB, templatesDir string) (*Handler, error) {
+func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config, templatesDir string) (*Handler, error) {
 	queries := db.New(database)
+
+	// Initialize service account if credentials are provided
+	var serviceAccount *auth.ServiceAccountClient
+	if cfg.KeycloakServiceAccountClientID != "" && cfg.KeycloakServiceAccountClientSecret != "" {
+		var err error
+		serviceAccount, err = auth.NewServiceAccountClient(
+			context.Background(),
+			cfg,
+			cfg.KeycloakServiceAccountClientID,
+			cfg.KeycloakServiceAccountClientSecret,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize service account: %w", err)
+		}
+	}
 
 	// Note: templates is set to nil, we'll parse on each request
 	// This is simpler than managing template name conflicts
 	return &Handler{
-		auth:      authenticator,
-		queries:   queries,
-		templates: nil, // Will be loaded per-request
+		auth:           authenticator,
+		queries:        queries,
+		templates:      nil, // Will be loaded per-request
+		config:         cfg,
+		serviceAccount: serviceAccount,
 	}, nil
+}
+
+// getServiceAccountToken is a helper to get service account token with error handling
+func (h *Handler) getServiceAccountToken(ctx context.Context) (string, error) {
+	if h.serviceAccount == nil {
+		return "", fmt.Errorf("service account not configured")
+	}
+	return h.serviceAccount.GetAccessToken(ctx)
 }
 
 // HomeHandler displays the home page

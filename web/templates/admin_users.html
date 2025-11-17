@@ -1,0 +1,357 @@
+{{ define "content" }}
+<div class="container">
+    <div class="header">
+        <h1>Admin - User Management</h1>
+        <p>Total users: {{ len .UserList }}</p>
+    </div>
+
+    <table class="users-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Email</th>
+                <th>Real Name</th>
+                <th>State</th>
+                <th>Balance</th>
+                <th>Keycloak Status</th>
+                <th>Username</th>
+                <th>Roles</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .UserList }}
+            <tr>
+                <td>{{ .DBUser.ID }}</td>
+                <td>{{ .DBUser.Email }}</td>
+                <td>{{ if .DBUser.Realname.Valid }}{{ .DBUser.Realname.String }}{{ else }}-{{ end }}</td>
+                <td>
+                    <span class="badge badge-{{ .DBUser.State }}">{{ .DBUser.State }}</span>
+                </td>
+                <td class="{{ if lt .Balance 0 }}text-negative{{ else }}text-positive{{ end }}">
+                    {{ .Balance }} Kč
+                </td>
+                <td>
+                    {{ if .KeycloakEnabled }}
+                        {{ if .KeycloakEnabled }}
+                            <span class="badge badge-success">✓ Enabled</span>
+                        {{ else }}
+                            <span class="badge badge-danger">✗ Disabled</span>
+                        {{ end }}
+                    {{ else }}
+                        <span class="badge badge-warning">Not Linked</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if .KeycloakUsername }}
+                        {{ .KeycloakUsername }}
+                    {{ else }}
+                        -
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if .Roles }}
+                        {{ range .Roles }}
+                            <span class="badge badge-role">{{ . }}</span>
+                        {{ end }}
+                    {{ else }}
+                        <span class="text-muted">No roles</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if .DBUser.KeycloakID.Valid }}
+                        <button class="btn btn-sm" onclick="manageRoles('{{ .DBUser.KeycloakID.String }}', '{{ .DBUser.Email }}')">
+                            Manage Roles
+                        </button>
+                    {{ else }}
+                        <span class="text-muted">N/A</span>
+                    {{ end }}
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>
+
+<!-- Role Management Modal -->
+<div id="roleModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h2>Manage Roles</h2>
+        <p>User: <strong id="modalUserEmail"></strong></p>
+        <input type="hidden" id="modalUserId" />
+
+        <div class="role-actions">
+            <h3>Assign Role</h3>
+            <select id="roleSelect">
+                <option value="">Select role...</option>
+                <option value="active_member">active_member</option>
+                <option value="in_debt">in_debt</option>
+                <option value="memberportal_admin">memberportal_admin</option>
+            </select>
+            <button onclick="assignRole()" class="btn btn-primary">Assign</button>
+        </div>
+
+        <div class="role-actions">
+            <h3>Remove Role</h3>
+            <select id="removeRoleSelect">
+                <option value="">Select role...</option>
+                <option value="active_member">active_member</option>
+                <option value="in_debt">in_debt</option>
+                <option value="memberportal_admin">memberportal_admin</option>
+            </select>
+            <button onclick="removeRole()" class="btn btn-danger">Remove</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 14px;
+}
+
+.users-table th,
+.users-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+.users-table th {
+    background-color: #4CAF50;
+    color: white;
+    font-weight: bold;
+}
+
+.users-table tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+.users-table tr:hover {
+    background-color: #ddd;
+}
+
+.badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.badge-success {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.badge-danger {
+    background-color: #f44336;
+    color: white;
+}
+
+.badge-warning {
+    background-color: #ff9800;
+    color: white;
+}
+
+.badge-role {
+    background-color: #2196F3;
+    color: white;
+    margin-right: 4px;
+}
+
+.badge-active {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.badge-awaiting {
+    background-color: #ff9800;
+    color: white;
+}
+
+.badge-suspended {
+    background-color: #f44336;
+    color: white;
+}
+
+.text-negative {
+    color: #f44336;
+    font-weight: bold;
+}
+
+.text-positive {
+    color: #4CAF50;
+}
+
+.text-muted {
+    color: #999;
+}
+
+.btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.btn-primary {
+    background-color: #2196F3;
+    color: white;
+}
+
+.btn-danger {
+    background-color: #f44336;
+    color: white;
+}
+
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 500px;
+    border-radius: 8px;
+}
+
+.close {
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: #f44336;
+}
+
+.role-actions {
+    margin: 20px 0;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.role-actions h3 {
+    margin-top: 0;
+}
+
+.role-actions select {
+    padding: 8px;
+    margin-right: 10px;
+    width: 200px;
+}
+</style>
+
+<script>
+function manageRoles(userId, email) {
+    document.getElementById('modalUserId').value = userId;
+    document.getElementById('modalUserEmail').textContent = email;
+    document.getElementById('roleModal').style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('roleModal').style.display = 'none';
+}
+
+async function assignRole() {
+    const userId = document.getElementById('modalUserId').value;
+    const roleName = document.getElementById('roleSelect').value;
+
+    if (!roleName) {
+        alert('Please select a role');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/roles/assign', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                role_name: roleName
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert('Role assigned successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Failed to assign role: ' + error);
+    }
+}
+
+async function removeRole() {
+    const userId = document.getElementById('modalUserId').value;
+    const roleName = document.getElementById('removeRoleSelect').value;
+
+    if (!roleName) {
+        alert('Please select a role');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to remove this role?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/roles/remove', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                role_name: roleName
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert('Role removed successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Failed to remove role: ' + error);
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('roleModal');
+    if (event.target == modal) {
+        closeModal();
+    }
+}
+</script>
+
+{{ end }}

@@ -70,7 +70,7 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 		Path:     "/",
 		MaxAge:   86400 * 7, // 7 days
 		HttpOnly: true,
-		Secure:   cfg.BaseURL[:5] == "https", // Secure only if HTTPS
+		Secure:   len(cfg.BaseURL) >= 5 && cfg.BaseURL[:5] == "https",
 		SameSite: http.SameSiteLaxMode,
 	}
 
@@ -202,7 +202,8 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 		Roles:         roles,
 	}
 
-	// Store user in session
+	// Store user in session (but NOT the full token - it's too big for cookies)
+	// For admin operations, we'll use service account instead
 	session.Values[sessionUserKey] = &user
 	if err := session.Save(r, w); err != nil {
 		http.Error(w, "Failed to save session", http.StatusInternalServerError)

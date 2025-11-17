@@ -51,7 +51,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	h, err := handler.New(authenticator, db, "web/templates")
+	h, err := handler.New(authenticator, db, cfg, "web/templates")
 	if err != nil {
 		log.Fatalf("Failed to create handler: %v", err)
 	}
@@ -85,6 +85,21 @@ func main() {
 		r.Get("/dashboard", h.DashboardHandler)
 		r.Get("/profile", h.ProfileHandler)
 		r.Post("/profile", h.ProfileHandler)
+	})
+
+	// Admin routes (requires memberportal_admin role)
+	r.Route("/admin", func(r chi.Router) {
+		r.Use(authenticator.RequireAuth)
+		r.Get("/users", h.RequireAdmin(h.AdminUsersHandler))
+	})
+
+	// Admin API routes (requires memberportal_admin role)
+	r.Route("/api/admin", func(r chi.Router) {
+		r.Use(authenticator.RequireAuth)
+		r.Get("/users", h.RequireAdmin(h.AdminUsersAPIHandler))
+		r.Post("/roles/assign", h.RequireAdmin(h.AdminAssignRoleHandler))
+		r.Post("/roles/remove", h.RequireAdmin(h.AdminRemoveRoleHandler))
+		r.Get("/users/roles", h.RequireAdmin(h.AdminGetUserRolesHandler))
 	})
 
 	// Create server

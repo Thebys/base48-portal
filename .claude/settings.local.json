@@ -5,7 +5,8 @@
       "Bash(go mod tidy:*)",
       "Bash(sqlc version:*)",
       "Bash(sqlc generate:*)",
-      "Bash(./portal.exe)"
+      "Bash(./portal.exe)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

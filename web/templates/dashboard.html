@@ -2,7 +2,14 @@
 
 {{define "content"}}
 <div class="px-4 py-6 sm:px-0">
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+        {{if .User.IsAdmin}}
+        <a href="/admin/users" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+            Admin: Manage Users
+        </a>
+        {{end}}
+    </div>
     
     <!-- Member Info Card -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
