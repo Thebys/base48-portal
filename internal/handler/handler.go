@@ -129,17 +129,17 @@ func (h *Handler) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user's payments
+	// Get user's payments (empty slice if none)
 	payments, err := h.queries.ListPaymentsByUser(r.Context(), sql.NullInt64{Int64: dbUser.ID, Valid: true})
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+	if err != nil && err != sql.ErrNoRows {
+		http.Error(w, fmt.Sprintf("Database error (payments): %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Get user's fees
+	// Get user's fees (empty slice if none)
 	fees, err := h.queries.ListFeesByUser(r.Context(), dbUser.ID)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+	if err != nil && err != sql.ErrNoRows {
+		http.Error(w, fmt.Sprintf("Database error (fees): %v", err), http.StatusInternalServerError)
 		return
 	}
 

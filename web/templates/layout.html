@@ -27,7 +27,20 @@
                 </div>
                 <div class="flex items-center">
                     {{if .User}}
-                    <span class="text-gray-700 mr-4">{{.User.Email}}</span>
+                    <div class="mr-4 text-right">
+                        <div class="text-gray-700 text-sm">{{.User.Email}}</div>
+                        <div class="flex gap-2 justify-end mt-0.5">
+                            {{if .User.IsAdmin}}
+                            <span class="text-xs text-red-600 font-medium">Admin</span>
+                            {{end}}
+                            {{if .User.IsActiveMember}}
+                            <span class="text-xs text-green-600 font-medium">Active</span>
+                            {{end}}
+                            {{if .User.IsInDebt}}
+                            <span class="text-xs text-orange-600 font-medium">Debt</span>
+                            {{end}}
+                        </div>
+                    </div>
                     <a href="/auth/logout" class="text-gray-500 hover:text-gray-700 text-sm font-medium">
                         Logout
                     </a>

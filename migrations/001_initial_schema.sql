@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS fees (
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_users_state ON users(state);
 CREATE INDEX IF NOT EXISTS idx_users_level ON users(level_id);
+CREATE INDEX IF NOT EXISTS idx_users_keycloak ON users(keycloak_id) WHERE keycloak_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(date);
 CREATE INDEX IF NOT EXISTS idx_fees_user ON fees(user_id);

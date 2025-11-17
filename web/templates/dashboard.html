@@ -16,6 +16,32 @@
                 <dt class="text-sm font-medium text-gray-500">Email</dt>
                 <dd class="mt-1 text-sm text-gray-900">{{.DBUser.Email}}</dd>
             </div>
+            {{if .User.Roles}}
+            <div class="sm:col-span-2">
+                <dt class="text-sm font-medium text-gray-500">Role v systému</dt>
+                <dd class="mt-1 flex flex-wrap gap-2">
+                    {{range .User.Roles}}
+                    {{if eq . "memberportal_admin"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        {{.}}
+                    </span>
+                    {{else if eq . "active_member"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        {{.}}
+                    </span>
+                    {{else if eq . "in_debt"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        {{.}}
+                    </span>
+                    {{else}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                        {{.}}
+                    </span>
+                    {{end}}
+                    {{end}}
+                </dd>
+            </div>
+            {{end}}
             <div>
                 <dt class="text-sm font-medium text-gray-500">Úroveň členství</dt>
                 <dd class="mt-1 text-sm text-gray-900">{{.Level.Name}} ({{.Level.Amount}} Kč/měsíc)</dd>
@@ -56,11 +82,11 @@
     <!-- Balance Card -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Stav účtu</h2>
-        <div class="text-3xl font-bold {{if gt .Balance 0.0}}text-green-600{{else if lt .Balance 0.0}}text-red-600{{else}}text-gray-900{{end}}">
-            {{printf "%.2f" .Balance}} Kč
+        <div class="text-3xl font-bold text-gray-900">
+            {{.Balance}} Kč
         </div>
         <p class="text-sm text-gray-500 mt-1">
-            {{if gt .Balance 0.0}}Přeplatek{{else if lt .Balance 0.0}}Dlužná částka{{else}}Vyrovnáno{{end}}
+            Aktuální zůstatek
         </p>
     </div>
 

@@ -38,6 +38,7 @@ type Authenticator struct {
 	oauth2Config oauth2.Config
 	verifier     *oidc.IDTokenVerifier
 	store        *sessions.CookieStore
+	config       *config.Config
 }
 
 func init() {
@@ -78,6 +79,7 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 		oauth2Config: oauth2Config,
 		verifier:     verifier,
 		store:        store,
+		config:       cfg,
 	}, nil
 }
 
@@ -133,11 +135,71 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Extract user info
-	var user User
-	if err := idToken.Claims(&user); err != nil {
+	// Extract user info and roles
+	var claims struct {
+		Sub           string `json:"sub"`
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
+		Name          string `json:"name"`
+		PreferredName string `json:"preferred_username"`
+		RealmAccess   struct {
+			Roles []string `json:"roles"`
+		} `json:"realm_access"`
+		ResourceAccess map[string]struct {
+			Roles []string `json:"roles"`
+		} `json:"resource_access"`
+	}
+
+	if err := idToken.Claims(&claims); err != nil {
 		http.Error(w, "Failed to parse claims", http.StatusInternalServerError)
 		return
+	}
+
+	// Extract only member portal roles (whitelist approach)
+	allowedRoles := map[string]bool{
+		"memberportal_admin": true,
+		"active_member":      true,
+		"in_debt":            true,
+	}
+
+	roles := make([]string, 0)
+
+	// Filter realm roles
+	for _, role := range claims.RealmAccess.Roles {
+		if allowedRoles[role] {
+			roles = append(roles, role)
+		}
+	}
+
+	// Add client-specific roles (from your Keycloak client)
+	if clientRoles, ok := claims.ResourceAccess[a.config.KeycloakClientID]; ok {
+		for _, role := range clientRoles.Roles {
+			if allowedRoles[role] {
+				roles = append(roles, role)
+			}
+		}
+	}
+
+	// Debug logging
+	fmt.Printf("[Auth] User logged in: %s\n", claims.Email)
+	fmt.Printf("[Auth] Realm roles: %v\n", claims.RealmAccess.Roles)
+	fmt.Printf("[Auth] Client ID: %s\n", a.config.KeycloakClientID)
+	fmt.Printf("[Auth] Resource Access keys: %v\n", func() []string {
+		keys := make([]string, 0, len(claims.ResourceAccess))
+		for k := range claims.ResourceAccess {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	fmt.Printf("[Auth] Total roles extracted: %v\n", roles)
+
+	user := User{
+		ID:            claims.Sub,
+		Email:         claims.Email,
+		EmailVerified: claims.EmailVerified,
+		Name:          claims.Name,
+		PreferredName: claims.PreferredName,
+		Roles:         roles,
 	}
 
 	// Store user in session
@@ -188,6 +250,47 @@ func (a *Authenticator) RequireAuth(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// HasRole checks if user has a specific role
+func (u *User) HasRole(role string) bool {
+	if u == nil {
+		return false
+	}
+	for _, r := range u.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAnyRole checks if user has any of the specified roles
+func (u *User) HasAnyRole(roles ...string) bool {
+	if u == nil {
+		return false
+	}
+	for _, role := range roles {
+		if u.HasRole(role) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsAdmin checks if user has memberportal_admin role
+func (u *User) IsAdmin() bool {
+	return u.HasRole("memberportal_admin")
+}
+
+// IsActiveMember checks if user has active_member role
+func (u *User) IsActiveMember() bool {
+	return u.HasRole("active_member")
+}
+
+// IsInDebt checks if user has in_debt role
+func (u *User) IsInDebt() bool {
+	return u.HasRole("in_debt")
 }
 
 // generateState creates a random state string for OAuth2
