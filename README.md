@@ -6,17 +6,16 @@ Member portál pro hackerspace Base48 s Keycloak SSO autentizací.
 
 ## Features
 
-- ✅ Keycloak OIDC SSO autentizace (funguje!)
+- ✅ Keycloak OIDC SSO autentizace
 - ✅ Správa členských profilů s přehledem plateb a bilance
-- ✅ Evidence plateb a poplatků (kompletní import + zobrazení)
-- ✅ Flexibilní úrovně členství (12 úrovní)
-- ✅ Admin rozhraní pro správu uživatelů a rolí
+- ✅ Evidence plateb a poplatků
+- ✅ Flexibilní úrovně členství
+- ✅ Admin rozhraní pro správu uživatelů a rolí (filtering, sorting)
 - ✅ Keycloak service account integrace pro automatizaci
-- ✅ Import historických dat (152 users, 3,855 payments, 5,027 fees)
-- ✅ Detailní přehled plateb v profilu uživatele
+- ✅ Username synchronizace z Keycloak
 - ✅ Type-safe SQL (sqlc)
 - ✅ Pure Go SQLite driver (bez CGO)
-- ✅ Minimalistická architektura
+- 🔜 Keycloak-less mode je plánován
 
 ## Quick Start
 
@@ -76,40 +75,13 @@ go build -o portal.exe cmd/server/main.go
 
 Server běží na `http://localhost:4848` (nebo PORT z .env)
 
-## Data Import (from old rememberportal)
+### První přihlášení
 
-Pro import dat ze staré databáze:
-
-```bash
-# 1. Zkopíruj starou databázi do migrations/
-cp /path/to/rememberportal.sqlite3 migrations/
-
-# 2. Vytvoř zálohu současné databáze (pokud existuje)
-cp data/portal.db data/portal.db.backup
-
-# 3. Spusť import skript
-sqlite3 data/portal.db < migrations/002_import_old_data.sql
-```
-
-**Co se importuje:**
-- ✅ Všechny levels (úrovně členství) - 12 úrovní
-- ✅ Všichni uživatelé s kompletními profily
-- ✅ Všechny platby (payments) včetně FIO JSON dat
-- ✅ Všechny poplatky (fees) - očekávané měsíční platby
-- ✅ Historická data od roku 2010
-
-**Automatické mapování:**
-- Zachovává původní user ID pro konzistenci
-- Mapuje vztahy user → payments → fees
-- Orphaned payments (bez uživatele) se také importují
-- `keycloak_id` je NULL - naváže se při prvním přihlášení
-
-**Proces napojení Keycloak ID při prvním přihlášení:**
-1. Uživatel se přihlásí přes Keycloak (email: `user@example.com`)
-2. Systém ho nenajde podle Keycloak ID (je NULL)
-3. Najde ho podle emailu v tabulce users
-4. Automaticky naváže `keycloak_id` z OIDC tokenu
-5. Příště už ho najde rovnou podle Keycloak ID
+Při prvním přihlášení existujícího uživatele přes Keycloak:
+1. Systém najde uživatele podle emailu
+2. Automaticky naváže `keycloak_id` z OIDC tokenu
+3. Synchronizuje username z Keycloak `preferred_username`
+4. Další přihlášení už probíhá přímo přes Keycloak ID
 
 ## Project Structure
 
@@ -213,21 +185,17 @@ Detaily viz `migrations/001_initial_schema.sql`
 ## Admin Features
 
 Po přihlášení jako admin (role `memberportal_admin`):
-- **GET /admin/users** - Webové rozhraní pro správu uživatelů
-  - Zobrazení všech uživatelů z DB
-  - Keycloak status (enabled/disabled/not linked)
-  - Aktuální role zobrazené jako badges
-  - Inline přiřazování/odebírání rolí
 
-API endpointy (JSON):
-- **GET /api/admin/users** - Seznam všech uživatelů s Keycloak info
-- **POST /api/admin/roles/assign** - Přiřadit roli uživateli
-- **POST /api/admin/roles/remove** - Odebrat roli uživateli
-- **GET /api/admin/users/roles** - Zobrazit role konkrétního uživatele
+**Webové rozhraní** (`/admin/users`):
+- Zobrazení všech uživatelů s Keycloak statusem a rolemi
+- Filtering: state, Keycloak status, balance, search
+- Sorting: ID, balance (ascending/descending)
+- Inline správa rolí (assign/remove)
 
-Podporované role pro správu:
-- `active_member` - aktivní členství
-- `in_debt` - dluh na účtu
+**API endpointy**:
+- `GET /api/admin/users` - Seznam uživatelů
+- `POST /api/admin/roles/assign` - Přiřadit roli
+- `POST /api/admin/roles/remove` - Odebrat roli
 
 ## Automated Tasks (Cron)
 
@@ -247,18 +215,6 @@ go run cmd/test/list_users.go
 TEST_USER_ID=<keycloak-user-id> go run cmd/test/test_role_assign.go
 ```
 
-## TODO
+---
 
-- [ ] Manuální přiřazování plateb
-- [ ] Import plateb z FIO API
-- [ ] Email notifikace
-- [ ] CSRF ochrana
-- [ ] Rate limiting
-
-## License
-
-MIT
-
-## Contributing
-
-PRs welcome! Viz `SPEC.md` pro detaily o architektuře a principech.
+Více informací viz `SPEC.md` pro detaily o architektuře a principech.
