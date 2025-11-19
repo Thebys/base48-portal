@@ -197,12 +197,17 @@ base48-portal/
 - [x] Member listing (admin only - /admin/users)
 - [x] Payment balance calculation improvements
 
-### Fáze 3: Admin features ✅ DOKONČENO (2025-11-17)
+### Fáze 3: Admin features + Payment details ✅ DOKONČENO (2025-11-19)
 - [x] Keycloak service account integration
 - [x] Admin user management UI (/admin/users)
 - [x] Role management (assign/remove via Admin API)
 - [x] Admin API endpoints (JSON)
 - [x] Automated tasks support (cron mode)
+- [x] Import plateb a fees ze staré databáze (002_import_old_data.sql)
+- [x] Detailní přehled plateb v profilu uživatele
+- [x] Zobrazení členských příspěvků (fees) v profilu
+- [x] Kalkulace a zobrazení celkově zaplacené částky
+- [x] Vizuální indikace bilance (zelená/červená)
 - [ ] Member state management (DB level)
 - [ ] Manual payment assignment
 - [ ] Level management
@@ -289,16 +294,18 @@ Import automaticky:
 - Admin: zobrazení a správa rolí
 
 ### ✅ Payment & Fee Display
-- Historie plateb (datum, částka, zdroj)
-- Přehled poplatků (období, částka)
+- Historie plateb v profilu (datum, částka, VS, účet)
+- Přehled členských příspěvků/fees (období, částka)
 - Výpočet balance (payments - fees)
-- Barevné indikátory (zelená/červená pro přeplatek/dluh)
+- Celková zaplacená částka + počet plateb
+- Členem od (datum registrace)
+- Barevné indikátory (zelená/červená pro bilanci, modrá pro total paid)
 
 ### ✅ Data Migration
-- Import tool pro migraci ze staré databáze
-- 152 uživatelů naimportováno
-- 12 membership levels
-- Zachování všech dat (state, level, payments_id, atd.)
+- Import skript (002_import_old_data.sql)
+- 152 users, 3,855 payments, 5,027 fees, 12 levels
+- Zachování všech dat včetně historie od 2010
+- Automatické linkování při prvním přihlášení
 
 ### ✅ Admin & Automation
 - Admin UI pro správu uživatelů (/admin/users)
@@ -338,7 +345,7 @@ Import automaticky:
 
 ---
 
-**Verze:** 0.3.0-alpha
-**Datum:** 2025-11-17
+**Verze:** 0.4.0-alpha
+**Datum:** 2025-11-19
 **Autor:** Base48 team
-**Status:** Funkční prototyp s admin rozhraním a Keycloak integrací
+**Status:** Funkční prototyp s kompletní platební historií a admin rozhraním

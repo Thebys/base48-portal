@@ -2,17 +2,18 @@
 
 Member portál pro hackerspace Base48 s Keycloak SSO autentizací.
 
-**Status:** 🚧 Active Development - Fáze 1 (Základ) dokončena
+**Status:** 🚧 Active Development - Fáze 3 (Admin features) dokončena
 
 ## Features
 
 - ✅ Keycloak OIDC SSO autentizace (funguje!)
-- ✅ Správa členských profilů (základní UI)
-- ✅ Evidence plateb a poplatků (s importem ze staré databáze)
-- ✅ Flexibilní úrovně členství
+- ✅ Správa členských profilů s přehledem plateb a bilance
+- ✅ Evidence plateb a poplatků (kompletní import + zobrazení)
+- ✅ Flexibilní úrovně členství (12 úrovní)
 - ✅ Admin rozhraní pro správu uživatelů a rolí
 - ✅ Keycloak service account integrace pro automatizaci
-- ✅ Import historických dat
+- ✅ Import historických dat (152 users, 3,855 payments, 5,027 fees)
+- ✅ Detailní přehled plateb v profilu uživatele
 - ✅ Type-safe SQL (sqlc)
 - ✅ Pure Go SQLite driver (bez CGO)
 - ✅ Minimalistická architektura
