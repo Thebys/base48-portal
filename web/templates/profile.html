@@ -37,10 +37,13 @@
             </div>
 
             <div>
-                <dt class="text-sm font-medium text-gray-500">Keycloak username</dt>
+                <dt class="text-sm font-medium text-gray-500">Přezdívka</dt>
                 <dd class="mt-1">
-                    <input type="text" value="{{.User.PreferredName}}" disabled
+                    <input type="text" value="{{if .DBUser.Username.Valid}}{{.DBUser.Username.String}}{{else}}{{.User.PreferredName}}{{end}}" disabled
                         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
+                </dd>
+                <dd class="mt-1 text-xs text-gray-500">
+                    Synchronizováno z Keycloaku ({{.User.PreferredName}})
                 </dd>
             </div>
         </dl>

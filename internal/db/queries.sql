@@ -22,15 +22,16 @@ SELECT * FROM users WHERE state = ? ORDER BY realname, email;
 
 -- name: CreateUser :one
 INSERT INTO users (
-    keycloak_id, email, realname, phone, alt_contact,
+    keycloak_id, email, username, realname, phone, alt_contact,
     level_id, level_actual_amount, payments_id, state,
     is_council, is_staff
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: UpdateUser :one
 UPDATE users SET
     email = ?,
+    username = ?,
     realname = ?,
     phone = ?,
     alt_contact = ?,
@@ -48,9 +49,17 @@ RETURNING *;
 
 -- name: UpdateUserProfile :one
 UPDATE users SET
+    username = ?,
     realname = ?,
     phone = ?,
     alt_contact = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateUserKeycloakInfo :one
+UPDATE users SET
+    username = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;

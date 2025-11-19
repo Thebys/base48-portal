@@ -83,6 +83,18 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{String: kcUser.ID, Valid: true})
 	if err == nil {
 		log("Found by Keycloak ID")
+		// Sync username from Keycloak if it changed
+		if kcUser.PreferredName != "" && dbUser.Username.String != kcUser.PreferredName {
+			log(fmt.Sprintf("Syncing username: %s -> %s", dbUser.Username.String, kcUser.PreferredName))
+			updatedUser, err := h.queries.UpdateUserKeycloakInfo(ctx, db.UpdateUserKeycloakInfoParams{
+				Username: sql.NullString{String: kcUser.PreferredName, Valid: true},
+				ID:       dbUser.ID,
+			})
+			if err == nil {
+				return &updatedUser, nil
+			}
+			log(fmt.Sprintf("Warning: failed to sync username: %v", err))
+		}
 		return &dbUser, nil
 	}
 	if err != sql.ErrNoRows {
@@ -105,6 +117,19 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 			return nil, err
 		}
 		log("Successfully linked!")
+
+		// Sync username from Keycloak (overwrite old 'ident' if different)
+		if kcUser.PreferredName != "" && linkedUser.Username.String != kcUser.PreferredName {
+			log(fmt.Sprintf("Syncing username after link: %s -> %s", linkedUser.Username.String, kcUser.PreferredName))
+			updatedUser, err := h.queries.UpdateUserKeycloakInfo(ctx, db.UpdateUserKeycloakInfoParams{
+				Username: sql.NullString{String: kcUser.PreferredName, Valid: true},
+				ID:       linkedUser.ID,
+			})
+			if err == nil {
+				return &updatedUser, nil
+			}
+			log(fmt.Sprintf("Warning: failed to sync username: %v", err))
+		}
 		return &linkedUser, nil
 	}
 	if err != sql.ErrNoRows {
@@ -117,6 +142,7 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	newUser, err := h.queries.CreateUser(ctx, db.CreateUserParams{
 		KeycloakID:        sql.NullString{String: kcUser.ID, Valid: true},
 		Email:             kcUser.Email,
+		Username:          sql.NullString{String: kcUser.PreferredName, Valid: kcUser.PreferredName != ""},
 		Realname:          sql.NullString{String: kcUser.Name, Valid: kcUser.Name != ""},
 		Phone:             sql.NullString{},
 		AltContact:        sql.NullString{},

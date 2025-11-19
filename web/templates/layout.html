@@ -28,7 +28,14 @@
                 <div class="flex items-center">
                     {{if .User}}
                     <div class="mr-4 text-right">
-                        <div class="text-gray-700 text-sm">{{.User.Email}}</div>
+                        <div class="text-gray-900 text-sm font-medium">
+                            {{if .DBUser}}
+                                {{if .DBUser.Username.Valid}}{{.DBUser.Username.String}}{{else}}{{.User.PreferredName}}{{end}}
+                            {{else}}
+                                {{.User.PreferredName}}
+                            {{end}}
+                        </div>
+                        <div class="text-gray-500 text-xs">{{.User.Email}}</div>
                         <div class="flex gap-2 justify-end mt-0.5">
                             {{if .User.IsAdmin}}
                             <span class="text-xs text-red-600 font-medium">Admin</span>

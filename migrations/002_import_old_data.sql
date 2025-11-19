@@ -48,6 +48,7 @@ CREATE TEMP TABLE user_id_map (
 INSERT INTO users (
     id,              -- Preserve old ID
     email,
+    username,        -- Import ident as username
     realname,
     phone,
     alt_contact,
@@ -65,6 +66,7 @@ INSERT INTO users (
 SELECT
     u.id,                                    -- Preserve ID
     u.email,
+    u.ident,                                -- Import ident as username
     u.realname,
     u.phone,
     u.altcontact,

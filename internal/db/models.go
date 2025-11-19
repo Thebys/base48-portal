@@ -45,6 +45,7 @@ type User struct {
 	ID                int64          `json:"id"`
 	KeycloakID        sql.NullString `json:"keycloak_id"`
 	Email             string         `json:"email"`
+	Username          sql.NullString `json:"username"`
 	Realname          sql.NullString `json:"realname"`
 	Phone             sql.NullString `json:"phone"`
 	AltContact        sql.NullString `json:"alt_contact"`

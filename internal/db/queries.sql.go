@@ -188,16 +188,17 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
-    keycloak_id, email, realname, phone, alt_contact,
+    keycloak_id, email, username, realname, phone, alt_contact,
     level_id, level_actual_amount, payments_id, state,
     is_council, is_staff
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
 `
 
 type CreateUserParams struct {
 	KeycloakID        sql.NullString `json:"keycloak_id"`
 	Email             string         `json:"email"`
+	Username          sql.NullString `json:"username"`
 	Realname          sql.NullString `json:"realname"`
 	Phone             sql.NullString `json:"phone"`
 	AltContact        sql.NullString `json:"alt_contact"`
@@ -213,6 +214,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	row := q.db.QueryRowContext(ctx, createUser,
 		arg.KeycloakID,
 		arg.Email,
+		arg.Username,
 		arg.Realname,
 		arg.Phone,
 		arg.AltContact,
@@ -228,6 +230,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.ID,
 		&i.KeycloakID,
 		&i.Email,
+		&i.Username,
 		&i.Realname,
 		&i.Phone,
 		&i.AltContact,
@@ -324,7 +327,7 @@ func (q *Queries) GetUserBalance(ctx context.Context, arg GetUserBalanceParams) 
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE email = ? LIMIT 1
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE email = ? LIMIT 1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -334,6 +337,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.ID,
 		&i.KeycloakID,
 		&i.Email,
+		&i.Username,
 		&i.Realname,
 		&i.Phone,
 		&i.AltContact,
@@ -353,7 +357,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE id = ? LIMIT 1
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -363,6 +367,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.ID,
 		&i.KeycloakID,
 		&i.Email,
+		&i.Username,
 		&i.Realname,
 		&i.Phone,
 		&i.AltContact,
@@ -382,7 +387,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 }
 
 const getUserByKeycloakID = `-- name: GetUserByKeycloakID :one
-SELECT id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE keycloak_id = ? LIMIT 1
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE keycloak_id = ? LIMIT 1
 `
 
 func (q *Queries) GetUserByKeycloakID(ctx context.Context, keycloakID sql.NullString) (User, error) {
@@ -392,6 +397,7 @@ func (q *Queries) GetUserByKeycloakID(ctx context.Context, keycloakID sql.NullSt
 		&i.ID,
 		&i.KeycloakID,
 		&i.Email,
+		&i.Username,
 		&i.Realname,
 		&i.Phone,
 		&i.AltContact,
@@ -415,7 +421,7 @@ UPDATE users SET
     keycloak_id = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE email = ? AND keycloak_id IS NULL
-RETURNING id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
 `
 
 type LinkKeycloakIDParams struct {
@@ -430,6 +436,7 @@ func (q *Queries) LinkKeycloakID(ctx context.Context, arg LinkKeycloakIDParams) 
 		&i.ID,
 		&i.KeycloakID,
 		&i.Email,
+		&i.Username,
 		&i.Realname,
 		&i.Phone,
 		&i.AltContact,
@@ -703,7 +710,7 @@ func (q *Queries) ListUnassignedPayments(ctx context.Context) ([]Payment, error)
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users ORDER BY realname, email
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users ORDER BY realname, email
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -719,6 +726,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.ID,
 			&i.KeycloakID,
 			&i.Email,
+			&i.Username,
 			&i.Realname,
 			&i.Phone,
 			&i.AltContact,
@@ -748,7 +756,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 }
 
 const listUsersByState = `-- name: ListUsersByState :many
-SELECT id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE state = ? ORDER BY realname, email
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE state = ? ORDER BY realname, email
 `
 
 func (q *Queries) ListUsersByState(ctx context.Context, state string) ([]User, error) {
@@ -764,6 +772,7 @@ func (q *Queries) ListUsersByState(ctx context.Context, state string) ([]User, e
 			&i.ID,
 			&i.KeycloakID,
 			&i.Email,
+			&i.Username,
 			&i.Realname,
 			&i.Phone,
 			&i.AltContact,
@@ -829,6 +838,7 @@ func (q *Queries) UpdateLevel(ctx context.Context, arg UpdateLevelParams) (Level
 const updateUser = `-- name: UpdateUser :one
 UPDATE users SET
     email = ?,
+    username = ?,
     realname = ?,
     phone = ?,
     alt_contact = ?,
@@ -842,11 +852,12 @@ UPDATE users SET
     keys_returned = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
 `
 
 type UpdateUserParams struct {
 	Email             string         `json:"email"`
+	Username          sql.NullString `json:"username"`
 	Realname          sql.NullString `json:"realname"`
 	Phone             sql.NullString `json:"phone"`
 	AltContact        sql.NullString `json:"alt_contact"`
@@ -864,6 +875,7 @@ type UpdateUserParams struct {
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, updateUser,
 		arg.Email,
+		arg.Username,
 		arg.Realname,
 		arg.Phone,
 		arg.AltContact,
@@ -882,6 +894,46 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.ID,
 		&i.KeycloakID,
 		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserKeycloakInfo = `-- name: UpdateUserKeycloakInfo :one
+UPDATE users SET
+    username = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+`
+
+type UpdateUserKeycloakInfoParams struct {
+	Username sql.NullString `json:"username"`
+	ID       int64          `json:"id"`
+}
+
+func (q *Queries) UpdateUserKeycloakInfo(ctx context.Context, arg UpdateUserKeycloakInfoParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserKeycloakInfo, arg.Username, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
 		&i.Realname,
 		&i.Phone,
 		&i.AltContact,
@@ -902,15 +954,17 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 
 const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users SET
+    username = ?,
     realname = ?,
     phone = ?,
     alt_contact = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, keycloak_id, email, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
 `
 
 type UpdateUserProfileParams struct {
+	Username   sql.NullString `json:"username"`
 	Realname   sql.NullString `json:"realname"`
 	Phone      sql.NullString `json:"phone"`
 	AltContact sql.NullString `json:"alt_contact"`
@@ -919,6 +973,7 @@ type UpdateUserProfileParams struct {
 
 func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, updateUserProfile,
+		arg.Username,
 		arg.Realname,
 		arg.Phone,
 		arg.AltContact,
@@ -929,6 +984,7 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.ID,
 		&i.KeycloakID,
 		&i.Email,
+		&i.Username,
 		&i.Realname,
 		&i.Phone,
 		&i.AltContact,

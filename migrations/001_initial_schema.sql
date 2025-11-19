@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     keycloak_id TEXT UNIQUE,  -- Nullable for imported users, linked on first login
     email TEXT NOT NULL UNIQUE,
+    username TEXT,  -- Username/nickname (ident from old system, synced with Keycloak)
     realname TEXT,
     phone TEXT,
     alt_contact TEXT,
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS fees (
 CREATE INDEX IF NOT EXISTS idx_users_state ON users(state);
 CREATE INDEX IF NOT EXISTS idx_users_level ON users(level_id);
 CREATE INDEX IF NOT EXISTS idx_users_keycloak ON users(keycloak_id) WHERE keycloak_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(date);
 CREATE INDEX IF NOT EXISTS idx_fees_user ON fees(user_id);

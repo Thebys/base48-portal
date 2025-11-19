@@ -68,13 +68,13 @@
             <tr>
                 <th>ID</th>
                 <th>Email</th>
-                <th>Real Name</th>
-                <th>State</th>
-                <th>Balance</th>
-                <th>Keycloak Status</th>
-                <th>Username</th>
-                <th>Roles</th>
-                <th>Actions</th>
+                <th>Přezdívka</th>
+                <th>Jméno</th>
+                <th>Stav</th>
+                <th>Bilance</th>
+                <th>Keycloak</th>
+                <th>Role</th>
+                <th>Akce</th>
             </tr>
         </thead>
         <tbody>
@@ -82,6 +82,7 @@
             <tr>
                 <td>{{ .DBUser.ID }}</td>
                 <td>{{ .DBUser.Email }}</td>
+                <td>{{ if .DBUser.Username.Valid }}{{ .DBUser.Username.String }}{{ else }}-{{ end }}</td>
                 <td>{{ if .DBUser.Realname.Valid }}{{ .DBUser.Realname.String }}{{ else }}-{{ end }}</td>
                 <td>
                     <span class="badge badge-{{ .DBUser.State }}">{{ .DBUser.State }}</span>
@@ -98,13 +99,6 @@
                         {{ end }}
                     {{ else }}
                         <span class="badge badge-warning">Not Linked</span>
-                    {{ end }}
-                </td>
-                <td>
-                    {{ if .KeycloakUsername }}
-                        {{ .KeycloakUsername }}
-                    {{ else }}
-                        -
                     {{ end }}
                 </td>
                 <td>
