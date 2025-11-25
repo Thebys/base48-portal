@@ -25,41 +25,40 @@ Member portál pro hackerspace Base48 s Keycloak SSO autentizací.
 
 - Go 1.21+ (testováno na 1.24.0)
 - Keycloak server s nakonfigurovaným realm a clientem
-- (SQLite není potřeba - používá se pure Go driver)
+- SQLite3 CLI (pro inicializaci DB)
 
-### Setup
+### Setup & Run
 
-1. **Clone a příprava**
 ```bash
-git clone <repo>
-cd base48-portal
-cp .env.example .env
-```
+# 1. Setup (dependencies + config)
+make setup
 
-2. **Edituj `.env`** - viz `.env.example` pro všechny potřebné proměnné
+# 2. Inicializuj databázi
+make db-init
 
-3. **Inicializuj databázi**
-```bash
-mkdir -p data
-# Windows (MSYS/Git Bash):
-sqlite3 data/portal.db < migrations/001_initial_schema.sql
-# Nebo použij DB browser nebo jiný SQL client
-```
+# 3. Edituj .env soubor
+nano .env  # nebo tvůj editor
 
-4. **Nainstaluj dependencies a vygeneruj SQL kód**
-```bash
-go mod tidy
-go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-sqlc generate
-```
+# 4. Vygeneruj SQL kód
+make sqlc
 
-5. **Build a spusť server**
-```bash
-go build -o portal.exe cmd/server/main.go
-./portal.exe
+# 5. Spusť server
+make run         # jednorázové spuštění
+make dev         # s hot reload (air)
 ```
 
 Server běží na `http://localhost:4848` (nebo PORT z .env)
+
+### Cross-platform Notes
+
+**Linux/macOS:**
+- Makefile příkazy fungují nativně
+- Binary: `./portal`
+
+**Windows:**
+- Použij Git Bash nebo WSL pro Makefile
+- Binary: `./portal.exe`
+- Alternativa: `go run cmd/server/main.go`
 
 ### První přihlášení
 
@@ -134,20 +133,14 @@ Viz detaily v [`docs/KEYCLOAK_SETUP.md`](docs/KEYCLOAK_SETUP.md)
 
 ## Development
 
-### Regenerate SQL code
 ```bash
-sqlc generate
-```
-
-### Run with live reload
-```bash
-go install github.com/air-verse/air@latest
-air
-```
-
-### Build for production
-```bash
-go build -o portal cmd/server/main.go
+make dev          # Run s hot reload (air)
+make sqlc         # Regenerate SQL code
+make build        # Build aplikace
+make build-all    # Build všech binárků (server + cron)
+make test         # Spusť testy
+make clean        # Vymaž build artifacts
+make help         # Zobraz všechny dostupné příkazy
 ```
 
 ## Database Schema
@@ -195,22 +188,18 @@ Po přihlášení jako admin (role `memberportal_admin`):
 Service account umožňuje automatizované úlohy bez přihlášeného uživatele:
 
 ```bash
+# Build cron jobs
+make build-all
+
 # Synchronizace FIO plateb (doporučeno spouštět denně)
-./sync_fio_payments.exe
+./sync_fio_payments
 
-# Aktualizace dluhového statusu na základě bilance
-go run cmd/cron/update_debt_status.go
-```
+# Aktualizace dluhového statusu
+./update_debt_status
 
-Test skripty:
-```bash
-# Test FIO API připojení
+# Test skripty
 go run cmd/test/test_fio_api.go
-
-# Zobraz všechny uživatele v Keycloak
 go run cmd/test/list_users.go
-
-# Test přiřazení/odebrání role
 TEST_USER_ID=<keycloak-user-id> go run cmd/test/test_role_assign.go
 ```
 

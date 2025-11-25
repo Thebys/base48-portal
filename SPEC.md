@@ -109,15 +109,15 @@ NOTES:
 
 ## Technický stack
 
-- **Jazyk:** Go 1.24
-- **Web framework:** Chi router (lehký, idiomatický)
-- **Templates:** html/template (stdlib, simple)
-- **CSS:** Tailwind CSS (via CDN, utility-first)
-- **Databáze:** SQLite (modernc.org/sqlite - pure Go, bez CGO)
-- **ORM:** sqlc (type-safe SQL, žádná magie)
-- **Auth:** go-oidc (Keycloak OIDC)
-- **Session:** gorilla/sessions
-- **Config:** kelseyhightower/envconfig
+- **Go 1.24** - Backend (cross-platform, pure Go)
+- **Chi** - HTTP router
+- **html/template** - Server-side rendering
+- **Tailwind CSS** - Styling (via CDN)
+- **SQLite** - Database (modernc.org/sqlite - pure Go, bez CGO)
+- **sqlc** - Type-safe SQL
+- **go-oidc** - Keycloak OIDC
+- **gorilla/sessions** - Session management
+- **Makefile** - Build automation (Linux/macOS/Windows Git Bash)
 
 ## Architektura
 
@@ -227,54 +227,27 @@ base48-portal/
 - [ ] Security hardening
 - [ ] Documentation
 
-## Konfigurace (env variables)
+## Konfigurace
 
-```bash
-# Server
-PORT=4848
-BASE_URL=http://localhost:4848
+Viz `.env.example` pro všechny potřebné environment variables. Klíčové:
 
-# Database
-DATABASE_URL=file:./data/portal.db?_fk=1
-# SQLite s foreign key constraints enabled
-
-# Keycloak
-KEYCLOAK_URL=https://auth.base48.cz
-KEYCLOAK_REALM=base48
-
-# Web application client (user login)
-KEYCLOAK_CLIENT_ID=go-member-portal-dev
-KEYCLOAK_CLIENT_SECRET=your-secret-here
-
-# Service account client (automation, admin operations)
-KEYCLOAK_SERVICE_ACCOUNT_CLIENT_ID=go-member-portal-service
-KEYCLOAK_SERVICE_ACCOUNT_CLIENT_SECRET=your-service-secret
-
-# FIO Bank API
-BANK_FIO_TOKEN=your-fio-token
-
-# Session
-SESSION_SECRET=generate-with-openssl-rand-base64-32
-```
+- `PORT`, `BASE_URL` - Server config
+- `DATABASE_URL` - SQLite path s FK constraints
+- `KEYCLOAK_*` - Dual client config (web + service account)
+- `BANK_FIO_TOKEN` - FIO Bank API
+- `SESSION_SECRET` - Session encryption
 
 ## Data Import
 
-Pro import ze staré rememberportal databáze:
-
 ```bash
-# 1. Zkopíruj starou databázi
-cp /path/to/rememberportal.sqlite3 migrations/
+# Build import tool
+make build-all
 
-# 2. Spusť import
-go build -o import.exe cmd/import/main.go
-./import.exe
+# Import ze staré databáze
+./import
 ```
 
-Import automaticky:
-- Naimportuje všechny membership levels (12 úrovní)
-- Naimportuje všechny uživatele (152 users)
-- Nastaví keycloak_id na NULL
-- Při prvním přihlášení se keycloak_id automaticky linkuje
+Importuje 152 users, 3855 payments, 5027 fees, 12 levels. Keycloak ID se linkuje při prvním přihlášení.
 
 ## Security considerations
 
