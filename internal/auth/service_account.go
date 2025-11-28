@@ -3,6 +3,9 @@ package auth
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/http"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
@@ -29,6 +32,18 @@ func NewServiceAccountClient(ctx context.Context, cfg *config.Config, clientID, 
 	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token",
 		cfg.KeycloakURL, cfg.KeycloakRealm)
 
+	// Create HTTP client with aggressive timeouts
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout: 3 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   3 * time.Second,
+			ResponseHeaderTimeout: 3 * time.Second,
+		},
+	}
+
 	oauth2Config := clientcredentials.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -36,7 +51,9 @@ func NewServiceAccountClient(ctx context.Context, cfg *config.Config, clientID, 
 		Scopes:       []string{"openid", "profile", "email"},
 	}
 
-	tokenSource := oauth2Config.TokenSource(ctx)
+	// Use custom HTTP client with timeout
+	ctxWithClient := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+	tokenSource := oauth2Config.TokenSource(ctxWithClient)
 
 	// Test the connection by getting a token
 	_, err := tokenSource.Token()

@@ -3,9 +3,11 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/gob"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/base48/member-portal/internal/config"
+	"github.com/base48/member-portal/internal/db"
 )
 
 const (
@@ -39,6 +42,8 @@ type Authenticator struct {
 	verifier     *oidc.IDTokenVerifier
 	store        *sessions.CookieStore
 	config       *config.Config
+	queries      *db.Queries
+	disabled     bool // true if Keycloak is unavailable
 }
 
 func init() {
@@ -47,10 +52,43 @@ func init() {
 }
 
 // New creates a new Authenticator instance
-func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
-	provider, err := oidc.NewProvider(ctx, cfg.KeycloakIssuerURL())
+func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authenticator, error) {
+	// Create HTTP client with aggressive timeouts for startup
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout: 3 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   3 * time.Second,
+			ResponseHeaderTimeout: 3 * time.Second,
+		},
+	}
+
+	// Try to connect to Keycloak with timeout
+	providerCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+	provider, err := oidc.NewProvider(providerCtx, cfg.KeycloakIssuerURL())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create OIDC provider: %w", err)
+		// Keycloak unavailable - start in limited mode
+		fmt.Printf("⚠ WARNING: Keycloak unavailable at %s\n", cfg.KeycloakIssuerURL())
+		fmt.Printf("⚠ Error: %v\n", err)
+		fmt.Println("⚠ Starting in LIMITED MODE - authentication will be unavailable")
+
+		store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
+		store.Options = &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 7,
+			HttpOnly: true,
+			Secure:   false,
+			SameSite: http.SameSiteLaxMode,
+		}
+
+		return &Authenticator{
+			store:    store,
+			config:   cfg,
+			queries:  queries,
+			disabled: true,
+		}, nil
 	}
 
 	oauth2Config := oauth2.Config{
@@ -74,17 +112,26 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 		SameSite: http.SameSiteLaxMode,
 	}
 
+	fmt.Println("✓ Keycloak connection established")
+
 	return &Authenticator{
 		provider:     provider,
 		oauth2Config: oauth2Config,
 		verifier:     verifier,
 		store:        store,
 		config:       cfg,
+		queries:      queries,
+		disabled:     false,
 	}, nil
 }
 
 // LoginHandler redirects to Keycloak login
 func (a *Authenticator) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	if a.disabled {
+		http.Error(w, "Authentication unavailable - Identity Provider (Keycloak) is not accessible", http.StatusServiceUnavailable)
+		return
+	}
+
 	state := generateState()
 
 	session, _ := a.store.Get(r, sessionName)
@@ -99,6 +146,11 @@ func (a *Authenticator) LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 // CallbackHandler handles the OAuth2 callback from Keycloak
 func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) {
+	if a.disabled {
+		http.Error(w, "Authentication unavailable - Identity Provider (Keycloak) is not accessible", http.StatusServiceUnavailable)
+		return
+	}
+
 	session, err := a.store.Get(r, sessionName)
 	if err != nil {
 		http.Error(w, "Failed to get session", http.StatusInternalServerError)
@@ -180,19 +232,6 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Debug logging
-	fmt.Printf("[Auth] User logged in: %s\n", claims.Email)
-	fmt.Printf("[Auth] Realm roles: %v\n", claims.RealmAccess.Roles)
-	fmt.Printf("[Auth] Client ID: %s\n", a.config.KeycloakClientID)
-	fmt.Printf("[Auth] Resource Access keys: %v\n", func() []string {
-		keys := make([]string, 0, len(claims.ResourceAccess))
-		for k := range claims.ResourceAccess {
-			keys = append(keys, k)
-		}
-		return keys
-	}())
-	fmt.Printf("[Auth] Total roles extracted: %v\n", roles)
-
 	user := User{
 		ID:            claims.Sub,
 		Email:         claims.Email,
@@ -208,6 +247,29 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	if err := session.Save(r, w); err != nil {
 		http.Error(w, "Failed to save session", http.StatusInternalServerError)
 		return
+	}
+
+	// Log successful login
+	if a.queries != nil {
+		// Try to get user ID from database (may not exist yet for new users)
+		dbUser, err := a.queries.GetUserByKeycloakID(r.Context(), sql.NullString{
+			String: user.ID,
+			Valid:  true,
+		})
+
+		var userID sql.NullInt64
+		if err == nil {
+			userID = sql.NullInt64{Int64: dbUser.ID, Valid: true}
+		}
+
+		// Log login (gracefully - don't fail login if logging fails)
+		_, _ = a.queries.CreateLog(r.Context(), db.CreateLogParams{
+			Subsystem: "auth",
+			Level:     "info",
+			UserID:    userID,
+			Message:   fmt.Sprintf("User login: %s", user.Email),
+			Metadata:  sql.NullString{String: fmt.Sprintf(`{"keycloak_id":"%s","email":"%s"}`, user.ID, user.Email), Valid: true},
+		})
 	}
 
 	// Redirect to dashboard

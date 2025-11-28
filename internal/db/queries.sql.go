@@ -134,6 +134,41 @@ func (q *Queries) CreateLevel(ctx context.Context, arg CreateLevelParams) (Level
 	return i, err
 }
 
+const createLog = `-- name: CreateLog :one
+INSERT INTO system_logs (subsystem, level, user_id, message, metadata)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, subsystem, level, user_id, message, metadata, created_at
+`
+
+type CreateLogParams struct {
+	Subsystem string         `json:"subsystem"`
+	Level     string         `json:"level"`
+	UserID    sql.NullInt64  `json:"user_id"`
+	Message   string         `json:"message"`
+	Metadata  sql.NullString `json:"metadata"`
+}
+
+func (q *Queries) CreateLog(ctx context.Context, arg CreateLogParams) (SystemLog, error) {
+	row := q.db.QueryRowContext(ctx, createLog,
+		arg.Subsystem,
+		arg.Level,
+		arg.UserID,
+		arg.Message,
+		arg.Metadata,
+	)
+	var i SystemLog
+	err := row.Scan(
+		&i.ID,
+		&i.Subsystem,
+		&i.Level,
+		&i.UserID,
+		&i.Message,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createPayment = `-- name: CreatePayment :one
 INSERT INTO payments (
     user_id, date, amount, kind, kind_id,
@@ -751,6 +786,143 @@ func (q *Queries) ListLevels(ctx context.Context) ([]Level, error) {
 	return items, nil
 }
 
+const listLogsBySubsystem = `-- name: ListLogsBySubsystem :many
+SELECT id, subsystem, level, user_id, message, metadata, created_at FROM system_logs WHERE subsystem = ? ORDER BY created_at DESC LIMIT ?
+`
+
+type ListLogsBySubsystemParams struct {
+	Subsystem string `json:"subsystem"`
+	Limit     int64  `json:"limit"`
+}
+
+func (q *Queries) ListLogsBySubsystem(ctx context.Context, arg ListLogsBySubsystemParams) ([]SystemLog, error) {
+	rows, err := q.db.QueryContext(ctx, listLogsBySubsystem, arg.Subsystem, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SystemLog{}
+	for rows.Next() {
+		var i SystemLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Subsystem,
+			&i.Level,
+			&i.UserID,
+			&i.Message,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogsByUser = `-- name: ListLogsByUser :many
+SELECT id, subsystem, level, user_id, message, metadata, created_at FROM system_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+`
+
+type ListLogsByUserParams struct {
+	UserID sql.NullInt64 `json:"user_id"`
+	Limit  int64         `json:"limit"`
+}
+
+func (q *Queries) ListLogsByUser(ctx context.Context, arg ListLogsByUserParams) ([]SystemLog, error) {
+	rows, err := q.db.QueryContext(ctx, listLogsByUser, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SystemLog{}
+	for rows.Next() {
+		var i SystemLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Subsystem,
+			&i.Level,
+			&i.UserID,
+			&i.Message,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogsFiltered = `-- name: ListLogsFiltered :many
+SELECT id, subsystem, level, user_id, message, metadata, created_at FROM system_logs
+WHERE (? = '' OR subsystem = ?)
+  AND (? = '' OR level = ?)
+  AND (? = 0 OR user_id = ?)
+ORDER BY created_at DESC LIMIT ?
+`
+
+type ListLogsFilteredParams struct {
+	Column1   interface{}   `json:"column_1"`
+	Subsystem string        `json:"subsystem"`
+	Column3   interface{}   `json:"column_3"`
+	Level     string        `json:"level"`
+	Column5   interface{}   `json:"column_5"`
+	UserID    sql.NullInt64 `json:"user_id"`
+	Limit     int64         `json:"limit"`
+}
+
+func (q *Queries) ListLogsFiltered(ctx context.Context, arg ListLogsFilteredParams) ([]SystemLog, error) {
+	rows, err := q.db.QueryContext(ctx, listLogsFiltered,
+		arg.Column1,
+		arg.Subsystem,
+		arg.Column3,
+		arg.Level,
+		arg.Column5,
+		arg.UserID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SystemLog{}
+	for rows.Next() {
+		var i SystemLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Subsystem,
+			&i.Level,
+			&i.UserID,
+			&i.Message,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMembershipPaymentsByUser = `-- name: ListMembershipPaymentsByUser :many
 SELECT p.id, p.user_id, p.date, p.amount, p.kind, p.kind_id, p.local_account, p.remote_account, p.identification, p.raw_data, p.staff_comment, p.created_at
 FROM payments p
@@ -822,6 +994,41 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) 
 			&i.Identification,
 			&i.RawData,
 			&i.StaffComment,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentLogs = `-- name: ListRecentLogs :many
+SELECT id, subsystem, level, user_id, message, metadata, created_at FROM system_logs ORDER BY created_at DESC LIMIT ?
+`
+
+func (q *Queries) ListRecentLogs(ctx context.Context, limit int64) ([]SystemLog, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentLogs, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SystemLog{}
+	for rows.Next() {
+		var i SystemLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Subsystem,
+			&i.Level,
+			&i.UserID,
+			&i.Message,
+			&i.Metadata,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

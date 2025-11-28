@@ -179,3 +179,24 @@ SELECT
 
 -- name: CountUsersByState :many
 SELECT state, COUNT(*) as count FROM users GROUP BY state;
+
+-- name: CreateLog :one
+INSERT INTO system_logs (subsystem, level, user_id, message, metadata)
+VALUES (?, ?, ?, ?, ?)
+RETURNING *;
+
+-- name: ListLogsBySubsystem :many
+SELECT * FROM system_logs WHERE subsystem = ? ORDER BY created_at DESC LIMIT ?;
+
+-- name: ListLogsByUser :many
+SELECT * FROM system_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?;
+
+-- name: ListRecentLogs :many
+SELECT * FROM system_logs ORDER BY created_at DESC LIMIT ?;
+
+-- name: ListLogsFiltered :many
+SELECT * FROM system_logs
+WHERE (? = '' OR subsystem = ?)
+  AND (? = '' OR level = ?)
+  AND (? = 0 OR user_id = ?)
+ORDER BY created_at DESC LIMIT ?;

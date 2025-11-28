@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #dc2626;
+            margin-top: 0;
+        }
+        .alert {
+            background: #fef2f2;
+            border-left: 4px solid #dc2626;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .reason {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-style: italic;
+        }
+        .button {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 14px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Pozastavení členství v Base48</h1>
+
+        <p>Ahoj {{.Name}},</p>
+
+        <div class="alert">
+            <strong>Tvé členství v Base48 bylo pozastaveno.</strong>
+        </div>
+
+        <p><strong>Důvod pozastavení:</strong></p>
+        <div class="reason">
+            {{.Reason}}
+        </div>
+
+        <p><strong>Co to znamená?</strong></p>
+        <ul>
+            <li>Přístup do prostoru Base48 je dočasně omezen</li>
+            <li>Členské benefity jsou pozastaveny</li>
+            <li>Nadále můžeš používat členský portál</li>
+        </ul>
+
+        <p><strong>Jak obnovit členství?</strong></p>
+        <ol>
+            <li>Zkontroluj si svou bilanci v <a href="{{.PortalURL}}/profile">členském portálu</a></li>
+            <li>Pokud je důvodem neuhrazený dluh, uhraď prosím částku co nejdříve</li>
+            <li>Kontaktuj nás pro vyjasnění situace a obnovení členství</li>
+        </ol>
+
+        <a href="{{.PortalURL}}/profile" class="button">Zobrazit můj profil</a>
+
+        <div class="footer">
+            <p><strong>Potřebuješ pomoc?</strong><br>
+            Pokud si myslíš, že došlo k omylu, nebo potřebuješ vysvětlit svou situaci, neváhej nás kontaktovat. Rádi s tebou situaci probereme.</p>
+            <p><strong>Base48 Hackerspace</strong></p>
+        </div>
+    </div>
+</body>
+</html>

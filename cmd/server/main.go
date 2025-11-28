@@ -18,6 +18,7 @@ import (
 
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/config"
+	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/handler"
 )
 
@@ -32,26 +33,29 @@ func main() {
 	}
 
 	// Connect to database
-	db, err := sql.Open("sqlite", cfg.DatabaseURL)
+	database, err := sql.Open("sqlite", cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer database.Close()
 
 	// Enable foreign keys for SQLite
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+	if _, err := database.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		log.Fatalf("Failed to enable foreign keys: %v", err)
 	}
 
-	// Initialize authenticator
+	// Initialize queries
 	ctx := context.Background()
-	authenticator, err := auth.New(ctx, cfg)
+	queries := db.New(database)
+
+	// Initialize authenticator
+	authenticator, err := auth.New(ctx, cfg, queries)
 	if err != nil {
 		log.Fatalf("Failed to create authenticator: %v", err)
 	}
 
 	// Initialize handlers
-	h, err := handler.New(authenticator, db, cfg, "web/templates")
+	h, err := handler.New(authenticator, database, cfg, "web/templates")
 	if err != nil {
 		log.Fatalf("Failed to create handler: %v", err)
 	}
@@ -92,6 +96,7 @@ func main() {
 		r.Use(authenticator.RequireAuth)
 		r.Get("/users", h.RequireAdmin(h.AdminUsersHandler))
 		r.Get("/payments/unmatched", h.RequireAdmin(h.AdminUnmatchedPaymentsHandler))
+		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))
 	})
 
 	// Admin API routes (requires memberportal_admin role)

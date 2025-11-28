@@ -15,6 +15,8 @@ Member portál pro hackerspace Base48 s Keycloak SSO autentizací.
 - ✅ Finanční přehled - správa nespárovaných příchozích plateb
 - ✅ Keycloak service account integrace pro automatizaci
 - ✅ Username synchronizace z Keycloak
+- ✅ Email systém (welcome, debt warnings, member notifications)
+- ✅ Automatizované měsíční poplatky s email notifikacemi
 - ✅ Type-safe SQL (sqlc)
 - ✅ Pure Go SQLite driver (bez CGO)
 - 🔜 Keycloak-less mode je plánován

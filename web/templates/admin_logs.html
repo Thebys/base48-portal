@@ -1,0 +1,139 @@
+{{define "content"}}
+<div class="px-4 sm:px-6 lg:px-8">
+    <div class="sm:flex sm:items-center">
+        <div class="sm:flex-auto">
+            <h1 class="text-2xl font-semibold text-gray-900">Systémové logy</h1>
+            <p class="mt-2 text-sm text-gray-700">Unified logging ze všech subsystémů (email, cron, fio_sync, keycloak)</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="mt-6 bg-white shadow rounded-lg p-6">
+        <form method="GET" class="grid grid-cols-1 gap-4 sm:grid-cols-5">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Subsystém</label>
+                <select name="subsystem" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    <option value="">Všechny</option>
+                    <option value="email" {{if eq .Subsystem "email"}}selected{{end}}>Email</option>
+                    <option value="cron" {{if eq .Subsystem "cron"}}selected{{end}}>Cron</option>
+                    <option value="fio_sync" {{if eq .Subsystem "fio_sync"}}selected{{end}}>FIO Sync</option>
+                    <option value="keycloak" {{if eq .Subsystem "keycloak"}}selected{{end}}>Keycloak</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Level</label>
+                <select name="level" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    <option value="">Všechny</option>
+                    <option value="success" {{if eq .Level "success"}}selected{{end}}>Success</option>
+                    <option value="info" {{if eq .Level "info"}}selected{{end}}>Info</option>
+                    <option value="warning" {{if eq .Level "warning"}}selected{{end}}>Warning</option>
+                    <option value="error" {{if eq .Level "error"}}selected{{end}}>Error</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700">User ID</label>
+                <input type="number" name="user_id" value="{{.UserID}}" placeholder="Všichni" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Limit</label>
+                <input type="number" name="limit" value="{{.Limit}}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+
+            <div class="flex items-end">
+                <button type="submit" class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+                    Filtrovat
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Logs Table -->
+    <div class="mt-6 bg-white shadow overflow-hidden rounded-lg">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Čas</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subsystém</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {{if .Logs}}
+                {{range .Logs}}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {{.CreatedAt.Format "2006-01-02 15:04:05"}}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {{.Subsystem}}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {{if eq .Level "success"}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            ✓ Success
+                        </span>
+                        {{else if eq .Level "info"}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            ℹ Info
+                        </span>
+                        {{else if eq .Level "warning"}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            ⚠ Warning
+                        </span>
+                        {{else if eq .Level "error"}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            ✗ Error
+                        </span>
+                        {{else}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {{.Level}}
+                        </span>
+                        {{end}}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {{if .UserID.Valid}}
+                        <a href="/admin/users?search={{.UserID.Int64}}" class="text-indigo-600 hover:text-indigo-900">
+                            {{.UserID.Int64}}
+                        </a>
+                        {{else}}
+                        -
+                        {{end}}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900">
+                        <div class="max-w-2xl">
+                            {{.Message}}
+                            {{if .Metadata.Valid}}
+                            <details class="mt-1">
+                                <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700">Metadata</summary>
+                                <pre class="mt-1 text-xs bg-gray-50 p-2 rounded overflow-x-auto">{{.Metadata.String}}</pre>
+                            </details>
+                            {{end}}
+                        </div>
+                    </td>
+                </tr>
+                {{end}}
+                {{else}}
+                <tr>
+                    <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                        Žádné logy nenalezeny pro vybrané filtry
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+
+    {{if .Logs}}
+    <div class="mt-4 text-sm text-gray-500 text-center">
+        Zobrazeno {{len .Logs}} záznamů (limit: {{.Limit}})
+    </div>
+    {{end}}
+</div>
+{{end}}

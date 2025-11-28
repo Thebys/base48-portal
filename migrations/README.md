@@ -82,107 +82,54 @@ Creating fees for period: 2025-12
 Processing 57 accepted members...
   ✓ Created fee for user@example.com: 1000 Kč (fee_id: 5028)
   ⊘ Skipping user2@example.com - fee already exists for 2025-12
+  ✓ Created fee for user3@example.com: 600 Kč (fee_id: 5029)
+  ✉ Sent debt warning email (balance: -3200 Kč)
 
 Summary:
   Period: 2025-12
   Total users: 57
   Created: 56
   Skipped (already exists): 1
+  Debt warning emails sent: 1
   Errors: 0
 ```
 
-## Mapování staré -> nové databáze
+**Email notifikace:**
+- Po vytvoření každé fee se automaticky zkontroluje balance člena
+- Pokud balance < -(2× měsíční poplatek), pošle se **debt warning email**
+- Emaily se posílají pouze pokud je SMTP nakonfigurováno
+- Chyby při posílání emailů necrashnou celý job (graceful handling)
 
-| Stará tabulka | Stará pole | Nová tabulka | Nová pole | Poznámky |
-|---------------|------------|--------------|-----------|----------|
-| `user` | `id` | `users` | `id` | Zachovává se stejné ID |
-| `user` | `email` | `users` | `email` | UNIQUE constraint |
-| `user` | `realname` | `users` | `realname` | |
-| `user` | `phone` | `users` | `phone` | |
-| `user` | `altcontact` | `users` | `alt_contact` | Přejmenováno |
-| `user` | `level` | `users` | `level_id` | FK na levels |
-| `user` | `payments_id` | `users` | `payments_id` | Variabilní symbol |
-| `user` | `state` | `users` | `state` | LOWER() - "Accepted" → "accepted" |
-| `user` | `council` | `users` | `is_council` | Přejmenováno |
-| `user` | `staff` | `users` | `is_staff` | Přejmenováno |
-| `user` | - | `users` | `keycloak_id` | **NULL při importu** - naváže se při prvním loginu |
-| `payment` | `user` | `payments` | `user_id` | FK mapování přes temp tabulku |
-| `payment` | `json` | `payments` | `raw_data` | FIO bank JSON blob |
-| `fee` | `user` | `fees` | `user_id` | FK mapování |
-| `fee` | `level` | `fees` | `level_id` | FK na levels |
+### 003_system_logs.sql
+Unified logging pro všechny subsystémy (email, fio_sync, cron).
 
-## Automatické napojení Keycloak ID
+**Použití:**
+```bash
+sqlite3 data/portal.db < migrations/003_system_logs.sql
+```
 
-Při importu jsou všichni uživatelé bez `keycloak_id` (NULL).
+## Email Systém
 
-**Proces napojení při prvním přihlášení:**
+**SMTP konfigurace** (`.env`):
+```bash
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=noreply@base48.cz
+SMTP_PASSWORD=your-password
+SMTP_FROM=Base48 <noreply@base48.cz>
+```
 
-1. **User se přihlásí přes Keycloak:**
-   - Keycloak vrátí ID token s claims (sub, email, roles, ...)
+**Scénáře:** Welcome, Negative Balance, Debt Warning (>2× fee), Membership Suspended
 
-2. **Handler zkusí najít uživatele:**
-   ```sql
-   SELECT * FROM users WHERE keycloak_id = 'uuid-from-keycloak'
-   -- Nenajde (je NULL)
-   ```
+**Testování:** [MailHog](https://github.com/mailhog/MailHog) - `docker run -p 1025:1025 -p 8025:8025 mailhog/mailhog`
 
-3. **Fallback na email:**
-   ```sql
-   SELECT * FROM users WHERE email = 'user@example.com'
-   -- Najde importovaného uživatele!
-   ```
+## Import dat ze staré databáze
 
-4. **Automaticky naváže Keycloak ID:**
-   ```sql
-   UPDATE users SET keycloak_id = 'uuid-from-keycloak'
-   WHERE email = 'user@example.com'
-   ```
+Klíčové změny: `altcontact`→`alt_contact`, `state` lowercase, `keycloak_id` NULL (napojí se při prvním loginu)
 
-5. **Příští přihlášení:**
-   - Najde uživatele rovnou podle `keycloak_id`
-   - Rychlejší dotaz (indexed)
-
-## Troubleshooting
-
-### "Error: near line X: UNIQUE constraint failed"
-- Email už existuje v databázi
-- Zkontroluj duplicity: `SELECT email, COUNT(*) FROM users GROUP BY email HAVING COUNT(*) > 1;`
-
-### "Error: FOREIGN KEY constraint failed"
-- Level ID neexistuje v tabulce levels
-- Zkontroluj levels: `SELECT * FROM levels;`
-- Ujisti se, že `001_initial_schema.sql` proběhla úspěšně
-
-### "Orphaned payments"
-- Normální - některé platby nemají přiřazeného uživatele
-- Může se stát při platbě před vytvořením účtu
-- Adminové je mohou přiřadit později ručně
-
-### Nízký počet importovaných uživatelů
-- Skript přeskakuje emaily obsahující `@UNKNOWN` nebo `@unknown`
-- Přeskakuje prázdné emaily (`email = '' OR email IS NULL`)
-- To je správné chování - placeholder účty se neimportují
+**Automatické napojení Keycloak:** První login najde usera podle emailu a naváže `keycloak_id`
 
 ## Best Practices
 
-1. **Vždy vytvoř zálohu před importem:**
-   ```bash
-   cp data/portal.db data/portal.db.backup-$(date +%Y%m%d)
-   ```
-
-2. **Testuj na copy databáze:**
-   ```bash
-   cp data/portal.db data/portal_test.db
-   sqlite3 data/portal_test.db < migrations/002_import_old_data.sql
-   ```
-
-3. **Kontroluj výsledky:**
-   ```bash
-   sqlite3 data/portal.db "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM payments;"
-   ```
-
-4. **Po importu zkontroluj integrity:**
-   ```bash
-   sqlite3 data/portal.db "PRAGMA integrity_check;"
-   sqlite3 data/portal.db "PRAGMA foreign_key_check;"
-   ```
+- Vždy backup před migrací: `cp data/portal.db data/portal.db.backup`
+- Kontroluj integrity: `sqlite3 data/portal.db "PRAGMA integrity_check;"`

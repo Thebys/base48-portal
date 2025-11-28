@@ -28,6 +28,13 @@ type Config struct {
 
 	// Session
 	SessionSecret string
+
+	// SMTP Email
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
 }
 
 func Load() (*Config, error) {
@@ -43,6 +50,11 @@ func Load() (*Config, error) {
 		KeycloakServiceAccountClientSecret: getEnv("KEYCLOAK_SERVICE_ACCOUNT_CLIENT_SECRET", ""),
 		BankFIOToken:                       getEnv("BANK_FIO_TOKEN", ""),
 		SessionSecret:                      getEnv("SESSION_SECRET", ""),
+		SMTPHost:                           getEnv("SMTP_HOST", ""),
+		SMTPPort:                           getEnvInt("SMTP_PORT", 587),
+		SMTPUsername:                       getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:                       getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:                           getEnv("SMTP_FROM", ""),
 	}
 
 	// Validate required fields
@@ -76,6 +88,16 @@ func (c *Config) OAuthCallbackURL() string {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		var intValue int
+		if _, err := fmt.Sscanf(value, "%d", &intValue); err == nil {
+			return intValue
+		}
 	}
 	return defaultValue
 }

@@ -254,6 +254,21 @@ func main() {
 
 	log.Println("\n" + repeat("=", 80))
 
+	// Log FIO sync completion
+	level := "success"
+	if errors > 0 {
+		level = "warning"
+	} else if totalUnmatched > 0 {
+		level = "info"
+	}
+	queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "fio_sync",
+		Level:     level,
+		UserID:    sql.NullInt64{},
+		Message:   fmt.Sprintf("FIO sync completed: %d new, %d updated, %d unmatched", inserted, updated, totalUnmatched),
+		Metadata:  sql.NullString{String: fmt.Sprintf(`{"inserted":%d,"updated":%d,"skipped":%d,"unmatched":%d,"errors":%d}`, inserted, updated, skipped, totalUnmatched, errors), Valid: true},
+	})
+
 	if errors > 0 {
 		log.Fatal("Job completed with errors")
 	}

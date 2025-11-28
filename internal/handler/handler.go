@@ -36,7 +36,9 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 			cfg.KeycloakServiceAccountClientSecret,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize service account: %w", err)
+			fmt.Printf("⚠ WARNING: Service account initialization failed: %v\n", err)
+			fmt.Println("⚠ Admin features requiring service account will be unavailable")
+			// Continue without service account - it's optional
 		}
 	}
 
@@ -75,17 +77,12 @@ func (h *Handler) HomeHandler(w http.ResponseWriter, r *http.Request) {
 // and creates a new user if none exists
 func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User, error) {
 	ctx := r.Context()
-	log := func(msg string) {
-		fmt.Printf("[getOrCreateUser] KC_ID=%s Email=%s - %s\n", kcUser.ID, kcUser.Email, msg)
-	}
 
 	// Try to find by Keycloak ID first
 	dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{String: kcUser.ID, Valid: true})
 	if err == nil {
-		log("Found by Keycloak ID")
 		// Sync username from Keycloak if it changed
 		if kcUser.PreferredName != "" && dbUser.Username.String != kcUser.PreferredName {
-			log(fmt.Sprintf("Syncing username: %s -> %s", dbUser.Username.String, kcUser.PreferredName))
 			updatedUser, err := h.queries.UpdateUserKeycloakInfo(ctx, db.UpdateUserKeycloakInfoParams{
 				Username: sql.NullString{String: kcUser.PreferredName, Valid: true},
 				ID:       dbUser.ID,
@@ -93,34 +90,36 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 			if err == nil {
 				return &updatedUser, nil
 			}
-			log(fmt.Sprintf("Warning: failed to sync username: %v", err))
 		}
 		return &dbUser, nil
 	}
 	if err != sql.ErrNoRows {
-		log(fmt.Sprintf("Error finding by KC_ID: %v", err))
 		return nil, err
 	}
 
 	// Try to find by email (for migration from old system)
-	log("Not found by KC_ID, trying email...")
 	dbUser, err = h.queries.GetUserByEmail(ctx, kcUser.Email)
 	if err == nil {
-		log("Found by email! Linking Keycloak ID...")
 		// Found by email! Link the Keycloak ID
 		linkedUser, err := h.queries.LinkKeycloakID(ctx, db.LinkKeycloakIDParams{
 			KeycloakID: sql.NullString{String: kcUser.ID, Valid: true},
 			Email:      kcUser.Email,
 		})
 		if err != nil {
-			log(fmt.Sprintf("Error linking KC_ID: %v", err))
 			return nil, err
 		}
-		log("Successfully linked!")
+
+		// Log Keycloak association
+		h.queries.CreateLog(ctx, db.CreateLogParams{
+			Subsystem: "keycloak",
+			Level:     "success",
+			UserID:    sql.NullInt64{Int64: linkedUser.ID, Valid: true},
+			Message:   fmt.Sprintf("Keycloak ID associated: %s", kcUser.Email),
+			Metadata:  sql.NullString{String: fmt.Sprintf(`{"keycloak_id":"%s","email":"%s"}`, kcUser.ID, kcUser.Email), Valid: true},
+		})
 
 		// Sync username from Keycloak (overwrite old 'ident' if different)
 		if kcUser.PreferredName != "" && linkedUser.Username.String != kcUser.PreferredName {
-			log(fmt.Sprintf("Syncing username after link: %s -> %s", linkedUser.Username.String, kcUser.PreferredName))
 			updatedUser, err := h.queries.UpdateUserKeycloakInfo(ctx, db.UpdateUserKeycloakInfoParams{
 				Username: sql.NullString{String: kcUser.PreferredName, Valid: true},
 				ID:       linkedUser.ID,
@@ -128,17 +127,14 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 			if err == nil {
 				return &updatedUser, nil
 			}
-			log(fmt.Sprintf("Warning: failed to sync username: %v", err))
 		}
 		return &linkedUser, nil
 	}
 	if err != sql.ErrNoRows {
-		log(fmt.Sprintf("Error finding by email: %v", err))
 		return nil, err
 	}
 
 	// User doesn't exist - create new one
-	log("User not found, creating new user...")
 	newUser, err := h.queries.CreateUser(ctx, db.CreateUserParams{
 		KeycloakID:        sql.NullString{String: kcUser.ID, Valid: true},
 		Email:             kcUser.Email,
@@ -154,11 +150,18 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		IsStaff:           false,
 	})
 	if err != nil {
-		log(fmt.Sprintf("Error creating user: %v", err))
 		return nil, err
 	}
 
-	log("Successfully created new user!")
+	// Log new user registration
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "auth",
+		Level:     "info",
+		UserID:    sql.NullInt64{Int64: newUser.ID, Valid: true},
+		Message:   fmt.Sprintf("New user registered: %s", kcUser.Email),
+		Metadata:  sql.NullString{String: fmt.Sprintf(`{"keycloak_id":"%s","email":"%s"}`, kcUser.ID, kcUser.Email), Valid: true},
+	})
+
 	return &newUser, nil
 }
 

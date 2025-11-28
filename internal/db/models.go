@@ -41,6 +41,16 @@ type Payment struct {
 	CreatedAt      time.Time      `json:"created_at"`
 }
 
+type SystemLog struct {
+	ID        int64          `json:"id"`
+	Subsystem string         `json:"subsystem"`
+	Level     string         `json:"level"`
+	UserID    sql.NullInt64  `json:"user_id"`
+	Message   string         `json:"message"`
+	Metadata  sql.NullString `json:"metadata"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
 type User struct {
 	ID                int64          `json:"id"`
 	KeycloakID        sql.NullString `json:"keycloak_id"`
