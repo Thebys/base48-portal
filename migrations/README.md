@@ -47,6 +47,50 @@ Skript vypíše shrnutí:
 - Rozsah dat
 - Počet orphaned payments (bez uživatele)
 
+## Automatické generování měsíčních poplatků
+
+Po importu dat je potřeba spravovat měsíční poplatky nových období.
+
+### Cron job: create_monthly_fees
+
+**Účel:** Vytváří měsíční fee záznamy pro všechny aktivní členy (`state='accepted'`)
+
+**Použití:**
+```bash
+# Jednoráz spuštění
+go run cmd/cron/create_monthly_fees.go
+
+# Nebo zkompilovaný binary
+go build -o create_monthly_fees ./cmd/cron/create_monthly_fees.go
+./create_monthly_fees
+```
+
+**Crontab nastavení** (1. den v měsíci):
+```bash
+0 0 1 * * cd /path/to/portal && ./create_monthly_fees >> logs/fees.log 2>&1
+```
+
+**Logika:**
+- Vytvoří fee pro první den aktuálního měsíce
+- Používá `level_actual_amount` (fallback na `level.amount`)
+- Kontroluje duplicity - idempotentní (bezpečné opakované spuštění)
+- Pouze pro členy se stavem `accepted`
+
+**Příklad output:**
+```
+Creating fees for period: 2025-12
+Processing 57 accepted members...
+  ✓ Created fee for user@example.com: 1000 Kč (fee_id: 5028)
+  ⊘ Skipping user2@example.com - fee already exists for 2025-12
+
+Summary:
+  Period: 2025-12
+  Total users: 57
+  Created: 56
+  Skipped (already exists): 1
+  Errors: 0
+```
+
 ## Mapování staré -> nové databáze
 
 | Stará tabulka | Stará pole | Nová tabulka | Nová pole | Poznámky |

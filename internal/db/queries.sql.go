@@ -267,6 +267,29 @@ func (q *Queries) GetFee(ctx context.Context, id int64) (Fee, error) {
 	return i, err
 }
 
+const getFeeByUserAndPeriod = `-- name: GetFeeByUserAndPeriod :one
+SELECT id, user_id, level_id, period_start, amount, created_at FROM fees WHERE user_id = ? AND period_start = ? LIMIT 1
+`
+
+type GetFeeByUserAndPeriodParams struct {
+	UserID      int64     `json:"user_id"`
+	PeriodStart time.Time `json:"period_start"`
+}
+
+func (q *Queries) GetFeeByUserAndPeriod(ctx context.Context, arg GetFeeByUserAndPeriodParams) (Fee, error) {
+	row := q.db.QueryRowContext(ctx, getFeeByUserAndPeriod, arg.UserID, arg.PeriodStart)
+	var i Fee
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LevelID,
+		&i.PeriodStart,
+		&i.Amount,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getLevel = `-- name: GetLevel :one
 SELECT id, name, amount, active, created_at FROM levels WHERE id = ? LIMIT 1
 `
@@ -512,6 +535,79 @@ func (q *Queries) LinkKeycloakID(ctx context.Context, arg LinkKeycloakIDParams) 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listAcceptedUsersForFees = `-- name: ListAcceptedUsersForFees :many
+SELECT u.id, u.keycloak_id, u.email, u.username, u.realname, u.phone, u.alt_contact, u.level_id, u.level_actual_amount, u.payments_id, u.date_joined, u.keys_granted, u.keys_returned, u.state, u.is_council, u.is_staff, u.created_at, u.updated_at, l.amount as level_amount
+FROM users u
+JOIN levels l ON u.level_id = l.id
+WHERE u.state = 'accepted'
+ORDER BY u.id
+`
+
+type ListAcceptedUsersForFeesRow struct {
+	ID                int64          `json:"id"`
+	KeycloakID        sql.NullString `json:"keycloak_id"`
+	Email             string         `json:"email"`
+	Username          sql.NullString `json:"username"`
+	Realname          sql.NullString `json:"realname"`
+	Phone             sql.NullString `json:"phone"`
+	AltContact        sql.NullString `json:"alt_contact"`
+	LevelID           int64          `json:"level_id"`
+	LevelActualAmount string         `json:"level_actual_amount"`
+	PaymentsID        sql.NullString `json:"payments_id"`
+	DateJoined        time.Time      `json:"date_joined"`
+	KeysGranted       sql.NullTime   `json:"keys_granted"`
+	KeysReturned      sql.NullTime   `json:"keys_returned"`
+	State             string         `json:"state"`
+	IsCouncil         bool           `json:"is_council"`
+	IsStaff           bool           `json:"is_staff"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	LevelAmount       string         `json:"level_amount"`
+}
+
+func (q *Queries) ListAcceptedUsersForFees(ctx context.Context) ([]ListAcceptedUsersForFeesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAcceptedUsersForFees)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAcceptedUsersForFeesRow{}
+	for rows.Next() {
+		var i ListAcceptedUsersForFeesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.KeycloakID,
+			&i.Email,
+			&i.Username,
+			&i.Realname,
+			&i.Phone,
+			&i.AltContact,
+			&i.LevelID,
+			&i.LevelActualAmount,
+			&i.PaymentsID,
+			&i.DateJoined,
+			&i.KeysGranted,
+			&i.KeysReturned,
+			&i.State,
+			&i.IsCouncil,
+			&i.IsStaff,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LevelAmount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAllLevels = `-- name: ListAllLevels :many

@@ -146,6 +146,16 @@ INSERT INTO fees (user_id, level_id, period_start, amount)
 VALUES (?, ?, ?, ?)
 RETURNING *;
 
+-- name: GetFeeByUserAndPeriod :one
+SELECT * FROM fees WHERE user_id = ? AND period_start = ? LIMIT 1;
+
+-- name: ListAcceptedUsersForFees :many
+SELECT u.*, l.amount as level_amount
+FROM users u
+JOIN levels l ON u.level_id = l.id
+WHERE u.state = 'accepted'
+ORDER BY u.id;
+
 -- name: GetUserBalance :one
 SELECT
     COALESCE((SELECT SUM(CAST(p.amount AS REAL)) FROM payments p WHERE p.user_id = ?), 0) -

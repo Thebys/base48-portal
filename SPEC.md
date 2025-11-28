@@ -217,6 +217,8 @@ base48-portal/
 - [x] Automatická synchronizace plateb z FIO (cron job)
 - [x] Admin finanční přehled nespárovaných plateb
 - [x] VS mapping na payments_id (ne user.id)
+- [x] Automatické generování měsíčních poplatků (create_monthly_fees cron)
+- [x] Dashboard zobrazení fees a payments
 - [ ] Member state management (DB level)
 - [ ] Manual payment assignment
 - [ ] Level management
@@ -278,13 +280,15 @@ Importuje 152 users, 3855 payments, 5027 fees, 12 levels. Keycloak ID se linkuje
 - Admin: Keycloak status (enabled/disabled/not linked)
 - Admin: zobrazení a správa rolí
 
-### ✅ Payment & Fee Display
+### ✅ Payment & Fee Management
 - Historie plateb v profilu (datum, částka, VS, účet)
 - Přehled členských příspěvků/fees (období, částka)
 - Výpočet balance (payments - fees)
 - Celková zaplacená částka + počet plateb
 - Členem od (datum registrace)
 - Barevné indikátory (zelená/červená pro bilanci, modrá pro total paid)
+- Automatické generování měsíčních poplatků (cron job)
+- Dashboard s přehledem fees a payments v tabulkách
 
 ### ✅ Data Migration
 - Import skript (002_import_old_data.sql)
@@ -303,7 +307,11 @@ Importuje 152 users, 3855 payments, 5027 fees, 12 levels. Keycloak ID se linkuje
 - Keycloak Admin API client (internal/keycloak/client.go)
 - Service account authentication
 - Test skripty (cmd/test/)
-- Cron mode examples (cmd/cron/update_debt_status.go)
+- Cron jobs:
+  - cmd/cron/update_debt_status.go - Aktualizace in_debt role
+  - cmd/cron/sync_fio_payments.go - Synchronizace plateb z FIO API
+  - cmd/cron/create_monthly_fees.go - Generování měsíčních poplatků
+  - cmd/cron/report_unmatched_payments.go - Report nespárovaných plateb
 
 ### 🚧 TODO
 - Manual payment assignment (admin)

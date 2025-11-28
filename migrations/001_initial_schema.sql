@@ -75,7 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_fees_period ON fees(period_start);
 -- Initial data: Default membership levels
 INSERT INTO levels (name, amount, active) VALUES
     ('Awaiting', '0', 1),
-    ('Student', '500', 1),
+    ('Student', '600', 1),
     ('Regular', '1000', 1),
     ('Supporter', '2000', 1),
     ('Sponsor', '5000', 1);

@@ -93,12 +93,69 @@
     <!-- Balance Card -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
         <h2 class="text-lg font-medium text-gray-900 mb-4">Stav účtu</h2>
-        <div class="text-3xl font-bold text-gray-900">
-            {{.Balance}} Kč
+        <div class="text-3xl font-bold {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">
+            {{printf "%.0f" .Balance}} Kč
         </div>
         <p class="text-sm text-gray-500 mt-1">
             Aktuální zůstatek
         </p>
+    </div>
+
+    <!-- Fees & Payments -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Fees (Poplatky) -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <h2 class="text-lg font-medium text-gray-900 mb-4">Členské poplatky</h2>
+            {{if .Fees}}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="text-left text-xs font-medium text-gray-500 uppercase">Období</th>
+                            <th class="text-right text-xs font-medium text-gray-500 uppercase">Částka</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {{range .Fees}}
+                        <tr>
+                            <td class="py-2 text-sm text-gray-900">{{.PeriodStart.Format "01/2006"}}</td>
+                            <td class="py-2 text-sm text-right text-gray-900">{{.Amount}} Kč</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <p class="text-sm text-gray-500">Zatím nemáte žádné vystavené poplatky.</p>
+            {{end}}
+        </div>
+
+        <!-- Payments (Platby) -->
+        <div class="bg-white shadow rounded-lg p-6">
+            <h2 class="text-lg font-medium text-gray-900 mb-4">Přijaté platby</h2>
+            {{if .Payments}}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="text-left text-xs font-medium text-gray-500 uppercase">Datum</th>
+                            <th class="text-right text-xs font-medium text-gray-500 uppercase">Částka</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {{range .Payments}}
+                        <tr>
+                            <td class="py-2 text-sm text-gray-900">{{.Date.Format "02.01.2006"}}</td>
+                            <td class="py-2 text-sm text-right text-green-600 font-medium">+{{.Amount}} Kč</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <p class="text-sm text-gray-500">Zatím nemáte žádné evidované platby.</p>
+            {{end}}
+        </div>
     </div>
 </div>
 {{end}}
