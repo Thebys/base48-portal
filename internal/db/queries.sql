@@ -95,6 +95,15 @@ SELECT * FROM payments WHERE id = ? LIMIT 1;
 -- name: ListPaymentsByUser :many
 SELECT * FROM payments WHERE user_id = ? ORDER BY date DESC;
 
+-- name: ListMembershipPaymentsByUser :many
+-- Only payments that match the user's membership VS (payments_id)
+SELECT p.*
+FROM payments p
+JOIN users u ON p.user_id = u.id
+WHERE p.user_id = ?
+AND p.identification = u.payments_id
+ORDER BY p.date DESC;
+
 -- name: ListUnassignedPayments :many
 SELECT * FROM payments WHERE user_id IS NULL ORDER BY date DESC;
 
@@ -157,8 +166,15 @@ WHERE u.state = 'accepted'
 ORDER BY u.id;
 
 -- name: GetUserBalance :one
+-- Calculate membership fee balance (only payments matching user's payments_id VS)
 SELECT
-    COALESCE((SELECT SUM(CAST(p.amount AS REAL)) FROM payments p WHERE p.user_id = ?), 0) -
+    COALESCE((
+        SELECT SUM(CAST(p.amount AS REAL))
+        FROM payments p
+        JOIN users u ON p.user_id = u.id
+        WHERE p.user_id = ?
+        AND p.identification = u.payments_id
+    ), 0) -
     COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = ?), 0) as balance;
 
 -- name: CountUsersByState :many

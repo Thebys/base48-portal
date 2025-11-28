@@ -184,7 +184,7 @@ func (h *Handler) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user's payments (empty slice if none)
+	// Get ALL user's payments (not just membership)
 	payments, err := h.queries.ListPaymentsByUser(r.Context(), sql.NullInt64{Int64: dbUser.ID, Valid: true})
 	if err != nil && err != sql.ErrNoRows {
 		http.Error(w, fmt.Sprintf("Database error (payments): %v", err), http.StatusInternalServerError)
@@ -215,7 +215,7 @@ func (h *Handler) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 		"Level":    level,
 		"Payments": payments,
 		"Fees":     fees,
-		"Balance":  balance,
+		"Balance":  float64(balance), // Convert to float64 for template comparison
 	}
 
 	h.render(w, "dashboard.html", data)
@@ -258,7 +258,7 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch user's payments
+	// Fetch ALL user's payments (not just membership)
 	payments, err := h.queries.ListPaymentsByUser(r.Context(), sql.NullInt64{Int64: dbUser.ID, Valid: true})
 	if err != nil {
 		http.Error(w, "Failed to fetch payments", http.StatusInternalServerError)
@@ -301,8 +301,8 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		"Level":              level,
 		"Payments":           payments,
 		"Fees":               fees,
-		"Balance":            int64(balance),
-		"TotalPaid":          int64(totalPaid),
+		"Balance":            float64(balance), // Membership balance (only matching VS)
+		"TotalPaid":          int64(totalPaid), // Total of ALL payments
 		"Success":            r.URL.Query().Get("success") == "1",
 		"KeycloakAccountURL": keycloakAccountURL,
 	}

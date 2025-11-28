@@ -362,7 +362,13 @@ func (q *Queries) GetPaymentByKindAndID(ctx context.Context, arg GetPaymentByKin
 
 const getUserBalance = `-- name: GetUserBalance :one
 SELECT
-    COALESCE((SELECT SUM(CAST(p.amount AS REAL)) FROM payments p WHERE p.user_id = ?), 0) -
+    COALESCE((
+        SELECT SUM(CAST(p.amount AS REAL))
+        FROM payments p
+        JOIN users u ON p.user_id = u.id
+        WHERE p.user_id = ?
+        AND p.identification = u.payments_id
+    ), 0) -
     COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = ?), 0) as balance
 `
 
@@ -371,6 +377,7 @@ type GetUserBalanceParams struct {
 	UserID_2 int64         `json:"user_id_2"`
 }
 
+// Calculate membership fee balance (only payments matching user's payments_id VS)
 func (q *Queries) GetUserBalance(ctx context.Context, arg GetUserBalanceParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, getUserBalance, arg.UserID, arg.UserID_2)
 	var balance int64
@@ -729,6 +736,52 @@ func (q *Queries) ListLevels(ctx context.Context) ([]Level, error) {
 			&i.Name,
 			&i.Amount,
 			&i.Active,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMembershipPaymentsByUser = `-- name: ListMembershipPaymentsByUser :many
+SELECT p.id, p.user_id, p.date, p.amount, p.kind, p.kind_id, p.local_account, p.remote_account, p.identification, p.raw_data, p.staff_comment, p.created_at
+FROM payments p
+JOIN users u ON p.user_id = u.id
+WHERE p.user_id = ?
+AND p.identification = u.payments_id
+ORDER BY p.date DESC
+`
+
+// Only payments that match the user's membership VS (payments_id)
+func (q *Queries) ListMembershipPaymentsByUser(ctx context.Context, userID sql.NullInt64) ([]Payment, error) {
+	rows, err := q.db.QueryContext(ctx, listMembershipPaymentsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payment{}
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Date,
+			&i.Amount,
+			&i.Kind,
+			&i.KindID,
+			&i.LocalAccount,
+			&i.RemoteAccount,
+			&i.Identification,
+			&i.RawData,
+			&i.StaffComment,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
