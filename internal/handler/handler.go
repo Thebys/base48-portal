@@ -171,65 +171,6 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	return &newUser, nil
 }
 
-// DashboardHandler displays the member dashboard
-func (h *Handler) DashboardHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	// Get or create user in database
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	// Get user's level
-	level, err := h.queries.GetLevel(r.Context(), dbUser.LevelID)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	// Get ALL user's payments (not just membership)
-	payments, err := h.queries.ListPaymentsByUser(r.Context(), sql.NullInt64{Int64: dbUser.ID, Valid: true})
-	if err != nil && err != sql.ErrNoRows {
-		http.Error(w, fmt.Sprintf("Database error (payments): %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Get user's fees (empty slice if none)
-	fees, err := h.queries.ListFeesByUser(r.Context(), dbUser.ID)
-	if err != nil && err != sql.ErrNoRows {
-		http.Error(w, fmt.Sprintf("Database error (fees): %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Calculate balance
-	balance, err := h.queries.GetUserBalance(r.Context(), db.GetUserBalanceParams{
-		UserID:   sql.NullInt64{Int64: dbUser.ID, Valid: true},
-		UserID_2: dbUser.ID,
-	})
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	data := map[string]interface{}{
-		"Title":    "Dashboard",
-		"User":     user,
-		"DBUser":   dbUser,
-		"Level":    level,
-		"Payments": payments,
-		"Fees":     fees,
-		"Balance":  float64(balance), // Convert to float64 for template comparison
-	}
-
-	h.render(w, "dashboard.html", data)
-}
-
 // ProfileHandler displays and updates user profile
 func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	user := h.auth.GetUser(r)

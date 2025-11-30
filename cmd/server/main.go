@@ -86,7 +86,6 @@ func main() {
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(authenticator.RequireAuth)
-		r.Get("/dashboard", h.DashboardHandler)
 		r.Get("/profile", h.ProfileHandler)
 		r.Post("/profile", h.ProfileHandler)
 	})
