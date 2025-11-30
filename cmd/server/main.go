@@ -97,6 +97,7 @@ func main() {
 		r.Get("/users", h.RequireAdmin(h.AdminUsersHandler))
 		r.Get("/payments/unmatched", h.RequireAdmin(h.AdminUnmatchedPaymentsHandler))
 		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))
+		r.Get("/settings", h.RequireAdmin(h.AdminSettingsHandler))
 	})
 
 	// Admin API routes (requires memberportal_admin role)
@@ -106,6 +107,7 @@ func main() {
 		r.Post("/roles/assign", h.RequireAdmin(h.AdminAssignRoleHandler))
 		r.Post("/roles/remove", h.RequireAdmin(h.AdminRemoveRoleHandler))
 		r.Get("/users/roles", h.RequireAdmin(h.AdminGetUserRolesHandler))
+		r.Post("/test-email", h.RequireAdmin(h.AdminTestEmailHandler))
 	})
 
 	// Create server

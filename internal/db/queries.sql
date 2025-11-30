@@ -52,10 +52,16 @@ RETURNING *;
 
 -- name: UpdateUserProfile :one
 UPDATE users SET
-    username = ?,
     realname = ?,
     phone = ?,
     alt_contact = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateUserCustomFee :one
+UPDATE users SET
+    level_actual_amount = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;

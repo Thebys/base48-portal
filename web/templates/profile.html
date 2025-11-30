@@ -13,7 +13,7 @@
     <!-- Keycloak Account Section (Read-only) -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-lg font-medium text-gray-900">Keycloak účet</h2>
+            <h2 class="text-lg font-medium text-gray-900">Identita (Keycloak)</h2>
             <a href="{{.KeycloakAccountURL}}" target="_blank" rel="noopener noreferrer"
                 class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                 <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,6 +92,119 @@
         </dl>
     </div>
 
+    <!-- Custom Membership Fee Amount (Collapsible) -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex justify-between items-center p-6 hover:bg-gray-50 transition-colors">
+                    <h2 class="text-lg font-medium text-gray-900">Nastavení výše příspěvku</h2>
+                    <div class="flex items-center gap-3">
+                        {{if ne .DBUser.LevelActualAmount "0"}}
+                        <span class="text-sm text-indigo-600 font-medium">{{.DBUser.LevelActualAmount}} Kč/měsíc</span>
+                        {{else}}
+                        <span class="text-sm text-gray-500">Výchozí: {{.Level.Amount}} Kč/měsíc</span>
+                        {{end}}
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                <p class="text-sm text-gray-500 mb-4">
+                    Můžete dobrovolně platit vyšší členský příspěvek než je minimum pro vaši úroveň členství.
+                    Minimální částka pro úroveň <strong>{{.Level.Name}}</strong> je <strong>{{.Level.Amount}} Kč/měsíc</strong>.
+                </p>
+
+                <form method="POST" action="/profile" class="space-y-4">
+                    <input type="hidden" name="action" value="update_custom_fee">
+
+                    <div>
+                        <label for="custom_fee_amount" class="block text-sm font-medium text-gray-700">
+                            Vlastní výše příspěvku (Kč/měsíc)
+                        </label>
+                        <input type="number" name="custom_fee_amount" id="custom_fee_amount"
+                            value="{{if ne .DBUser.LevelActualAmount "0"}}{{.DBUser.LevelActualAmount}}{{else}}{{.Level.Amount}}{{end}}"
+                            min="{{.Level.Amount}}"
+                            max="255000"
+                            required
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <p class="mt-1 text-xs text-gray-500">
+                            Minimální částka: {{.Level.Amount}} Kč
+                        </p>
+                    </div>
+
+                    <div class="pt-2">
+                        <button type="submit"
+                            class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Aktualizovat výši příspěvku
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </details>
+    </div>
+
+    <!-- Member Portal User Attributes Section (Collapsible) -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex justify-between items-center p-6 hover:bg-gray-50 transition-colors">
+                    <h2 class="text-lg font-medium text-gray-900">Členské údaje (Member Portal)</h2>
+                    <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                <p class="text-sm text-gray-500 mb-4">
+                    Tyto údaje jsou uloženy pouze v member portálu a byly migrovány z původní databáze.
+                </p>
+
+                <form method="POST" action="/profile" class="space-y-6">
+                    <div>
+                        <label for="realname" class="block text-sm font-medium text-gray-700">
+                            Skutečné jméno
+                            <span class="text-gray-400 font-normal">(volitelné)</span>
+                        </label>
+                        <input type="text" name="realname" id="realname"
+                            value="{{if .DBUser.Realname.Valid}}{{.DBUser.Realname.String}}{{end}}"
+                            placeholder="Jan Novák"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <p class="mt-1 text-xs text-gray-500">Zobrazeno v členském přehledu</p>
+                    </div>
+
+                    <div>
+                        <label for="phone" class="block text-sm font-medium text-gray-700">
+                            Telefon
+                            <span class="text-gray-400 font-normal">(volitelné)</span>
+                        </label>
+                        <input type="tel" name="phone" id="phone"
+                            value="{{if .DBUser.Phone.Valid}}{{.DBUser.Phone.String}}{{end}}"
+                            placeholder="+420 123 456 789"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <p class="mt-1 text-xs text-gray-500">Pro urgentní kontakt</p>
+                    </div>
+
+                    <div>
+                        <label for="alt_contact" class="block text-sm font-medium text-gray-700">
+                            Alternativní kontakt
+                            <span class="text-gray-400 font-normal">(volitelné)</span>
+                        </label>
+                        <input type="text" name="alt_contact" id="alt_contact"
+                            value="{{if .DBUser.AltContact.Valid}}{{.DBUser.AltContact.String}}{{end}}"
+                            placeholder="např. XMPP, Matrix, IRC, Telegram..."
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <p class="mt-1 text-xs text-gray-500">Další způsob komunikace</p>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-200">
+                        <button type="submit"
+                            class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Uložit změny
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </details>
+    </div>
+
     <!-- Incoming Payments (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group">
@@ -143,7 +256,7 @@
         </details>
     </div>
 
-    <!-- Expected Membership Fees (Collapsible) -->
+    <!-- Membership Fees (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group">
             <summary class="cursor-pointer list-none">
@@ -184,59 +297,6 @@
                 {{end}}
             </div>
         </details>
-    </div>
-
-    <!-- Member Portal Section (Editable) -->
-    <div class="bg-white shadow rounded-lg p-6">
-        <h2 class="text-lg font-medium text-gray-900 mb-4">Členské údaje (Member Portal)</h2>
-        <p class="text-sm text-gray-500 mb-4">
-            Tyto údaje jsou uloženy pouze v member portálu a byly migrovány z původní databáze.
-        </p>
-
-        <form method="POST" action="/profile" class="space-y-6">
-            <div>
-                <label for="realname" class="block text-sm font-medium text-gray-700">
-                    Skutečné jméno
-                    <span class="text-gray-400 font-normal">(volitelné)</span>
-                </label>
-                <input type="text" name="realname" id="realname"
-                    value="{{if .DBUser.Realname.Valid}}{{.DBUser.Realname.String}}{{end}}"
-                    placeholder="Jan Novák"
-                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                <p class="mt-1 text-xs text-gray-500">Zobrazeno v členském přehledu</p>
-            </div>
-
-            <div>
-                <label for="phone" class="block text-sm font-medium text-gray-700">
-                    Telefon
-                    <span class="text-gray-400 font-normal">(volitelné)</span>
-                </label>
-                <input type="tel" name="phone" id="phone"
-                    value="{{if .DBUser.Phone.Valid}}{{.DBUser.Phone.String}}{{end}}"
-                    placeholder="+420 123 456 789"
-                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                <p class="mt-1 text-xs text-gray-500">Pro urgentní kontakt</p>
-            </div>
-
-            <div>
-                <label for="alt_contact" class="block text-sm font-medium text-gray-700">
-                    Alternativní kontakt
-                    <span class="text-gray-400 font-normal">(volitelné)</span>
-                </label>
-                <input type="text" name="alt_contact" id="alt_contact"
-                    value="{{if .DBUser.AltContact.Valid}}{{.DBUser.AltContact.String}}{{end}}"
-                    placeholder="např. XMPP, Matrix, IRC, Telegram..."
-                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                <p class="mt-1 text-xs text-gray-500">Další způsob komunikace</p>
-            </div>
-
-            <div class="pt-4 border-t border-gray-200">
-                <button type="submit"
-                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Uložit změny
-                </button>
-            </div>
-        </form>
     </div>
 </div>
 {{end}}

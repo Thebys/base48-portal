@@ -10,6 +10,7 @@ import (
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/email"
 )
 
 // Handler holds dependencies for HTTP handlers
@@ -19,6 +20,7 @@ type Handler struct {
 	templates      *template.Template
 	config         *config.Config
 	serviceAccount *auth.ServiceAccountClient
+	emailClient    *email.Client
 }
 
 // New creates a new Handler instance
@@ -42,6 +44,9 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 		}
 	}
 
+	// Initialize email client
+	emailClient := email.New(cfg, queries)
+
 	// Note: templates is set to nil, we'll parse on each request
 	// This is simpler than managing template name conflicts
 	return &Handler{
@@ -50,6 +55,7 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 		templates:      nil, // Will be loaded per-request
 		config:         cfg,
 		serviceAccount: serviceAccount,
+		emailClient:    emailClient,
 	}, nil
 }
 
@@ -239,7 +245,14 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPost {
-		// Update profile
+		// Check which form was submitted
+		if r.FormValue("action") == "update_custom_fee" {
+			// Handle custom fee update
+			h.handleCustomFeeUpdate(w, r, dbUser)
+			return
+		}
+
+		// Update profile (member portal fields only)
 		_, err := h.queries.UpdateUserProfile(r.Context(), db.UpdateUserProfileParams{
 			Realname:   sql.NullString{String: r.FormValue("realname"), Valid: r.FormValue("realname") != ""},
 			Phone:      sql.NullString{String: r.FormValue("phone"), Valid: r.FormValue("phone") != ""},
@@ -311,6 +324,59 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, "profile.html", data)
+}
+
+// handleCustomFeeUpdate handles updating user's custom membership fee amount
+func (h *Handler) handleCustomFeeUpdate(w http.ResponseWriter, r *http.Request, dbUser *db.User) {
+	customFeeStr := r.FormValue("custom_fee_amount")
+
+	// Parse the custom fee amount
+	var customFee float64
+	if _, err := fmt.Sscanf(customFeeStr, "%f", &customFee); err != nil {
+		http.Error(w, "Neplatná částka", http.StatusBadRequest)
+		return
+	}
+
+	// Get user's current level to validate minimum
+	level, err := h.queries.GetLevel(r.Context(), dbUser.LevelID)
+	if err != nil {
+		http.Error(w, "Chyba při načítání úrovně členství", http.StatusInternalServerError)
+		return
+	}
+
+	// Parse level minimum amount
+	var levelMinimum float64
+	if _, err := fmt.Sscanf(level.Amount, "%f", &levelMinimum); err != nil {
+		http.Error(w, "Chyba konfigurace úrovně členství", http.StatusInternalServerError)
+		return
+	}
+
+	// Validate: custom fee must be >= level minimum
+	if customFee < levelMinimum {
+		http.Error(w, fmt.Sprintf("Částka musí být minimálně %s Kč (minimum pro %s)", level.Amount, level.Name), http.StatusBadRequest)
+		return
+	}
+
+	// Update the custom fee amount
+	_, err = h.queries.UpdateUserCustomFee(r.Context(), db.UpdateUserCustomFeeParams{
+		LevelActualAmount: fmt.Sprintf("%.0f", customFee),
+		ID:                dbUser.ID,
+	})
+	if err != nil {
+		http.Error(w, "Chyba při aktualizaci členského příspěvku", http.StatusInternalServerError)
+		return
+	}
+
+	// Log the change
+	h.queries.CreateLog(r.Context(), db.CreateLogParams{
+		Subsystem: "membership",
+		Level:     "info",
+		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
+		Message:   fmt.Sprintf("Custom fee amount updated: %.0f Kč (minimum: %s Kč)", customFee, level.Amount),
+		Metadata:  sql.NullString{String: fmt.Sprintf(`{"old_amount":"%s","new_amount":"%.0f","level_minimum":"%s"}`, dbUser.LevelActualAmount, customFee, level.Amount), Valid: true},
+	})
+
+	http.Redirect(w, r, "/profile?success=1", http.StatusSeeOther)
 }
 
 // render is a helper to render templates

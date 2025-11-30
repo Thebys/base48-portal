@@ -1,0 +1,229 @@
+{{define "content"}}
+<div class="px-4 sm:px-6 lg:px-8">
+    <div class="sm:flex sm:items-center mb-6">
+        <div class="sm:flex-auto">
+            <h1 class="text-2xl font-semibold text-gray-900">Nastavení</h1>
+            <p class="mt-2 text-sm text-gray-700">
+                Konfigurace systému a testování funkcí
+            </p>
+        </div>
+    </div>
+
+    <!-- Email Testing Section (Collapsible) -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex justify-between items-center p-6 hover:bg-gray-50 transition-colors">
+                    <div>
+                        <h2 class="text-lg font-medium text-gray-900">Testování e-mailů</h2>
+                        <p class="mt-1 text-sm text-gray-500">Odeslat testovací e-maily na vámi zadanou adresu</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        {{if .SMTPConfigured}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            SMTP nakonfigurováno
+                        </span>
+                        {{else}}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            SMTP není nakonfigurováno
+                        </span>
+                        {{end}}
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                {{if not .SMTPConfigured}}
+                <div class="rounded-md bg-yellow-50 p-4 mb-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-yellow-800">SMTP není nakonfigurováno</h3>
+                            <div class="mt-2 text-sm text-yellow-700">
+                                <p>Pro odesílání e-mailů je potřeba nastavit SMTP v <code class="bg-yellow-100 px-1 rounded">.env</code> souboru:</p>
+                                <pre class="mt-2 text-xs bg-yellow-100 p-2 rounded">SMTP_HOST=127.0.0.1
+SMTP_PORT=1025
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM=Base48 &lt;noreply@base48.cz&gt;</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+
+                <div class="space-y-6">
+                    <!-- Email address input -->
+                    <div>
+                        <label for="test-email" class="block text-sm font-medium text-gray-700">E-mailová adresa příjemce</label>
+                        <input type="email" id="test-email" name="email"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                               placeholder="vase@adresa.cz" value="{{.User.Email}}">
+                        <p class="mt-1 text-xs text-gray-500">E-mail bude odeslán na tuto adresu pro testovací účely</p>
+                    </div>
+
+                    <!-- Email type buttons -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">Vyberte typ e-mailu</label>
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <!-- Welcome Email -->
+                            <button type="button" onclick="sendTestEmail('welcome')"
+                                    class="test-email-btn relative flex items-start p-4 border border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-medium text-gray-900">🎉 Vítací e-mail</h3>
+                                    <p class="mt-1 text-xs text-gray-500">Odesláno novým členům po registraci</p>
+                                </div>
+                            </button>
+
+                            <!-- Negative Balance Email -->
+                            <button type="button" onclick="sendTestEmail('negative_balance')"
+                                    class="test-email-btn relative flex items-start p-4 border border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-medium text-gray-900">⚠️ Záporný zůstatek</h3>
+                                    <p class="mt-1 text-xs text-gray-500">První upozornění na negativní balance</p>
+                                </div>
+                            </button>
+
+                            <!-- Debt Warning Email -->
+                            <button type="button" onclick="sendTestEmail('debt_warning')"
+                                    class="test-email-btn relative flex items-start p-4 border border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-medium text-gray-900">🚨 Varování před dluhem</h3>
+                                    <p class="mt-1 text-xs text-gray-500">Dluh > 2× měsíční poplatek</p>
+                                </div>
+                            </button>
+
+                            <!-- Membership Suspended Email -->
+                            <button type="button" onclick="sendTestEmail('membership_suspended')"
+                                    class="test-email-btn relative flex items-start p-4 border border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-medium text-gray-900">🔒 Členství pozastaveno</h3>
+                                    <p class="mt-1 text-xs text-gray-500">Kritický dluh, členství pozastaveno</p>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Status message -->
+                    <div id="email-status" class="hidden">
+                        <!-- Dynamic status messages will be shown here -->
+                    </div>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    <!-- Future sections can be added here -->
+    <!-- <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex justify-between items-center p-6 hover:bg-gray-50 transition-colors">
+                    <h2 class="text-lg font-medium text-gray-900">Další nastavení</h2>
+                    <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                Content here
+            </div>
+        </details>
+    </div> -->
+</div>
+
+<script>
+function sendTestEmail(type) {
+    const email = document.getElementById('test-email').value;
+    const statusDiv = document.getElementById('email-status');
+
+    if (!email) {
+        showStatus('error', 'Prosím zadejte e-mailovou adresu');
+        return;
+    }
+
+    // Disable all buttons
+    const buttons = document.querySelectorAll('.test-email-btn');
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+    });
+
+    showStatus('info', 'Odesílám e-mail...');
+
+    // Send request
+    fetch('/api/admin/test-email', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+            'type': type,
+            'email': email
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(text => {
+                throw new Error(text || 'Chyba při odesílání e-mailu');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        showStatus('success', data.message || 'E-mail úspěšně odeslán!');
+    })
+    .catch(error => {
+        showStatus('error', 'Chyba: ' + error.message);
+    })
+    .finally(() => {
+        // Re-enable buttons
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        });
+    });
+}
+
+function showStatus(type, message) {
+    const statusDiv = document.getElementById('email-status');
+    statusDiv.classList.remove('hidden');
+
+    let bgColor, textColor, icon;
+    if (type === 'success') {
+        bgColor = 'bg-green-50';
+        textColor = 'text-green-800';
+        icon = '✓';
+    } else if (type === 'error') {
+        bgColor = 'bg-red-50';
+        textColor = 'text-red-800';
+        icon = '✗';
+    } else {
+        bgColor = 'bg-blue-50';
+        textColor = 'text-blue-800';
+        icon = 'ℹ';
+    }
+
+    statusDiv.innerHTML = `
+        <div class="rounded-md ${bgColor} p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <span class="text-lg">${icon}</span>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium ${textColor}">${message}</p>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Auto-hide success messages after 5 seconds
+    if (type === 'success') {
+        setTimeout(() => {
+            statusDiv.classList.add('hidden');
+        }, 5000);
+    }
+}
+</script>
+{{end}}

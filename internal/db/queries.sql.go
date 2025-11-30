@@ -1328,6 +1328,45 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 	return i, err
 }
 
+const updateUserCustomFee = `-- name: UpdateUserCustomFee :one
+UPDATE users SET
+    level_actual_amount = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+`
+
+type UpdateUserCustomFeeParams struct {
+	LevelActualAmount string `json:"level_actual_amount"`
+	ID                int64  `json:"id"`
+}
+
+func (q *Queries) UpdateUserCustomFee(ctx context.Context, arg UpdateUserCustomFeeParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserCustomFee, arg.LevelActualAmount, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateUserKeycloakInfo = `-- name: UpdateUserKeycloakInfo :one
 UPDATE users SET
     username = ?,
@@ -1369,7 +1408,6 @@ func (q *Queries) UpdateUserKeycloakInfo(ctx context.Context, arg UpdateUserKeyc
 
 const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users SET
-    username = ?,
     realname = ?,
     phone = ?,
     alt_contact = ?,
@@ -1379,7 +1417,6 @@ RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_
 `
 
 type UpdateUserProfileParams struct {
-	Username   sql.NullString `json:"username"`
 	Realname   sql.NullString `json:"realname"`
 	Phone      sql.NullString `json:"phone"`
 	AltContact sql.NullString `json:"alt_contact"`
@@ -1388,7 +1425,6 @@ type UpdateUserProfileParams struct {
 
 func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, updateUserProfile,
-		arg.Username,
 		arg.Realname,
 		arg.Phone,
 		arg.AltContact,
