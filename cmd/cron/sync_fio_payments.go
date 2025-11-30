@@ -103,17 +103,34 @@ func main() {
 
 		// Try to match user by variable symbol (payments_id)
 		// IMPORTANT: VS is NOT the user.id, it's the user.payments_id!
+		// Edge case: Some users put VS in Message field instead of VS field
+		variableSymbol := tx.VariableSymbol
+		if variableSymbol == "" && tx.Message != "" {
+			// Check if Message contains only digits (likely a VS)
+			isNumeric := true
+			for _, ch := range tx.Message {
+				if ch < '0' || ch > '9' {
+					isNumeric = false
+					break
+				}
+			}
+			if isNumeric {
+				variableSymbol = tx.Message
+				log.Printf("ℹ Using Message field as VS: '%s' (%.2f CZK from %s)", variableSymbol, tx.Amount, tx.AccountName)
+			}
+		}
+
 		var userID sql.NullInt64
-		if tx.VariableSymbol != "" {
+		if variableSymbol != "" {
 			// Look up user by payments_id (VS), not by user.id
-			if user, err := queries.GetUserByPaymentsID(ctx, sql.NullString{String: tx.VariableSymbol, Valid: true}); err == nil {
+			if user, err := queries.GetUserByPaymentsID(ctx, sql.NullString{String: variableSymbol, Valid: true}); err == nil {
 				userID = sql.NullInt64{Int64: user.ID, Valid: true}
 			} else if err == sql.ErrNoRows {
 				log.Printf("⚠ User with payments_id (VS) '%s' not found in database (%.2f CZK from %s)",
-					tx.VariableSymbol, tx.Amount, tx.AccountName)
+					variableSymbol, tx.Amount, tx.AccountName)
 				unmatchedVS = append(unmatchedVS, tx)
 			} else {
-				log.Printf("⚠ Database error looking up user by payments_id '%s': %v", tx.VariableSymbol, err)
+				log.Printf("⚠ Database error looking up user by payments_id '%s': %v", variableSymbol, err)
 				errors++
 			}
 		} else {
@@ -159,7 +176,7 @@ func main() {
 				KindID:         fmt.Sprintf("%d", tx.ID),
 				LocalAccount:   "FIO", // Could be parsed from API info
 				RemoteAccount:  remoteAccount,
-				Identification: tx.VariableSymbol,
+				Identification: variableSymbol,
 				RawData:        sql.NullString{String: string(rawDataJSON), Valid: true},
 				StaffComment:   sql.NullString{},
 			})
@@ -193,7 +210,7 @@ func main() {
 					KindID:         fmt.Sprintf("%d", tx.ID),
 					LocalAccount:   "FIO",
 					RemoteAccount:  remoteAccount,
-					Identification: tx.VariableSymbol,
+					Identification: variableSymbol,
 					RawData:        sql.NullString{String: string(rawDataJSON), Valid: true},
 					StaffComment:   existingPayment.StaffComment, // Preserve staff comment
 				})
