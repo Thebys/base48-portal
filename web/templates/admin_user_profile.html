@@ -1,0 +1,277 @@
+{{template "layout.html" .}}
+
+{{define "content"}}
+<div class="px-4 py-6 sm:px-0">
+    <!-- Admin View Banner -->
+    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+        <div class="flex items-center">
+            <svg class="h-5 w-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <p class="text-sm text-blue-700">
+                <strong>Admin View:</strong> Prohlížíte profil uživatele (read-only mode)
+            </p>
+        </div>
+    </div>
+
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Profil uživatele: {{.TargetDBUser.Email}}</h1>
+        <a href="/admin/users" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-600 hover:bg-gray-700">
+            ← Zpět na seznam uživatelů
+        </a>
+    </div>
+
+    <!-- Keycloak Account Section (Read-only) -->
+    <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-medium text-gray-900">Identita (Keycloak)</h2>
+            <a href="{{.KeycloakAccountURL}}" target="_blank" rel="noopener noreferrer"
+                class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                </svg>
+                Spravovat v Keycloaku
+            </a>
+        </div>
+
+        <p class="text-sm text-gray-500 mb-4">
+            Tyto údaje jsou spravovány v Keycloak SSO systému. Pro jejich změnu použijte tlačítko výše.
+        </p>
+
+        <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Email</dt>
+                <dd class="mt-1">
+                    <input type="email" value="{{.TargetDBUser.Email}}" disabled
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
+                </dd>
+            </div>
+
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Přezdívka</dt>
+                <dd class="mt-1">
+                    <input type="text" value="{{if .TargetDBUser.Username.Valid}}{{.TargetDBUser.Username.String}}{{else}}{{.TargetUser.PreferredName}}{{end}}" disabled
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
+                </dd>
+                <dd class="mt-1 text-xs text-gray-500">
+                    Synchronizováno z Keycloaku ({{.TargetUser.PreferredName}})
+                </dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Membership & Balance Overview -->
+    <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Členství a platby</h2>
+
+        <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="bg-gray-50 px-4 py-3 rounded-md">
+                <dt class="text-sm font-medium text-gray-500">Úroveň členství</dt>
+                <dd class="mt-1 text-sm text-gray-900 font-semibold">{{.Level.Name}}</dd>
+                <dd class="text-xs text-gray-500">{{.Level.Amount}} Kč/měsíc</dd>
+            </div>
+
+            <div class="bg-gray-50 px-4 py-3 rounded-md">
+                <dt class="text-sm font-medium text-gray-500">Členem od</dt>
+                <dd class="mt-1 text-sm text-gray-900 font-semibold">
+                    {{.TargetDBUser.DateJoined.Format "02.01.2006"}}
+                </dd>
+                <dd class="text-xs text-gray-500">
+                    &nbsp;
+                </dd>
+            </div>
+
+            <div class="bg-blue-50 px-4 py-3 rounded-md">
+                <dt class="text-sm font-medium text-blue-700">Zaplaceno celkem</dt>
+                <dd class="mt-1 text-lg font-bold text-blue-900">
+                    {{.TotalPaid}} Kč
+                </dd>
+                <dd class="text-xs text-blue-600">
+                    {{len .Payments}} plateb
+                </dd>
+            </div>
+
+            <div class="px-4 py-3 rounded-md {{if ge .Balance 0.0}}bg-green-50{{else}}bg-red-50{{end}}">
+                <dt class="text-sm font-medium {{if ge .Balance 0.0}}text-green-700{{else}}text-red-700{{end}}">Bilance členství</dt>
+                <dd class="mt-1 text-lg font-bold {{if ge .Balance 0.0}}text-green-900{{else}}text-red-900{{end}}">
+                    {{printf "%.0f" .Balance}} Kč
+                </dd>
+                <dd class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">
+                    {{if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}
+                </dd>
+            </div>
+        </dl>
+
+        <!-- Additional membership details -->
+        <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 mt-4 pt-4 border-t border-gray-200">
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Variabilní symbol pro plabu členského příspěvku</dt>
+                <dd class="mt-1 text-sm text-gray-900 font-mono">{{if .TargetDBUser.PaymentsID.Valid}}{{.TargetDBUser.PaymentsID.String}}{{else}}<span class="text-gray-400">Nepřiřazen</span>{{end}}</dd>
+            </div>
+
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Stav členství</dt>
+                <dd class="mt-1">
+                    {{if eq .TargetDBUser.State "accepted"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Aktivní
+                    </span>
+                    {{else if eq .TargetDBUser.State "awaiting"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        Čekající
+                    </span>
+                    {{else if eq .TargetDBUser.State "suspended"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        Pozastaveno
+                    </span>
+                    {{else}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        {{.TargetDBUser.State}}
+                    </span>
+                    {{end}}
+                </dd>
+            </div>
+
+            {{if .TargetUser.Roles}}
+            <div class="sm:col-span-2">
+                <dt class="text-sm font-medium text-gray-500 mb-2">Role v systému</dt>
+                <dd class="flex flex-wrap gap-2">
+                    {{range .TargetUser.Roles}}
+                    {{if eq . "memberportal_admin"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        {{.}}
+                    </span>
+                    {{else if eq . "active_member"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        {{.}}
+                    </span>
+                    {{else if eq . "in_debt"}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        {{.}}
+                    </span>
+                    {{else}}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                        {{.}}
+                    </span>
+                    {{end}}
+                    {{end}}
+                </dd>
+            </div>
+            {{end}}
+        </dl>
+    </div>
+
+    <!-- Contact Information (Read-only for admin) -->
+    <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Kontaktní údaje</h2>
+        <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Skutečné jméno</dt>
+                <dd class="mt-1 text-sm text-gray-900">{{if .TargetDBUser.Realname.Valid}}{{.TargetDBUser.Realname.String}}{{else}}<span class="text-gray-400">Nevyplněno</span>{{end}}</dd>
+            </div>
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Telefon</dt>
+                <dd class="mt-1 text-sm text-gray-900">{{if .TargetDBUser.Phone.Valid}}{{.TargetDBUser.Phone.String}}{{else}}<span class="text-gray-400">Nevyplněno</span>{{end}}</dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-sm font-medium text-gray-500">Alternativní kontakt</dt>
+                <dd class="mt-1 text-sm text-gray-900">{{if .TargetDBUser.AltContact.Valid}}{{.TargetDBUser.AltContact.String}}{{else}}<span class="text-gray-400">Nevyplněno</span>{{end}}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Incoming Payments (Collapsible) -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex justify-between items-center p-6 hover:bg-gray-50 transition-colors">
+                    <h2 class="text-lg font-medium text-gray-900">Příchozí platby</h2>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-500">{{len .Payments}} plateb</span>
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                {{if .Payments}}
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Datum</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Částka</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">VS</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Účet</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {{range $payment := .Payments}}
+                            <tr>
+                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                                    {{$payment.Date.Format "02.01.2006"}}
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-green-600">
+                                    +{{$payment.Amount}} Kč
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500 font-mono">
+                                    {{$payment.Identification}}
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">
+                                    {{$payment.RemoteAccount}}
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+                {{else}}
+                <p class="text-sm text-gray-500">Zatím žádné zaznamenané platby.</p>
+                {{end}}
+            </div>
+        </details>
+    </div>
+
+    <!-- Membership Fees (Collapsible) -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex justify-between items-center p-6 hover:bg-gray-50 transition-colors">
+                    <h2 class="text-lg font-medium text-gray-900">Započítané členské příspěvky</h2>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-500">{{len .Fees}} období</span>
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                {{if .Fees}}
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Období</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Částka</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {{range $fee := .Fees}}
+                            <tr>
+                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                                    {{$fee.PeriodStart.Format "01/2006"}}
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-700">
+                                    {{$fee.Amount}} Kč
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+                {{else}}
+                <p class="text-sm text-gray-500">Zatím žádné evidované členské příspěvky.</p>
+                {{end}}
+            </div>
+        </details>
+    </div>
+</div>
+{{end}}

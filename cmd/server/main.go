@@ -94,6 +94,7 @@ func main() {
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(authenticator.RequireAuth)
 		r.Get("/users", h.RequireAdmin(h.AdminUsersHandler))
+		r.Get("/users/{id}", h.RequireAdmin(h.AdminUserProfileHandler))
 		r.Get("/payments/unmatched", h.RequireAdmin(h.AdminUnmatchedPaymentsHandler))
 		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))
 		r.Get("/settings", h.RequireAdmin(h.AdminSettingsHandler))

@@ -89,7 +89,11 @@
             {{ range .UserList }}
             <tr>
                 <td>{{ .DBUser.ID }}</td>
-                <td>{{ .DBUser.Email }}</td>
+                <td>
+                    <a href="/admin/users/{{ .DBUser.ID }}" class="text-link" title="Zobrazit profil">
+                        {{ .DBUser.Email }}
+                    </a>
+                </td>
                 <td>{{ if .DBUser.Username.Valid }}{{ .DBUser.Username.String }}{{ else }}-{{ end }}</td>
                 <td>{{ if .DBUser.Realname.Valid }}{{ .DBUser.Realname.String }}{{ else }}-{{ end }}</td>
                 <td>

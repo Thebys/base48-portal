@@ -208,61 +208,18 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch user's membership level
-	level, err := h.queries.GetLevel(r.Context(), dbUser.LevelID)
+	// Build profile data using shared helper
+	data, err := h.buildProfileData(r.Context(), dbUser, user)
 	if err != nil {
-		http.Error(w, "Failed to fetch level", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to build profile data: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Fetch ALL user's payments (not just membership)
-	payments, err := h.queries.ListPaymentsByUser(r.Context(), sql.NullInt64{Int64: dbUser.ID, Valid: true})
-	if err != nil {
-		http.Error(w, "Failed to fetch payments", http.StatusInternalServerError)
-		return
-	}
-
-	// Fetch user's fees
-	fees, err := h.queries.ListFeesByUser(r.Context(), dbUser.ID)
-	if err != nil {
-		http.Error(w, "Failed to fetch fees", http.StatusInternalServerError)
-		return
-	}
-
-	// Calculate balance
-	balance, err := h.queries.GetUserBalance(r.Context(), db.GetUserBalanceParams{
-		UserID:   sql.NullInt64{Int64: dbUser.ID, Valid: true},
-		UserID_2: dbUser.ID,
-	})
-	if err != nil {
-		http.Error(w, "Failed to calculate balance", http.StatusInternalServerError)
-		return
-	}
-
-	// Calculate total paid (sum of all payments)
-	var totalPaid float64
-	for _, payment := range payments {
-		// Parse amount as float
-		var amount float64
-		fmt.Sscanf(payment.Amount, "%f", &amount)
-		totalPaid += amount
-	}
-
-	// Build Keycloak account URL
-	keycloakAccountURL := fmt.Sprintf("%s/realms/%s/account", h.config.KeycloakURL, h.config.KeycloakRealm)
-
-	data := map[string]interface{}{
-		"Title":              "My Profile",
-		"User":               user,
-		"DBUser":             dbUser,
-		"Level":              level,
-		"Payments":           payments,
-		"Fees":               fees,
-		"Balance":            float64(balance), // Membership balance (only matching VS)
-		"TotalPaid":          int64(totalPaid), // Total of ALL payments
-		"Success":            r.URL.Query().Get("success") == "1",
-		"KeycloakAccountURL": keycloakAccountURL,
-	}
+	// Add user-specific data
+	data["Title"] = "My Profile"
+	data["User"] = data["ViewedUser"]  // For own profile, ViewedUser = current user
+	data["DBUser"] = dbUser             // For layout compatibility (current user)
+	data["Success"] = r.URL.Query().Get("success") == "1"
 
 	h.render(w, "profile.html", data)
 }
