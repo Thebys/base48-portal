@@ -125,16 +125,19 @@ RETURNING *;
 
 -- name: UpsertPayment :one
 INSERT INTO payments (
-    user_id, date, amount, kind, kind_id,
+    user_id, project_id, date, amount, kind, kind_id,
     local_account, remote_account, identification, raw_data, staff_comment
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(kind, kind_id) DO UPDATE SET
+    user_id = excluded.user_id,
+    project_id = excluded.project_id,
     date = excluded.date,
     amount = excluded.amount,
     local_account = excluded.local_account,
     remote_account = excluded.remote_account,
     identification = excluded.identification,
-    raw_data = excluded.raw_data
+    raw_data = excluded.raw_data,
+    staff_comment = excluded.staff_comment
 RETURNING *;
 
 -- name: GetPaymentByKindAndID :one
@@ -212,3 +215,50 @@ SELECT DISTINCT subsystem FROM system_logs ORDER BY subsystem;
 
 -- name: GetDistinctLevels :many
 SELECT DISTINCT level FROM system_logs ORDER BY level;
+
+-- ============================================================================
+-- PROJECTS (Fundraising / Special VS)
+-- ============================================================================
+
+-- name: ListProjects :many
+SELECT * FROM projects ORDER BY id DESC;
+
+-- name: GetProject :one
+SELECT * FROM projects WHERE id = ? LIMIT 1;
+
+-- name: GetProjectByPaymentsID :one
+SELECT * FROM projects WHERE payments_id = ? LIMIT 1;
+
+-- name: CreateProject :one
+INSERT INTO projects (name, payments_id, description)
+VALUES (?, ?, ?)
+RETURNING *;
+
+-- name: UpdateProject :one
+UPDATE projects SET
+    name = ?,
+    payments_id = ?,
+    description = ?
+WHERE id = ?
+RETURNING *;
+
+-- name: DeleteProject :exec
+DELETE FROM projects WHERE id = ?;
+
+-- name: GetProjectPayments :many
+-- Get all payments that match the project's VS (identification)
+SELECT p.* FROM payments p
+WHERE p.identification = (
+    SELECT pr.payments_id FROM projects pr WHERE pr.id = ?
+)
+ORDER BY p.date DESC;
+
+-- name: GetProjectBalance :one
+-- Sum all payments that match the project's VS (identification)
+-- This includes both explicitly assigned payments (project_id set)
+-- and payments that just have matching VS
+SELECT COALESCE(SUM(CAST(p.amount AS REAL)), 0) as total
+FROM payments p
+WHERE p.identification = (
+    SELECT pr.payments_id FROM projects pr WHERE pr.id = ?
+);

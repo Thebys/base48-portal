@@ -170,6 +170,7 @@ func main() {
 			// Insert new payment
 			_, err = queries.UpsertPayment(ctx, db.UpsertPaymentParams{
 				UserID:         userID,
+				ProjectID:      sql.NullInt64{}, // Not set during FIO import
 				Date:           txDate,
 				Amount:         fmt.Sprintf("%.2f", tx.Amount),
 				Kind:           "fio",
@@ -204,6 +205,7 @@ func main() {
 			if needsUpdate {
 				_, err = queries.UpsertPayment(ctx, db.UpsertPaymentParams{
 					UserID:         userID,
+					ProjectID:      existingPayment.ProjectID, // Preserve project assignment
 					Date:           txDate,
 					Amount:         fmt.Sprintf("%.2f", tx.Amount),
 					Kind:           "fio",

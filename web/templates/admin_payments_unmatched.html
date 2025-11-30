@@ -32,18 +32,6 @@
             font-size: 14px;
         }
 
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #2563eb;
-            text-decoration: none;
-            font-size: 14px;
-        }
-
-        .back-link:hover {
-            text-decoration: underline;
-        }
-
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -276,17 +264,105 @@
         .help-list li {
             margin-bottom: 5px;
         }
+
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+
+        .btn-primary {
+            background-color: #2196F3;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #1976D2;
+        }
+
+        .btn-primary:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background-color: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border: 1px solid #888;
+            width: 600px;
+            max-width: 90%;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .close {
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .close:hover {
+            color: #ef4444;
+        }
+
+        .payment-info {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border: 1px solid #e5e7eb;
+        }
+
+        .payment-info p {
+            margin: 8px 0;
+            color: #374151;
+        }
+
+        .assign-form h3 {
+            margin-bottom: 15px;
+            color: #111827;
+        }
+
+        .user-item:hover {
+            background: #f3f4f6 !important;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <a href="/admin/users" class="back-link">← Správa uživatelů</a>
-
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <div>
-                <h1 style="margin: 0;">💰 Finanční přehled</h1>
-                <p class="subtitle" style="margin: 5px 0 0 0;">Příchozí platby, které se nepodařilo automaticky přiřadit k uživateli</p>
-            </div>
+        <div style="margin-bottom: 20px;">
+            <h1 style="margin: 0;">💰 Finanční přehled - Nespárované platby</h1>
+            <p class="subtitle" style="margin: 5px 0 0 0;">Příchozí platby, které se nepodařilo automaticky přiřadit k uživateli</p>
         </div>
 
         <div class="stats">
@@ -328,6 +404,7 @@
                         <th>Částka</th>
                         <th>Odesílatel</th>
                         <th>Poznámka</th>
+                        <th>Akce</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -339,6 +416,11 @@
                         <td class="amount incoming">+{{.Payment.Amount}} Kč</td>
                         <td class="account">{{.Payment.RemoteAccount}}</td>
                         <td class="reason">Bez VS - manuální přiřazení nutné</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}', '', '')">
+                                Správa
+                            </button>
+                        </td>
                     </tr>
                     {{end}}
                     {{end}}
@@ -370,6 +452,7 @@
                         <th>VS / payments_id</th>
                         <th>Odesílatel</th>
                         <th>Poznámka</th>
+                        <th>Akce</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -382,6 +465,11 @@
                         <td><span class="vs">{{.Payment.Identification}}</span></td>
                         <td class="account">{{.Payment.RemoteAccount}}</td>
                         <td class="reason">Uživatel s payments_id '{{.Payment.Identification}}' neexistuje</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}', '', '')">
+                                Správa
+                            </button>
+                        </td>
                     </tr>
                     {{end}}
                     {{end}}
@@ -413,6 +501,7 @@
                         <th>VS / payments_id</th>
                         <th>Odesílatel</th>
                         <th>Poznámka</th>
+                        <th>Akce</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -425,6 +514,11 @@
                         <td><span class="vs">{{.Payment.Identification}}</span></td>
                         <td class="account">{{.Payment.RemoteAccount}}</td>
                         <td class="reason">Uživatel s tímto payments_id existuje, ale platba není přiřazena!</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}', '', '')">
+                                Správa
+                            </button>
+                        </td>
                     </tr>
                     {{end}}
                     {{end}}
@@ -436,5 +530,304 @@
         {{end}}
 
         {{end}}
+
+        <!-- Payment Management Modal -->
+        <div id="assignmentModal" class="modal" style="display:none;">
+            <div class="modal-content" style="width: 700px;">
+                <span class="close" onclick="closeAssignmentModal()">&times;</span>
+                <h2>Správa platby <span id="modalPaymentId"></span></h2>
+
+                <!-- Basic Info -->
+                <div class="payment-info">
+                    <p><strong>Datum:</strong> <span id="modalPaymentDate"></span></p>
+                    <p><strong>Částka:</strong> <span id="modalPaymentAmount"></span></p>
+                    <p><strong>Odesílatel:</strong> <span id="modalPaymentAccount"></span></p>
+                </div>
+
+                <!-- Editable Payment Data -->
+                <div style="background: #f9fafb; padding: 15px; border-radius: 6px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                    <h3 style="margin: 0 0 15px 0; font-size: 14px; color: #111827; font-weight: 600;">Doplnit / upravit informace</h3>
+
+                    <div style="display: grid; gap: 12px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; color: #374151;">Variabilní symbol:</label>
+                            <input type="text" id="editVS" placeholder="např. 108" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: 'Courier New', monospace;">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; color: #374151;">Zpráva pro příjemce:</label>
+                            <input type="text" id="editMessage" placeholder="např. dar na energie" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; color: #374151;">Komentář:</label>
+                            <input type="text" id="editComment" placeholder="volitelný komentář" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Assignment Options -->
+                <div style="background: #fff; padding: 15px; border-radius: 6px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                    <h3 style="margin: 0 0 15px 0; font-size: 14px; color: #111827; font-weight: 600;">Přiřazení</h3>
+
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Assign to User -->
+                        <label style="display: flex; align-items: start; cursor: pointer; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='#f9fafb'" onmouseout="if(!document.getElementById('assignToUser').checked) this.style.background='white'">
+                            <input type="radio" name="assignType" id="assignToUser" value="user" onchange="handleAssignTypeChange('user')" style="margin-top: 3px;">
+                            <div style="margin-left: 10px; flex: 1;">
+                                <div style="font-weight: 600; margin-bottom: 5px;">Přiřadit uživateli</div>
+                                <div id="userAssignSection" style="display: none; margin-top: 10px;">
+                                    <input type="text" id="userSearch" placeholder="Hledat podle emailu, jména nebo ID..." oninput="searchUsers()" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                                    <div id="userList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px;">
+                                        <div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">
+                                            Zadejte text pro vyhledání uživatele
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+
+                        <!-- Assign to Project -->
+                        <label style="display: flex; align-items: start; cursor: pointer; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='#f9fafb'" onmouseout="if(!document.getElementById('assignToProject').checked) this.style.background='white'">
+                            <input type="radio" name="assignType" id="assignToProject" value="project" onchange="handleAssignTypeChange('project')" style="margin-top: 3px;">
+                            <div style="margin-left: 10px; flex: 1;">
+                                <div style="font-weight: 600; margin-bottom: 5px;">Přiřadit projektu / fundraising</div>
+                                <div id="projectAssignSection" style="display: none; margin-top: 10px;">
+                                    <select id="projectSelect" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                        <option value="">Načítání projektů...</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </label>
+
+                        <!-- Leave Unmatched -->
+                        <label style="display: flex; align-items: start; cursor: pointer; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='#f9fafb'" onmouseout="if(!document.getElementById('leaveUnmatched').checked) this.style.background='white'">
+                            <input type="radio" name="assignType" id="leaveUnmatched" value="unmatched" onchange="handleAssignTypeChange('unmatched')" style="margin-top: 3px;">
+                            <div style="margin-left: 10px;">
+                                <div style="font-weight: 600; margin-bottom: 5px;">Nechat nespárované</div>
+                                <div style="font-size: 13px; color: #6b7280;">Jen uložit upravené údaje bez přiřazení</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Admin Comment -->
+                <div style="margin: 20px 0;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 600;">Poznámka admin (volitelné):</label>
+                    <textarea id="staffComment" rows="3" placeholder="Např: Platba ověřena osobně, dar na energie 2024, opravený VS, atd." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+                </div>
+
+                <!-- Actions -->
+                <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeAssignmentModal()" class="btn btn-secondary">Zrušit</button>
+                    <button id="confirmAssignBtn" onclick="confirmAssignment()" class="btn btn-primary">Uložit změny</button>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <script>
+        let selectedUserId = null;
+        let selectedProjectId = null;
+        let currentPaymentId = null;
+
+        function managePayment(paymentId, amount, date, account, vs, message, comment) {
+            currentPaymentId = paymentId;
+            selectedUserId = null;
+            selectedProjectId = null;
+
+            // Set basic info
+            document.getElementById('modalPaymentId').textContent = '#' + paymentId;
+            document.getElementById('modalPaymentDate').textContent = date;
+            document.getElementById('modalPaymentAmount').textContent = amount + ' Kč';
+            document.getElementById('modalPaymentAccount').textContent = account;
+
+            // Set editable fields
+            document.getElementById('editVS').value = vs || '';
+            document.getElementById('editMessage').value = message || '';
+            document.getElementById('editComment').value = comment || '';
+            document.getElementById('staffComment').value = '';
+
+            // Reset assign type
+            document.querySelectorAll('input[name="assignType"]').forEach(r => r.checked = false);
+            document.getElementById('userAssignSection').style.display = 'none';
+            document.getElementById('projectAssignSection').style.display = 'none';
+
+            // Reset user search
+            document.getElementById('userSearch').value = '';
+            document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">Zadejte text pro vyhledání uživatele</div>';
+
+            // Load projects for dropdown
+            loadProjects();
+
+            // Show modal
+            document.getElementById('assignmentModal').style.display = 'block';
+        }
+
+        function closeAssignmentModal() {
+            document.getElementById('assignmentModal').style.display = 'none';
+        }
+
+        function handleAssignTypeChange(type) {
+            // Hide all sections first
+            document.getElementById('userAssignSection').style.display = 'none';
+            document.getElementById('projectAssignSection').style.display = 'none';
+
+            // Show relevant section
+            if (type === 'user') {
+                document.getElementById('userAssignSection').style.display = 'block';
+                selectedProjectId = null;
+            } else if (type === 'project') {
+                document.getElementById('projectAssignSection').style.display = 'block';
+                selectedUserId = null;
+            } else if (type === 'unmatched') {
+                selectedUserId = null;
+                selectedProjectId = null;
+            }
+
+            // Update button highlighting
+            const labels = document.querySelectorAll('label');
+            labels.forEach(label => {
+                const radio = label.querySelector('input[type="radio"]');
+                if (radio && radio.checked) {
+                    label.style.borderColor = '#2196F3';
+                    label.style.background = '#eff6ff';
+                } else if (radio) {
+                    label.style.borderColor = '#e5e7eb';
+                    label.style.background = 'white';
+                }
+            });
+        }
+
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/admin/projects');
+                const data = await response.json();
+
+                const select = document.getElementById('projectSelect');
+                if (data.projects && data.projects.length > 0) {
+                    select.innerHTML = '<option value="">-- Vyberte projekt --</option>';
+                    data.projects.forEach(project => {
+                        select.innerHTML += `<option value="${project.id}">${project.name} (VS: ${project.payments_id || 'N/A'})</option>`;
+                    });
+                } else {
+                    select.innerHTML = '<option value="">Žádné projekty (vytvořte v /admin/projects)</option>';
+                }
+            } catch (error) {
+                document.getElementById('projectSelect').innerHTML = '<option value="">Chyba načítání projektů</option>';
+            }
+        }
+
+        async function searchUsers() {
+            const query = document.getElementById('userSearch').value;
+            if (query.length < 2) {
+                document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">Zadejte alespoň 2 znaky</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/users?search=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (data.users && data.users.length > 0) {
+                    let html = '<div style="padding: 10px;">';
+                    data.users.forEach(user => {
+                        const displayName = user.realname || user.username || user.email;
+                        html += `
+                            <div class="user-item" onclick="selectUser(${user.id}, '${displayName.replace(/'/g, "\\'")}', '${user.email.replace(/'/g, "\\'")}', '${user.payments_id || ''}')" style="padding: 10px; border-bottom: 1px solid #e5e7eb; cursor: pointer;">
+                                <div style="font-weight: 600;">${displayName}</div>
+                                <div style="font-size: 13px; color: #6b7280;">${user.email}${user.payments_id ? ' | VS: ' + user.payments_id : ''}</div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    document.getElementById('userList').innerHTML = html;
+                } else {
+                    document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">Žádní uživatelé nenalezeni</div>';
+                }
+            } catch (error) {
+                document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #ef4444; font-size: 13px;">Chyba při načítání uživatelů</div>';
+            }
+        }
+
+        function selectUser(userId, displayName, email, paymentsId) {
+            selectedUserId = userId;
+
+            // Highlight selected user
+            document.querySelectorAll('.user-item').forEach(item => {
+                item.style.background = 'transparent';
+            });
+            event.target.closest('.user-item').style.background = '#eff6ff';
+        }
+
+        async function confirmAssignment() {
+            const assignType = document.querySelector('input[name="assignType"]:checked');
+            const vs = document.getElementById('editVS').value.trim();
+            const message = document.getElementById('editMessage').value.trim();
+            const comment = document.getElementById('editComment').value.trim();
+            const staffComment = document.getElementById('staffComment').value.trim();
+
+            // Validate based on assignment type
+            if (assignType && assignType.value === 'user') {
+                if (!selectedUserId) {
+                    alert('Prosím vyberte uživatele');
+                    return;
+                }
+            } else if (assignType && assignType.value === 'project') {
+                selectedProjectId = parseInt(document.getElementById('projectSelect').value);
+                if (!selectedProjectId) {
+                    alert('Prosím vyberte projekt');
+                    return;
+                }
+            }
+
+            const payload = {
+                payment_id: currentPaymentId,
+                vs: vs,
+                message: message,
+                comment: comment,
+                staff_comment: staffComment,
+                assign_type: assignType ? assignType.value : 'unmatched',
+                user_id: selectedUserId,
+                project_id: selectedProjectId
+            };
+
+            try {
+                const response = await fetch('/api/admin/payments/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Platba byla úspěšně upravena!');
+                    location.reload();
+                } else {
+                    alert('Chyba: ' + (data.error || 'Nepodařilo se upravit platbu'));
+                }
+            } catch (error) {
+                alert('Chyba při úpravě platby: ' + error);
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('assignmentModal');
+            if (event.target == modal) {
+                closeAssignmentModal();
+            }
+        }
+
+        // Handle project select change
+        document.addEventListener('DOMContentLoaded', function() {
+            const projectSelect = document.getElementById('projectSelect');
+            if (projectSelect) {
+                projectSelect.addEventListener('change', function() {
+                    selectedProjectId = this.value ? parseInt(this.value) : null;
+                });
+            }
+        });
+    </script>
 {{ end }}

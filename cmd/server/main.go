@@ -96,6 +96,7 @@ func main() {
 		r.Get("/users", h.RequireAdmin(h.AdminUsersHandler))
 		r.Get("/users/{id}", h.RequireAdmin(h.AdminUserProfileHandler))
 		r.Get("/payments/unmatched", h.RequireAdmin(h.AdminUnmatchedPaymentsHandler))
+		r.Get("/projects", h.RequireAdmin(h.AdminProjectsHandler))
 		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))
 		r.Get("/settings", h.RequireAdmin(h.AdminSettingsHandler))
 	})
@@ -108,6 +109,12 @@ func main() {
 		r.Post("/roles/remove", h.RequireAdmin(h.AdminRemoveRoleHandler))
 		r.Get("/users/roles", h.RequireAdmin(h.AdminGetUserRolesHandler))
 		r.Post("/test-email", h.RequireAdmin(h.AdminTestEmailHandler))
+		r.Post("/payments/assign", h.RequireAdmin(h.AdminAssignPaymentHandler))
+		r.Post("/payments/update", h.RequireAdmin(h.AdminUpdatePaymentHandler))
+		r.Get("/projects", h.RequireAdmin(h.AdminProjectsAPIHandler))
+		r.Post("/projects", h.RequireAdmin(h.AdminCreateProjectHandler))
+		r.Delete("/projects", h.RequireAdmin(h.AdminDeleteProjectHandler))
+		r.Get("/projects/payments", h.RequireAdmin(h.AdminProjectPaymentsHandler))
 	})
 
 	// Create server

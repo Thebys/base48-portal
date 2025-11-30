@@ -1,15 +1,9 @@
 {{ define "content" }}
 <div class="container">
     <div class="header">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <div>
-                <h1 style="margin: 0;">Admin - User Management</h1>
-                <p style="margin: 5px 0 0 0; color: #6b7280;">Showing {{ len .UserList }} users</p>
-            </div>
-            <a href="/admin/payments/unmatched" style="background: #059669; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px;">
-                <span style="font-size: 16px;">💰</span>
-                Finanční přehled
-            </a>
+        <div style="margin-bottom: 20px;">
+            <h1 style="margin: 0;">Admin - User Management</h1>
+            <p style="margin: 5px 0 0 0; color: #6b7280;">Showing {{ len .UserList }} users</p>
         </div>
     </div>
 

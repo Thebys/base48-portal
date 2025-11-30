@@ -39,6 +39,14 @@ type Payment struct {
 	RawData        sql.NullString `json:"raw_data"`
 	StaffComment   sql.NullString `json:"staff_comment"`
 	CreatedAt      time.Time      `json:"created_at"`
+	ProjectID      sql.NullInt64  `json:"project_id"`
+}
+
+type Project struct {
+	ID          int64          `json:"id"`
+	Name        string         `json:"name"`
+	PaymentsID  sql.NullString `json:"payments_id"`
+	Description sql.NullString `json:"description"`
 }
 
 type SystemLog struct {

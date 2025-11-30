@@ -1,0 +1,498 @@
+{{ define "content" }}
+<style>
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .header {
+        margin-bottom: 30px;
+    }
+
+    h1 {
+        font-size: 28px;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+
+    .subtitle {
+        color: #666;
+        font-size: 14px;
+    }
+
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .btn-primary {
+        background-color: #2196F3;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background-color: #1976D2;
+    }
+
+    .btn-secondary {
+        background-color: #6b7280;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background-color: #4b5563;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    th, td {
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    th {
+        background-color: #f9fafb;
+        font-weight: 600;
+        color: #374151;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    tr:last-child td {
+        border-bottom: none;
+    }
+
+    tr:hover {
+        background-color: #f9fafb;
+    }
+
+    .vs {
+        font-family: 'Courier New', monospace;
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-weight: 600;
+    }
+
+    details {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    summary {
+        padding: 20px;
+        cursor: pointer;
+        font-weight: 600;
+        list-style: none;
+        user-select: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    summary::-webkit-details-marker {
+        display: none;
+    }
+
+    summary:hover {
+        background: #f9fafb;
+    }
+
+    .project-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+    }
+
+    .project-info {
+        flex: 1;
+    }
+
+    .project-title {
+        font-size: 18px;
+        color: #111827;
+        margin-bottom: 5px;
+    }
+
+    .project-meta {
+        font-size: 14px;
+        color: #6b7280;
+        font-weight: normal;
+    }
+
+    .project-balance {
+        font-size: 24px;
+        font-weight: 700;
+        color: #059669;
+        margin-right: 20px;
+    }
+
+    .payments-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px;
+    }
+
+    .payments-table th {
+        background: #f9fafb;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 12px;
+        color: #374151;
+        border-bottom: 2px solid #e5e7eb;
+    }
+
+    .payments-table td {
+        padding: 12px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .payments-table tr:hover {
+        background: #f9fafb;
+    }
+
+    .btn-danger {
+        background-color: #ef4444;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background-color: #dc2626;
+    }
+
+    .modal {
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        display: none;
+    }
+
+    .modal-content {
+        background-color: white;
+        margin: 5% auto;
+        padding: 30px;
+        border: 1px solid #888;
+        width: 600px;
+        max-width: 90%;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .close {
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+        color: #6b7280;
+    }
+
+    .close:hover {
+        color: #ef4444;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .form-group input,
+    .form-group textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-family: inherit;
+    }
+
+    .form-group input[type="checkbox"] {
+        width: auto;
+        margin-right: 8px;
+    }
+
+    .form-actions {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+</style>
+
+<div class="container">
+    <div class="header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>🏗️ Správa projektů a fundraising</h1>
+                <p class="subtitle">Projekty se speciálním VS pro sběr příspěvků</p>
+            </div>
+            <button class="btn btn-primary" onclick="openCreateModal()">+ Nový projekt</button>
+        </div>
+    </div>
+
+    <div id="projectsList">
+        <div style="text-align: center; padding: 40px; color: #6b7280;">
+            Načítání projektů...
+        </div>
+    </div>
+</div>
+
+<!-- Create Project Modal -->
+<div id="createModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeCreateModal()">&times;</span>
+        <h2>Vytvořit nový projekt</h2>
+
+        <form id="createProjectForm" onsubmit="createProject(event)">
+            <div class="form-group">
+                <label>Název projektu *</label>
+                <input type="text" id="projectName" required placeholder="např. Energie 2024">
+            </div>
+
+            <div class="form-group">
+                <label>Variabilní symbol (VS) *</label>
+                <input type="text" id="projectVS" required placeholder="např. 2024" pattern="[0-9]+" title="Pouze čísla">
+            </div>
+
+            <div class="form-group">
+                <label>Popis</label>
+                <textarea id="projectDescription" rows="3" placeholder="Popis projektu, pro co sbíráme peníze..."></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" onclick="closeCreateModal()" class="btn btn-secondary">Zrušit</button>
+                <button type="submit" class="btn btn-primary">Vytvořit projekt</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+async function loadProjects() {
+    try {
+        const response = await fetch('/api/admin/projects');
+        const data = await response.json();
+
+        const container = document.getElementById('projectsList');
+
+        if (data.projects && data.projects.length > 0) {
+            container.innerHTML = '';
+            data.projects.forEach(project => {
+                const balance = project.total_amount || 0;
+
+                const projectSection = document.createElement('details');
+                projectSection.innerHTML = `
+                    <summary>
+                        <div class="project-header">
+                            <div class="project-info">
+                                <div class="project-title">${project.name}</div>
+                                <div class="project-meta">
+                                    VS: <span class="vs">${project.payments_id || 'N/A'}</span>
+                                    ${project.description ? ' | ' + project.description : ''}
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <div class="project-balance">
+                                    ${balance.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kč
+                                </div>
+                                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteProject(${project.id}, '${project.name.replace(/'/g, "\\'")}')">
+                                    Smazat
+                                </button>
+                            </div>
+                        </div>
+                    </summary>
+                    <div id="payments-${project.id}" style="padding: 20px; border-top: 1px solid #e5e7eb;">
+                        <div style="text-align: center; padding: 20px; color: #6b7280;">
+                            Načítání plateb...
+                        </div>
+                    </div>
+                `;
+
+                // Load payments when details is opened
+                projectSection.addEventListener('toggle', function() {
+                    if (this.open) {
+                        loadProjectPayments(project.id);
+                    }
+                });
+
+                container.appendChild(projectSection);
+            });
+        } else {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #6b7280;">
+                    Žádné projekty. Vytvořte první projekt pomocí tlačítka "+ Nový projekt".
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading projects:', error);
+        document.getElementById('projectsList').innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #ef4444;">
+                Chyba při načítání projektů: ${error.message}
+            </div>
+        `;
+    }
+}
+
+async function loadProjectPayments(projectId) {
+    try {
+        const response = await fetch(`/api/admin/projects/payments?project_id=${projectId}`);
+        const data = await response.json();
+
+        const container = document.getElementById(`payments-${projectId}`);
+
+        if (data.payments && data.payments.length > 0) {
+            let html = `
+                <table class="payments-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Datum</th>
+                            <th>Částka</th>
+                            <th>Odesílatel</th>
+                            <th>VS</th>
+                            <th>Komentář</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            data.payments.forEach(payment => {
+                html += `
+                    <tr>
+                        <td>#${payment.id}</td>
+                        <td>${payment.date}</td>
+                        <td style="color: #059669; font-weight: 600;">+${payment.amount} Kč</td>
+                        <td>${payment.remote_account}</td>
+                        <td><span class="vs">${payment.identification || '-'}</span></td>
+                        <td style="font-size: 13px; color: #6b7280;">${payment.comment || '-'}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 20px; color: #6b7280;">
+                    Žádné platby pro tento projekt.
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading project payments:', error);
+        document.getElementById(`payments-${projectId}`).innerHTML = `
+            <div style="text-align: center; padding: 20px; color: #ef4444;">
+                Chyba při načítání plateb: ${error.message}
+            </div>
+        `;
+    }
+}
+
+async function deleteProject(projectId, projectName) {
+    if (!confirm(`Opravdu chcete smazat projekt "${projectName}"? Tato akce je nevratná!`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/projects', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ project_id: projectId })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert('Projekt byl úspěšně smazán!');
+            loadProjects();
+        } else {
+            alert('Chyba: ' + (data.error || 'Nepodařilo se smazat projekt'));
+        }
+    } catch (error) {
+        alert('Chyba při mazání projektu: ' + error);
+    }
+}
+
+function openCreateModal() {
+    document.getElementById('createModal').style.display = 'block';
+}
+
+function closeCreateModal() {
+    document.getElementById('createModal').style.display = 'none';
+    document.getElementById('createProjectForm').reset();
+}
+
+async function createProject(event) {
+    event.preventDefault();
+
+    const payload = {
+        name: document.getElementById('projectName').value,
+        payments_id: document.getElementById('projectVS').value,
+        description: document.getElementById('projectDescription').value
+    };
+
+    try {
+        const response = await fetch('/api/admin/projects', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert('Projekt byl úspěšně vytvořen!');
+            closeCreateModal();
+            loadProjects();
+        } else {
+            alert('Chyba: ' + (data.error || 'Nepodařilo se vytvořit projekt'));
+        }
+    } catch (error) {
+        alert('Chyba při vytváření projektu: ' + error);
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('createModal');
+    if (event.target == modal) {
+        closeCreateModal();
+    }
+}
+
+// Load projects on page load
+document.addEventListener('DOMContentLoaded', loadProjects);
+</script>
+{{ end }}

@@ -16,7 +16,7 @@ UPDATE payments SET
     user_id = ?,
     staff_comment = ?
 WHERE id = ?
-RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at
+RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id
 `
 
 type AssignPaymentParams struct {
@@ -41,6 +41,7 @@ func (q *Queries) AssignPayment(ctx context.Context, arg AssignPaymentParams) (P
 		&i.RawData,
 		&i.StaffComment,
 		&i.CreatedAt,
+		&i.ProjectID,
 	)
 	return i, err
 }
@@ -174,7 +175,7 @@ INSERT INTO payments (
     user_id, date, amount, kind, kind_id,
     local_account, remote_account, identification, raw_data, staff_comment
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at
+RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id
 `
 
 type CreatePaymentParams struct {
@@ -217,6 +218,31 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		&i.RawData,
 		&i.StaffComment,
 		&i.CreatedAt,
+		&i.ProjectID,
+	)
+	return i, err
+}
+
+const createProject = `-- name: CreateProject :one
+INSERT INTO projects (name, payments_id, description)
+VALUES (?, ?, ?)
+RETURNING id, name, payments_id, description
+`
+
+type CreateProjectParams struct {
+	Name        string         `json:"name"`
+	PaymentsID  sql.NullString `json:"payments_id"`
+	Description sql.NullString `json:"description"`
+}
+
+func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
+	row := q.db.QueryRowContext(ctx, createProject, arg.Name, arg.PaymentsID, arg.Description)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PaymentsID,
+		&i.Description,
 	)
 	return i, err
 }
@@ -282,6 +308,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteProject = `-- name: DeleteProject :exec
+DELETE FROM projects WHERE id = ?
+`
+
+func (q *Queries) DeleteProject(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteProject, id)
+	return err
 }
 
 const getDistinctLevels = `-- name: GetDistinctLevels :many
@@ -397,7 +432,7 @@ func (q *Queries) GetLevel(ctx context.Context, id int64) (Level, error) {
 }
 
 const getPayment = `-- name: GetPayment :one
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at FROM payments WHERE id = ? LIMIT 1
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id FROM payments WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetPayment(ctx context.Context, id int64) (Payment, error) {
@@ -416,12 +451,13 @@ func (q *Queries) GetPayment(ctx context.Context, id int64) (Payment, error) {
 		&i.RawData,
 		&i.StaffComment,
 		&i.CreatedAt,
+		&i.ProjectID,
 	)
 	return i, err
 }
 
 const getPaymentByKindAndID = `-- name: GetPaymentByKindAndID :one
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at FROM payments WHERE kind = ? AND kind_id = ? LIMIT 1
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id FROM payments WHERE kind = ? AND kind_id = ? LIMIT 1
 `
 
 type GetPaymentByKindAndIDParams struct {
@@ -445,8 +481,105 @@ func (q *Queries) GetPaymentByKindAndID(ctx context.Context, arg GetPaymentByKin
 		&i.RawData,
 		&i.StaffComment,
 		&i.CreatedAt,
+		&i.ProjectID,
 	)
 	return i, err
+}
+
+const getProject = `-- name: GetProject :one
+SELECT id, name, payments_id, description FROM projects WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
+	row := q.db.QueryRowContext(ctx, getProject, id)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PaymentsID,
+		&i.Description,
+	)
+	return i, err
+}
+
+const getProjectBalance = `-- name: GetProjectBalance :one
+SELECT COALESCE(SUM(CAST(p.amount AS REAL)), 0) as total
+FROM payments p
+WHERE p.identification = (
+    SELECT pr.payments_id FROM projects pr WHERE pr.id = ?
+)
+`
+
+// Sum all payments that match the project's VS (identification)
+// This includes both explicitly assigned payments (project_id set)
+// and payments that just have matching VS
+func (q *Queries) GetProjectBalance(ctx context.Context, id int64) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, getProjectBalance, id)
+	var total interface{}
+	err := row.Scan(&total)
+	return total, err
+}
+
+const getProjectByPaymentsID = `-- name: GetProjectByPaymentsID :one
+SELECT id, name, payments_id, description FROM projects WHERE payments_id = ? LIMIT 1
+`
+
+func (q *Queries) GetProjectByPaymentsID(ctx context.Context, paymentsID sql.NullString) (Project, error) {
+	row := q.db.QueryRowContext(ctx, getProjectByPaymentsID, paymentsID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PaymentsID,
+		&i.Description,
+	)
+	return i, err
+}
+
+const getProjectPayments = `-- name: GetProjectPayments :many
+SELECT p.id, p.user_id, p.date, p.amount, p.kind, p.kind_id, p.local_account, p.remote_account, p.identification, p.raw_data, p.staff_comment, p.created_at, p.project_id FROM payments p
+WHERE p.identification = (
+    SELECT pr.payments_id FROM projects pr WHERE pr.id = ?
+)
+ORDER BY p.date DESC
+`
+
+// Get all payments that match the project's VS (identification)
+func (q *Queries) GetProjectPayments(ctx context.Context, id int64) ([]Payment, error) {
+	rows, err := q.db.QueryContext(ctx, getProjectPayments, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payment{}
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Date,
+			&i.Amount,
+			&i.Kind,
+			&i.KindID,
+			&i.LocalAccount,
+			&i.RemoteAccount,
+			&i.Identification,
+			&i.RawData,
+			&i.StaffComment,
+			&i.CreatedAt,
+			&i.ProjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserBalance = `-- name: GetUserBalance :one
@@ -978,7 +1111,7 @@ func (q *Queries) ListLogsFiltered(ctx context.Context, arg ListLogsFilteredPara
 }
 
 const listMembershipPaymentsByUser = `-- name: ListMembershipPaymentsByUser :many
-SELECT p.id, p.user_id, p.date, p.amount, p.kind, p.kind_id, p.local_account, p.remote_account, p.identification, p.raw_data, p.staff_comment, p.created_at
+SELECT p.id, p.user_id, p.date, p.amount, p.kind, p.kind_id, p.local_account, p.remote_account, p.identification, p.raw_data, p.staff_comment, p.created_at, p.project_id
 FROM payments p
 JOIN users u ON p.user_id = u.id
 WHERE p.user_id = ?
@@ -1009,6 +1142,7 @@ func (q *Queries) ListMembershipPaymentsByUser(ctx context.Context, userID sql.N
 			&i.RawData,
 			&i.StaffComment,
 			&i.CreatedAt,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -1024,7 +1158,7 @@ func (q *Queries) ListMembershipPaymentsByUser(ctx context.Context, userID sql.N
 }
 
 const listPaymentsByUser = `-- name: ListPaymentsByUser :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at FROM payments WHERE user_id = ? ORDER BY date DESC
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id FROM payments WHERE user_id = ? ORDER BY date DESC
 `
 
 func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) ([]Payment, error) {
@@ -1049,6 +1183,43 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) 
 			&i.RawData,
 			&i.StaffComment,
 			&i.CreatedAt,
+			&i.ProjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjects = `-- name: ListProjects :many
+
+SELECT id, name, payments_id, description FROM projects ORDER BY id DESC
+`
+
+// ============================================================================
+// PROJECTS (Fundraising / Special VS)
+// ============================================================================
+func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
+	rows, err := q.db.QueryContext(ctx, listProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Project{}
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.PaymentsID,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -1099,7 +1270,7 @@ func (q *Queries) ListRecentLogs(ctx context.Context, limit int64) ([]SystemLog,
 }
 
 const listRecentPayments = `-- name: ListRecentPayments :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at FROM payments ORDER BY date DESC LIMIT ?
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id FROM payments ORDER BY date DESC LIMIT ?
 `
 
 func (q *Queries) ListRecentPayments(ctx context.Context, limit int64) ([]Payment, error) {
@@ -1124,6 +1295,7 @@ func (q *Queries) ListRecentPayments(ctx context.Context, limit int64) ([]Paymen
 			&i.RawData,
 			&i.StaffComment,
 			&i.CreatedAt,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -1139,7 +1311,7 @@ func (q *Queries) ListRecentPayments(ctx context.Context, limit int64) ([]Paymen
 }
 
 const listUnassignedPayments = `-- name: ListUnassignedPayments :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at FROM payments WHERE user_id IS NULL ORDER BY date DESC
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id FROM payments WHERE user_id IS NULL ORDER BY date DESC
 `
 
 func (q *Queries) ListUnassignedPayments(ctx context.Context) ([]Payment, error) {
@@ -1164,6 +1336,7 @@ func (q *Queries) ListUnassignedPayments(ctx context.Context) ([]Payment, error)
 			&i.RawData,
 			&i.StaffComment,
 			&i.CreatedAt,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -1300,6 +1473,39 @@ func (q *Queries) UpdateLevel(ctx context.Context, arg UpdateLevelParams) (Level
 		&i.Amount,
 		&i.Active,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateProject = `-- name: UpdateProject :one
+UPDATE projects SET
+    name = ?,
+    payments_id = ?,
+    description = ?
+WHERE id = ?
+RETURNING id, name, payments_id, description
+`
+
+type UpdateProjectParams struct {
+	Name        string         `json:"name"`
+	PaymentsID  sql.NullString `json:"payments_id"`
+	Description sql.NullString `json:"description"`
+	ID          int64          `json:"id"`
+}
+
+func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
+	row := q.db.QueryRowContext(ctx, updateProject,
+		arg.Name,
+		arg.PaymentsID,
+		arg.Description,
+		arg.ID,
+	)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PaymentsID,
+		&i.Description,
 	)
 	return i, err
 }
@@ -1510,21 +1716,25 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 
 const upsertPayment = `-- name: UpsertPayment :one
 INSERT INTO payments (
-    user_id, date, amount, kind, kind_id,
+    user_id, project_id, date, amount, kind, kind_id,
     local_account, remote_account, identification, raw_data, staff_comment
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(kind, kind_id) DO UPDATE SET
+    user_id = excluded.user_id,
+    project_id = excluded.project_id,
     date = excluded.date,
     amount = excluded.amount,
     local_account = excluded.local_account,
     remote_account = excluded.remote_account,
     identification = excluded.identification,
-    raw_data = excluded.raw_data
-RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at
+    raw_data = excluded.raw_data,
+    staff_comment = excluded.staff_comment
+RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id
 `
 
 type UpsertPaymentParams struct {
 	UserID         sql.NullInt64  `json:"user_id"`
+	ProjectID      sql.NullInt64  `json:"project_id"`
 	Date           time.Time      `json:"date"`
 	Amount         string         `json:"amount"`
 	Kind           string         `json:"kind"`
@@ -1539,6 +1749,7 @@ type UpsertPaymentParams struct {
 func (q *Queries) UpsertPayment(ctx context.Context, arg UpsertPaymentParams) (Payment, error) {
 	row := q.db.QueryRowContext(ctx, upsertPayment,
 		arg.UserID,
+		arg.ProjectID,
 		arg.Date,
 		arg.Amount,
 		arg.Kind,
@@ -1563,6 +1774,7 @@ func (q *Queries) UpsertPayment(ctx context.Context, arg UpsertPaymentParams) (P
 		&i.RawData,
 		&i.StaffComment,
 		&i.CreatedAt,
+		&i.ProjectID,
 	)
 	return i, err
 }
