@@ -2,9 +2,20 @@ services:
   portal:
     build: .
     ports:
-      - "8080:8080"
+      - "9123:9123"
     env_file:
       - .env
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+
+  fio-sync:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    command: sh -c 'while true; do echo "=== FIO sync started at $$(date) ===" && ./sync-fio; sleep 120; done'
+    restart: unless-stopped
+    depends_on:
+      - portal

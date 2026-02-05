@@ -59,9 +59,9 @@ func main() {
 	var transactions []fio.Transaction
 	var fetchErr error
 
-	// Default: fetch last 90 days (FIO API limit)
+	// Default: fetch last 85 days (FIO API limit is 90, using 85 for safety margin)
 	// You can modify this based on command line arguments
-	daysBack := 90
+	daysBack := 85
 	dateFrom := time.Now().AddDate(0, 0, -daysBack)
 	dateTo := time.Now()
 
