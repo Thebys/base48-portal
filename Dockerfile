@@ -14,6 +14,7 @@ WORKDIR /app
 COPY --from=builder /app/server .
 COPY --from=builder /app/sync-fio .
 COPY --from=builder /app/web/templates ./web/templates
+COPY --from=builder /app/web/static ./web/static
 COPY --from=builder /app/migrations ./migrations
 # Port is configured via PORT env variable
 CMD ["./server"]
