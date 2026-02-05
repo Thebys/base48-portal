@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -55,7 +56,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	h, err := handler.New(authenticator, database, cfg, "web/templates")
+	h, err := handler.New(authenticator, database, cfg)
 	if err != nil {
 		log.Fatalf("Failed to create handler: %v", err)
 	}
@@ -70,7 +71,7 @@ func main() {
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	// Static files
-	fileServer := http.FileServer(http.Dir("web/static"))
+	fileServer := http.FileServer(http.Dir(filepath.Join(cfg.WebRoot, "static")))
 	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
 
 	// Public routes

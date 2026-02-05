@@ -51,7 +51,7 @@ func (c *Client) SendTemplated(ctx context.Context, params SendParams) error {
 	}
 
 	// Load and parse template
-	templatePath := filepath.Join("web/templates/email", params.TemplateName)
+	templatePath := filepath.Join(c.config.WebRoot, "templates", "email", params.TemplateName)
 	tmpl, err := template.ParseFiles(templatePath)
 	if err != nil {
 		return c.logEmail(ctx, params, fmt.Errorf("template parse error: %w", err))

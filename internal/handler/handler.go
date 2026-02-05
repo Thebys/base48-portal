@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"path/filepath"
 
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/config"
@@ -23,10 +24,11 @@ type Handler struct {
 	serviceAccount *auth.ServiceAccountClient
 	emailClient    *email.Client
 	qrpayService   *qrpay.Service
+	webRoot        string
 }
 
 // New creates a new Handler instance
-func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config, templatesDir string) (*Handler, error) {
+func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config) (*Handler, error) {
 	queries := db.New(database)
 
 	// Initialize service account if credentials are provided
@@ -65,6 +67,7 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 		serviceAccount: serviceAccount,
 		emailClient:    emailClient,
 		qrpayService:   qrService,
+		webRoot:        cfg.WebRoot,
 	}, nil
 }
 
@@ -297,8 +300,8 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 
 	// Parse templates fresh each time to avoid name conflicts
 	tmpl, err := template.ParseFiles(
-		"web/templates/layout.html",
-		"web/templates/"+name,
+		filepath.Join(h.webRoot, "templates", "layout.html"),
+		filepath.Join(h.webRoot, "templates", name),
 	)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Template parse error: %v", err), http.StatusInternalServerError)
