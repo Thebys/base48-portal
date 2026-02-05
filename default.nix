@@ -16,11 +16,14 @@ pkgs.buildGoModule rec {
   buildPhase = ''
     runHook preBuild
     mkdir -p $out/bin
+    mkdir -p $out/share/portal/web
 
     go build -ldflags="-s -w" -o $out/bin/portal cmd/server/main.go
 
     go build -o $out/bin/sync_fio_payments cmd/cron/sync_fio_payments.go
     go build -o $out/bin/update_debt_status cmd/cron/update_debt_status.go
+
+    cp -r web/templates $out/share/portal/web/
 
     runHook postBuild
   '';
