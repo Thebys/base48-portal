@@ -290,6 +290,11 @@ func (h *Handler) handleCustomFeeUpdate(w http.ResponseWriter, r *http.Request, 
 func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
+	// Add BaseURL to template data for OG tags
+	if dataMap, ok := data.(map[string]interface{}); ok {
+		dataMap["BaseURL"] = h.config.BaseURL
+	}
+
 	// Parse templates fresh each time to avoid name conflicts
 	tmpl, err := template.ParseFiles(
 		"web/templates/layout.html",
