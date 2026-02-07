@@ -2,6 +2,14 @@
 
 Členský portál brněnského hackerspace Base48.
 
+## File Hierarchy
+
+├── **tasks** -- Routines to work with the project<br/>
+&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── **docs** -- Tasks related to the project documentation<br/>
+&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── **tree** -- Task used to generate this file hierarchy output<br/>
+
+*This file hierarchy output is generated using the `tree` task that processes directories with the `.about` file containing short description about the purpose of the directory*
+
 ## Funkce
 
 - Keycloak OIDC autentizace
