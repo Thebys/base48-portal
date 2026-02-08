@@ -117,7 +117,7 @@ func main() {
 		fmt.Sscanf(feeAmount, "%f", &monthlyFee)
 		balanceFloat := float64(balance)
 
-		if balanceFloat <= -(2*monthlyFee) || balanceFloat <= -monthlyFee {
+		if monthlyFee > 0 && (balanceFloat <= -(2*monthlyFee) || balanceFloat <= -monthlyFee) {
 			fullUser, err := queries.GetUserByID(ctx, user.ID)
 			if err != nil {
 				log.Printf("  ⚠ Failed to get user record for email: %v", err)
