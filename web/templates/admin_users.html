@@ -67,6 +67,7 @@
         <thead>
             <tr>
                 <th>ID</th>
+                <th>VS</th>
                 <th>Email</th>
                 <th>Nickname</th>
                 <th>Name</th>
@@ -81,6 +82,7 @@
             {{ range .UserList }}
             <tr>
                 <td>{{ .DBUser.ID }}</td>
+                <td>{{ if .DBUser.PaymentsID.Valid }}{{ .DBUser.PaymentsID.String }}{{ else }}-{{ end }}</td>
                 <td>
                     <a href="/admin/users/{{ .DBUser.ID }}" class="text-link" title="Zobrazit profil">
                         {{ .DBUser.Email }}
