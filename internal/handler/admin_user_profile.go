@@ -13,6 +13,7 @@ import (
 
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/keycloak"
 	"github.com/base48/member-portal/internal/qrpay"
 	"github.com/go-chi/chi/v5"
 )
@@ -405,6 +406,48 @@ func (h *Handler) AdminUpdateUserStateHandler(w http.ResponseWriter, r *http.Req
 			"admin_email":    adminDBUser.Email,
 		}),
 	})
+
+	// Sync active_member Keycloak role on state transitions
+	if targetUser.KeycloakID.Valid && targetUser.KeycloakID.String != "" {
+		keycloakID := targetUser.KeycloakID.String
+		if req.State == "accepted" && previousState != "accepted" {
+			// Transitioning TO accepted → assign active_member
+			if token, err := h.getServiceAccountToken(ctx); err != nil {
+				log.Printf("[Keycloak] Warning: cannot sync active_member for %s: %v", updatedUser.Email, err)
+			} else {
+				kcClient := keycloak.NewClient(h.config, token)
+				if err := kcClient.AssignRoleToUser(ctx, keycloakID, "active_member"); err != nil {
+					log.Printf("[Keycloak] Warning: failed to assign active_member to %s: %v", updatedUser.Email, err)
+				} else {
+					log.Printf("[Keycloak] Assigned active_member to %s", updatedUser.Email)
+					h.queries.CreateLog(ctx, db.CreateLogParams{
+						Subsystem: "keycloak",
+						Level:     "success",
+						UserID:    sql.NullInt64{Int64: userID, Valid: true},
+						Message:   fmt.Sprintf("Assigned active_member role (state changed to accepted)"),
+					})
+				}
+			}
+		} else if req.State != "accepted" && previousState == "accepted" {
+			// Transitioning FROM accepted → remove active_member
+			if token, err := h.getServiceAccountToken(ctx); err != nil {
+				log.Printf("[Keycloak] Warning: cannot sync active_member for %s: %v", updatedUser.Email, err)
+			} else {
+				kcClient := keycloak.NewClient(h.config, token)
+				if err := kcClient.RemoveRoleFromUser(ctx, keycloakID, "active_member"); err != nil {
+					log.Printf("[Keycloak] Warning: failed to remove active_member from %s: %v", updatedUser.Email, err)
+				} else {
+					log.Printf("[Keycloak] Removed active_member from %s", updatedUser.Email)
+					h.queries.CreateLog(ctx, db.CreateLogParams{
+						Subsystem: "keycloak",
+						Level:     "success",
+						UserID:    sql.NullInt64{Int64: userID, Valid: true},
+						Message:   fmt.Sprintf("Removed active_member role (state changed to %s)", req.State),
+					})
+				}
+			}
+		}
+	}
 
 	// Send welcome email on transition TO "accepted"
 	if req.State == "accepted" && previousState != "accepted" {

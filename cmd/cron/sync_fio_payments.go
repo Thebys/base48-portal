@@ -347,10 +347,11 @@ func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queri
 		return 1
 	}
 
-	log.Printf("Checking debt status for %d accepted members...", len(users))
+	log.Printf("Checking debt and active_member status for %d accepted members...", len(users))
 
-	assigned := 0
-	removed := 0
+	debtAssigned := 0
+	debtRemoved := 0
+	activeMemberAssigned := 0
 	errors := 0
 
 	for _, user := range users {
@@ -370,13 +371,26 @@ func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queri
 			continue
 		}
 
-		hasDebtRole, err := kcClient.UserHasRole(ctx, keycloakID, "in_debt")
+		// Fetch all roles once (instead of multiple UserHasRole calls)
+		roles, err := kcClient.GetUserRoles(ctx, keycloakID)
 		if err != nil {
 			log.Printf("  ⚠ Error checking roles for %s: %v", user.Email, err)
 			errors++
 			continue
 		}
 
+		hasDebtRole := false
+		hasActiveMemberRole := false
+		for _, role := range roles {
+			switch role.Name {
+			case "in_debt":
+				hasDebtRole = true
+			case "active_member":
+				hasActiveMemberRole = true
+			}
+		}
+
+		// Sync in_debt role based on balance
 		shouldHaveDebt := balance < 0
 
 		if shouldHaveDebt && !hasDebtRole {
@@ -385,7 +399,7 @@ func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queri
 				errors++
 			} else {
 				log.Printf("  ✓ Assigned in_debt to %s (balance: %d)", user.Email, balance)
-				assigned++
+				debtAssigned++
 			}
 		} else if !shouldHaveDebt && hasDebtRole {
 			if err := kcClient.RemoveRoleFromUser(ctx, keycloakID, "in_debt"); err != nil {
@@ -393,15 +407,27 @@ func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queri
 				errors++
 			} else {
 				log.Printf("  ✓ Removed in_debt from %s (balance: %d)", user.Email, balance)
-				removed++
+				debtRemoved++
+			}
+		}
+
+		// Sync active_member role (all accepted members should have it)
+		if !hasActiveMemberRole {
+			if err := kcClient.AssignRoleToUser(ctx, keycloakID, "active_member"); err != nil {
+				log.Printf("  ✗ Failed to assign active_member to %s: %v", user.Email, err)
+				errors++
+			} else {
+				log.Printf("  ✓ Assigned active_member to %s", user.Email)
+				activeMemberAssigned++
 			}
 		}
 	}
 
-	log.Printf("\nDebt status summary:")
+	log.Printf("\nRole sync summary:")
 	log.Printf("  Total accepted users: %d", len(users))
-	log.Printf("  in_debt assigned: %d", assigned)
-	log.Printf("  in_debt removed: %d", removed)
+	log.Printf("  in_debt assigned: %d", debtAssigned)
+	log.Printf("  in_debt removed: %d", debtRemoved)
+	log.Printf("  active_member assigned: %d", activeMemberAssigned)
 	log.Printf("  Errors: %d", errors)
 
 	level := "success"
@@ -412,8 +438,8 @@ func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queri
 		Subsystem: "keycloak",
 		Level:     level,
 		UserID:    sql.NullInt64{},
-		Message:   fmt.Sprintf("Debt status update: %d assigned, %d removed", assigned, removed),
-		Metadata:  sql.NullString{String: fmt.Sprintf(`{"assigned":%d,"removed":%d,"errors":%d}`, assigned, removed, errors), Valid: true},
+		Message:   fmt.Sprintf("Role sync: in_debt +%d/-%d, active_member +%d", debtAssigned, debtRemoved, activeMemberAssigned),
+		Metadata:  sql.NullString{String: fmt.Sprintf(`{"debt_assigned":%d,"debt_removed":%d,"active_member_assigned":%d,"errors":%d}`, debtAssigned, debtRemoved, activeMemberAssigned, errors), Valid: true},
 	})
 
 	return errors
