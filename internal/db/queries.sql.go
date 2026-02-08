@@ -835,6 +835,21 @@ func (q *Queries) GetProjectVSByVS(ctx context.Context, vs string) (ProjectV, er
 	return i, err
 }
 
+const getSetting = `-- name: GetSetting :one
+
+SELECT "key", value, updated_at FROM settings WHERE key = ? LIMIT 1
+`
+
+// ============================================================================
+// SETTINGS (key-value cache for external data)
+// ============================================================================
+func (q *Queries) GetSetting(ctx context.Context, key string) (Setting, error) {
+	row := q.db.QueryRowContext(ctx, getSetting, key)
+	var i Setting
+	err := row.Scan(&i.Key, &i.Value, &i.UpdatedAt)
+	return i, err
+}
+
 const getUserBalance = `-- name: GetUserBalance :one
 SELECT CAST(ROUND(
     COALESCE((
@@ -2302,5 +2317,26 @@ func (q *Queries) UpsertPayment(ctx context.Context, arg UpsertPaymentParams) (P
 		&i.DismissedBy,
 		&i.DismissedReason,
 	)
+	return i, err
+}
+
+const upsertSetting = `-- name: UpsertSetting :one
+INSERT INTO settings (key, value, updated_at)
+VALUES (?, ?, CURRENT_TIMESTAMP)
+ON CONFLICT(key) DO UPDATE SET
+    value = excluded.value,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING "key", value, updated_at
+`
+
+type UpsertSettingParams struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+func (q *Queries) UpsertSetting(ctx context.Context, arg UpsertSettingParams) (Setting, error) {
+	row := q.db.QueryRowContext(ctx, upsertSetting, arg.Key, arg.Value)
+	var i Setting
+	err := row.Scan(&i.Key, &i.Value, &i.UpdatedAt)
 	return i, err
 }

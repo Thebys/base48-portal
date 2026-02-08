@@ -87,6 +87,12 @@ type ProjectV struct {
 	CreatedAt sql.NullTime   `json:"created_at"`
 }
 
+type Setting struct {
+	Key       string    `json:"key"`
+	Value     string    `json:"value"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type SystemLog struct {
 	ID        int64          `json:"id"`
 	Subsystem string         `json:"subsystem"`

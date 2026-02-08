@@ -113,6 +113,7 @@ func detectExisting(db *sql.DB) error {
 			db.QueryRow("SELECT COUNT(*) FROM fees WHERE length(period_start) > 10").Scan(&count)
 			return count == 0
 		}},
+		{13, func(db *sql.DB) bool { return hasTable(db, "settings") }},
 	}
 
 	for _, c := range checks {

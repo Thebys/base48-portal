@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -71,7 +72,7 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	log.Printf("Fetching FIO transactions from %s to %s...",
 		fio.FormatDate(dateFrom), fio.FormatDate(dateTo))
 
-	transactions, err := fioClient.FetchTransactionsByPeriod(
+	result, err := fioClient.FetchTransactionsByPeriod(
 		ctx,
 		fio.FormatDate(dateFrom),
 		fio.FormatDate(dateTo),
@@ -80,6 +81,19 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 		log.Printf("✗ Failed to fetch transactions: %v", err)
 		return 1
 	}
+
+	transactions := result.Transactions
+
+	// Cache FIO closing balance
+	queries.UpsertSetting(ctx, db.UpsertSettingParams{
+		Key:   "fio_closing_balance",
+		Value: fmt.Sprintf("%.0f", result.ClosingBalance),
+	})
+	queries.UpsertSetting(ctx, db.UpsertSettingParams{
+		Key:   "fio_closing_balance_date",
+		Value: fio.FormatDate(dateTo),
+	})
+	log.Printf("Cached FIO closing balance: %.0f CZK", result.ClosingBalance)
 
 	log.Printf("Fetched %d transactions from FIO API", len(transactions))
 
@@ -97,6 +111,34 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	emptyVS := []fio.Transaction{}
 
 	for _, tx := range transactions {
+		// Detect rent payments (outgoing, VS 3872751 or message contains "najemne"/"nájem")
+		if tx.Amount < 0 {
+			msg := strings.ToLower(tx.Message + " " + tx.Comment)
+			isRent := tx.VariableSymbol == "3872751" ||
+				strings.Contains(msg, "najemne") || strings.Contains(msg, "nájem")
+			if isRent {
+				if txDate, parseErr := fio.ParseDate(tx.Date); parseErr == nil {
+					shouldUpdate := true
+					if existing, getErr := queries.GetSetting(ctx, "fio_last_rent_date"); getErr == nil {
+						if existingDate, _ := time.Parse("2006-01-02", existing.Value); !txDate.After(existingDate) {
+							shouldUpdate = false
+						}
+					}
+					if shouldUpdate {
+						queries.UpsertSetting(ctx, db.UpsertSettingParams{
+							Key:   "fio_last_rent_date",
+							Value: txDate.Format("2006-01-02"),
+						})
+						queries.UpsertSetting(ctx, db.UpsertSettingParams{
+							Key:   "fio_last_rent_amount",
+							Value: fmt.Sprintf("%.0f", -tx.Amount),
+						})
+						log.Printf("✓ Detected rent payment: %.0f CZK on %s", -tx.Amount, txDate.Format("2006-01-02"))
+					}
+				}
+			}
+		}
+
 		// Skip transactions with zero or negative amounts (outgoing payments, fees, etc.)
 		// Only process incoming payments (positive amounts)
 		if tx.Amount <= 0 {

@@ -45,6 +45,12 @@ type Transaction struct {
 	Identification    string      `json:"column7"`  // Identifikace transakce
 }
 
+// FetchResult contains transactions and account info from a FIO API response.
+type FetchResult struct {
+	Transactions   []Transaction
+	ClosingBalance float64
+}
+
 // TransactionList represents the response from FIO API
 type TransactionList struct {
 	AccountStatement struct {
@@ -72,7 +78,7 @@ type TransactionList struct {
 
 // FetchTransactionsByPeriod fetches transactions for a specific date range
 // dateFrom and dateTo should be in format "YYYY-MM-DD"
-func (c *Client) FetchTransactionsByPeriod(ctx context.Context, dateFrom, dateTo string) ([]Transaction, error) {
+func (c *Client) FetchTransactionsByPeriod(ctx context.Context, dateFrom, dateTo string) (*FetchResult, error) {
 	url := fmt.Sprintf("%s/periods/%s/%s/%s/transactions.json",
 		c.baseURL, c.token, dateFrom, dateTo)
 
@@ -80,13 +86,13 @@ func (c *Client) FetchTransactionsByPeriod(ctx context.Context, dateFrom, dateTo
 }
 
 // FetchTransactionsSinceLastDownload fetches all new transactions since last download
-func (c *Client) FetchTransactionsSinceLastDownload(ctx context.Context) ([]Transaction, error) {
+func (c *Client) FetchTransactionsSinceLastDownload(ctx context.Context) (*FetchResult, error) {
 	url := fmt.Sprintf("%s/last/%s/transactions.json", c.baseURL, c.token)
 	return c.fetchTransactions(ctx, url)
 }
 
 // FetchTransactionsByID fetches transactions from a specific year and ID
-func (c *Client) FetchTransactionsByID(ctx context.Context, year int, idFrom int64) ([]Transaction, error) {
+func (c *Client) FetchTransactionsByID(ctx context.Context, year int, idFrom int64) (*FetchResult, error) {
 	url := fmt.Sprintf("%s/by-id/%s/%d/%d/transactions.json",
 		c.baseURL, c.token, year, idFrom)
 	return c.fetchTransactions(ctx, url)
@@ -117,7 +123,7 @@ func (c *Client) SetLastDownloadDate(ctx context.Context, date string) error {
 }
 
 // fetchTransactions is a helper that performs the actual HTTP request and parsing
-func (c *Client) fetchTransactions(ctx context.Context, url string) ([]Transaction, error) {
+func (c *Client) fetchTransactions(ctx context.Context, url string) (*FetchResult, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -227,7 +233,10 @@ func (c *Client) fetchTransactions(ctx context.Context, url string) ([]Transacti
 		transactions = append(transactions, tx)
 	}
 
-	return transactions, nil
+	return &FetchResult{
+		Transactions:   transactions,
+		ClosingBalance: result.AccountStatement.Info.ClosingBalance,
+	}, nil
 }
 
 // FormatDate converts time.Time to FIO API date format (YYYY-MM-DD)

@@ -340,6 +340,21 @@ RETURNING *;
 SELECT * FROM email_template_content
 WHERE template_name = ? AND lang = ? ORDER BY block_name;
 
+-- ============================================================================
+-- SETTINGS (key-value cache for external data)
+-- ============================================================================
+
+-- name: GetSetting :one
+SELECT * FROM settings WHERE key = ? LIMIT 1;
+
+-- name: UpsertSetting :one
+INSERT INTO settings (key, value, updated_at)
+VALUES (?, ?, CURRENT_TIMESTAMP)
+ON CONFLICT(key) DO UPDATE SET
+    value = excluded.value,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING *;
+
 -- name: UpsertEmailTemplateContent :one
 INSERT INTO email_template_content (template_name, block_name, lang, content, updated_by)
 VALUES (?, ?, ?, ?, ?)

@@ -46,7 +46,7 @@ func main() {
 	log.Printf("Fetching transactions from %s to %s...",
 		fio.FormatDate(dateFrom), fio.FormatDate(dateTo))
 
-	transactions, err := fioClient.FetchTransactionsByPeriod(
+	result, err := fioClient.FetchTransactionsByPeriod(
 		ctx,
 		fio.FormatDate(dateFrom),
 		fio.FormatDate(dateTo),
@@ -56,7 +56,8 @@ func main() {
 		log.Fatalf("Failed to fetch transactions: %v", err)
 	}
 
-	log.Printf("\n✓ Successfully fetched %d transactions\n", len(transactions))
+	transactions := result.Transactions
+	log.Printf("\n✓ Successfully fetched %d transactions (closing balance: %.0f)\n", len(transactions), result.ClosingBalance)
 
 	if len(transactions) == 0 {
 		log.Println("No transactions found in the last 7 days")

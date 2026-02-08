@@ -53,9 +53,9 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		totalMembers      int
 		totalMonthlyFees  int64
-		totalBalance      int64
 		membersInDebt     int
-		membersSevereDebt int
+		totalDebt         int64 // sum of absolute values of negative balances
+		deepDebt          int64 // debt from members owing more than 1 month's fee
 
 		feePreview         []FeePreviewItem
 		previewTotalFees   int64
@@ -101,14 +101,12 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		totalBalance += balance
 		if balance < 0 {
 			membersInDebt++
-		}
-
-		balanceFloat := float64(balance)
-		if balanceFloat <= -(2 * feeFloat) {
-			membersSevereDebt++
+			totalDebt += -balance
+			if float64(balance) <= -feeFloat {
+				deepDebt += -balance
+			}
 		}
 
 		// Fee preview: balance after hypothetical fee
@@ -249,15 +247,61 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	unmatchedCount := len(unmatchedPayments)
 
+	// === "Received this month" from existing payment stats ===
+	currentMonthKey := now.Format("2006-01")
+	var receivedThisMonth int64
+	var receivedThisMonthCount int64
+	if ps, ok := paymentMap[currentMonthKey]; ok {
+		receivedThisMonth = ps.PaymentTotal
+		receivedThisMonthCount = ps.PaymentCount
+	}
+
+	// === FIO cached data (bank balance + rent) ===
+	var bankBalance int64
+	var bankBalanceDate string
+	if setting, err := h.queries.GetSetting(ctx, "fio_closing_balance"); err == nil {
+		fmt.Sscanf(setting.Value, "%d", &bankBalance)
+	}
+	if setting, err := h.queries.GetSetting(ctx, "fio_closing_balance_date"); err == nil {
+		bankBalanceDate = setting.Value
+	}
+
+	var rentAmount int64
+	var rentDate string
+	var rentPaid bool
+	if setting, err := h.queries.GetSetting(ctx, "fio_last_rent_date"); err == nil {
+		rentDate = setting.Value
+	}
+	if setting, err := h.queries.GetSetting(ctx, "fio_last_rent_amount"); err == nil {
+		fmt.Sscanf(setting.Value, "%d", &rentAmount)
+	}
+	if rentDate != "" {
+		if rd, err := time.Parse("2006-01-02", rentDate); err == nil {
+			currentMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+			prevMonthCutoff := currentMonthStart.AddDate(0, 0, -5)
+			rentPaid = !rd.Before(prevMonthCutoff)
+		}
+	}
+
+	daysRemaining := time.Date(now.Year(), now.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day() - now.Day()
+
 	data := map[string]interface{}{
 		"User": h.auth.GetUser(r),
 
 		// Summary cards
-		"TotalMembers":      totalMembers,
-		"TotalMonthlyFees":  totalMonthlyFees,
-		"TotalBalance":      totalBalance,
-		"MembersInDebt":     membersInDebt,
-		"MembersSevereDebt": membersSevereDebt,
+		"TotalMembers":            totalMembers,
+		"TotalMonthlyFees":        totalMonthlyFees,
+		"ReceivedThisMonth":       receivedThisMonth,
+		"ReceivedThisMonthCount":  receivedThisMonthCount,
+		"BankBalance":             bankBalance,
+		"BankBalanceDate":         bankBalanceDate,
+		"RentAmount":              rentAmount,
+		"RentDate":                rentDate,
+		"RentPaid":                rentPaid,
+		"DaysRemaining":           daysRemaining,
+		"MembersInDebt":           membersInDebt,
+		"TotalDebt":               totalDebt,
+		"DeepDebt":                deepDebt,
 
 		// Fee preview
 		"FeePreview":         feePreview,
