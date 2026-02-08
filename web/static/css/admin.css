@@ -14,6 +14,17 @@
     padding: 20px;
 }
 
+/* ===== Responsive Tables ===== */
+/* Prevent wide tables (or anything else) from expanding the page */
+main {
+    overflow-x: hidden;
+}
+/* Any direct parent of a <table> inside main gets horizontal scroll */
+main :has(> table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 /* ===== Buttons ===== */
 
 .btn {
