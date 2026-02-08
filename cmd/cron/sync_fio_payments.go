@@ -124,14 +124,22 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 		}
 
 		var userID sql.NullInt64
+		var projectID sql.NullInt64
 		if variableSymbol != "" {
 			// Look up user by payments_id (VS), not by user.id
 			if user, err := queries.GetUserByPaymentsID(ctx, sql.NullString{String: variableSymbol, Valid: true}); err == nil {
 				userID = sql.NullInt64{Int64: user.ID, Valid: true}
 			} else if err == sql.ErrNoRows {
-				log.Printf("⚠ User with payments_id (VS) '%s' not found in database (%.2f CZK from %s)",
-					variableSymbol, tx.Amount, tx.AccountName)
-				unmatchedVS = append(unmatchedVS, tx)
+				// Not a user payment — check if it belongs to a fundraising project
+				if project, err := queries.GetProjectByPaymentsID(ctx, variableSymbol); err == nil {
+					projectID = sql.NullInt64{Int64: project.ID, Valid: true}
+					log.Printf("✓ Matched payment VS '%s' to project '%s' (%.2f CZK from %s)",
+						variableSymbol, project.Name, tx.Amount, tx.AccountName)
+				} else {
+					log.Printf("⚠ User with payments_id (VS) '%s' not found in database (%.2f CZK from %s)",
+						variableSymbol, tx.Amount, tx.AccountName)
+					unmatchedVS = append(unmatchedVS, tx)
+				}
 			} else {
 				log.Printf("⚠ Database error looking up user by payments_id '%s': %v", variableSymbol, err)
 				errors++
@@ -173,7 +181,7 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 			// Insert new payment
 			_, err = queries.UpsertPayment(ctx, db.UpsertPaymentParams{
 				UserID:         userID,
-				ProjectID:      sql.NullInt64{}, // Not set during FIO import
+				ProjectID:      projectID,
 				Date:           txDate,
 				Amount:         fmt.Sprintf("%.2f", tx.Amount),
 				Kind:           "fio",
@@ -205,10 +213,21 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 				needsUpdate = true
 			}
 
+			// Check if project_id should be set (new project match)
+			if projectID.Valid && !existingPayment.ProjectID.Valid {
+				needsUpdate = true
+			}
+
+			// Use matched projectID if set, otherwise preserve existing
+			effectiveProjectID := projectID
+			if existingPayment.ProjectID.Valid {
+				effectiveProjectID = existingPayment.ProjectID
+			}
+
 			if needsUpdate {
 				_, err = queries.UpsertPayment(ctx, db.UpsertPaymentParams{
 					UserID:         userID,
-					ProjectID:      existingPayment.ProjectID, // Preserve project assignment
+					ProjectID:      effectiveProjectID,
 					Date:           txDate,
 					Amount:         fmt.Sprintf("%.2f", tx.Amount),
 					Kind:           "fio",

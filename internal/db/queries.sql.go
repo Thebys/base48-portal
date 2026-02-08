@@ -1472,7 +1472,7 @@ func (q *Queries) ListRecentEmailOutbox(ctx context.Context, limit int64) ([]Ema
 }
 
 const listUnassignedPayments = `-- name: ListUnassignedPayments :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE user_id IS NULL AND dismissed_at IS NULL ORDER BY date DESC
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE user_id IS NULL AND project_id IS NULL AND dismissed_at IS NULL ORDER BY date DESC
 `
 
 func (q *Queries) ListUnassignedPayments(ctx context.Context) ([]Payment, error) {

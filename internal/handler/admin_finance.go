@@ -230,15 +230,22 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 	for _, p := range unmatched {
 		var amount float64
 		fmt.Sscanf(p.Amount, "%f", &amount)
-		if amount >= 5 {
-			unmatchedPayments = append(unmatchedPayments, UnmatchedPaymentItem{
-				ID:             p.ID,
-				Date:           p.Date,
-				Amount:         p.Amount,
-				Identification: p.Identification,
-				RemoteAccount:  p.RemoteAccount,
-			})
+		if amount < 5 {
+			continue
 		}
+		// Skip payments whose VS belongs to a fundraising project
+		if p.Identification != "" {
+			if _, err := h.queries.GetProjectByPaymentsID(ctx, p.Identification); err == nil {
+				continue
+			}
+		}
+		unmatchedPayments = append(unmatchedPayments, UnmatchedPaymentItem{
+			ID:             p.ID,
+			Date:           p.Date,
+			Amount:         p.Amount,
+			Identification: p.Identification,
+			RemoteAccount:  p.RemoteAccount,
+		})
 	}
 	unmatchedCount := len(unmatchedPayments)
 

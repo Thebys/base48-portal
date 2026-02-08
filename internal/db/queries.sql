@@ -80,7 +80,7 @@ SELECT * FROM payments WHERE id = ? LIMIT 1;
 SELECT * FROM payments WHERE user_id = ? ORDER BY date DESC;
 
 -- name: ListUnassignedPayments :many
-SELECT * FROM payments WHERE user_id IS NULL AND dismissed_at IS NULL ORDER BY date DESC;
+SELECT * FROM payments WHERE user_id IS NULL AND project_id IS NULL AND dismissed_at IS NULL ORDER BY date DESC;
 
 -- name: ListDismissedPayments :many
 SELECT * FROM payments WHERE dismissed_at IS NOT NULL ORDER BY dismissed_at DESC;
