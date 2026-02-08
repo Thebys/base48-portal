@@ -108,7 +108,7 @@ func (q *Queries) CountEmailOutboxByStatus(ctx context.Context) ([]CountEmailOut
 
 const countEmailOutboxSentToday = `-- name: CountEmailOutboxSentToday :one
 SELECT COUNT(*) as count FROM email_outbox
-WHERE status = 'sent' AND DATE(sent_at) = DATE('now')
+WHERE status = 'sent' AND substr(sent_at, 1, 10) = DATE('now')
 `
 
 func (q *Queries) CountEmailOutboxSentToday(ctx context.Context) (int64, error) {
@@ -123,7 +123,11 @@ const createEmailOutbox = `-- name: CreateEmailOutbox :one
 INSERT INTO email_outbox (
     user_id, recipient, subject, template_name,
     template_data, rendered_html, status, max_attempts, next_retry_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (
+    ?1, ?2, ?3, ?4,
+    ?5, ?6, ?7,
+    ?8, substr(?9, 1, 19)
+)
 RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
 `
 
@@ -136,12 +140,13 @@ type CreateEmailOutboxParams struct {
 	RenderedHtml sql.NullString `json:"rendered_html"`
 	Status       string         `json:"status"`
 	MaxAttempts  int64          `json:"max_attempts"`
-	NextRetryAt  sql.NullTime   `json:"next_retry_at"`
+	NextRetryAt  interface{}    `json:"next_retry_at"`
 }
 
 // ============================================================================
 // EMAIL OUTBOX
 // ============================================================================
+// substr normalizes Go time.Time to YYYY-MM-DD HH:MM:SS for SQLite datetime compat
 func (q *Queries) CreateEmailOutbox(ctx context.Context, arg CreateEmailOutboxParams) (EmailOutbox, error) {
 	row := q.db.QueryRowContext(ctx, createEmailOutbox,
 		arg.UserID,
@@ -176,17 +181,18 @@ func (q *Queries) CreateEmailOutbox(ctx context.Context, arg CreateEmailOutboxPa
 
 const createFee = `-- name: CreateFee :one
 INSERT INTO fees (user_id, level_id, period_start, amount)
-VALUES (?, ?, ?, ?)
+VALUES (?1, ?2, substr(?3, 1, 10), ?4)
 RETURNING id, user_id, level_id, period_start, amount, created_at
 `
 
 type CreateFeeParams struct {
-	UserID      int64     `json:"user_id"`
-	LevelID     int64     `json:"level_id"`
-	PeriodStart time.Time `json:"period_start"`
-	Amount      string    `json:"amount"`
+	UserID      int64       `json:"user_id"`
+	LevelID     int64       `json:"level_id"`
+	PeriodStart interface{} `json:"period_start"`
+	Amount      string      `json:"amount"`
 }
 
+// substr normalizes Go time.Time format ("2026-02-01 00:00:00 +0000 UTC") to "2026-02-01"
 func (q *Queries) CreateFee(ctx context.Context, arg CreateFeeParams) (Fee, error) {
 	row := q.db.QueryRowContext(ctx, createFee,
 		arg.UserID,
@@ -485,12 +491,12 @@ func (q *Queries) GetFee(ctx context.Context, id int64) (Fee, error) {
 }
 
 const getFeeByUserAndPeriod = `-- name: GetFeeByUserAndPeriod :one
-SELECT id, user_id, level_id, period_start, amount, created_at FROM fees WHERE user_id = ? AND period_start = ? LIMIT 1
+SELECT id, user_id, level_id, period_start, amount, created_at FROM fees WHERE user_id = ?1 AND period_start = substr(?2, 1, 10) LIMIT 1
 `
 
 type GetFeeByUserAndPeriodParams struct {
-	UserID      int64     `json:"user_id"`
-	PeriodStart time.Time `json:"period_start"`
+	UserID      int64       `json:"user_id"`
+	PeriodStart interface{} `json:"period_start"`
 }
 
 func (q *Queries) GetFeeByUserAndPeriod(ctx context.Context, arg GetFeeByUserAndPeriodParams) (Fee, error) {
@@ -1150,6 +1156,88 @@ func (q *Queries) ListLogsFiltered(ctx context.Context, arg ListLogsFilteredPara
 	return items, nil
 }
 
+const listMonthlyFeeStats = `-- name: ListMonthlyFeeStats :many
+SELECT substr(period_start, 1, 7) as period,
+    COUNT(*) as fee_count,
+    CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as fee_total
+FROM fees
+WHERE period_start >= date('now', '-13 months')
+GROUP BY 1
+`
+
+type ListMonthlyFeeStatsRow struct {
+	Period   string `json:"period"`
+	FeeCount int64  `json:"fee_count"`
+	FeeTotal int64  `json:"fee_total"`
+}
+
+func (q *Queries) ListMonthlyFeeStats(ctx context.Context) ([]ListMonthlyFeeStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMonthlyFeeStats)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMonthlyFeeStatsRow{}
+	for rows.Next() {
+		var i ListMonthlyFeeStatsRow
+		if err := rows.Scan(&i.Period, &i.FeeCount, &i.FeeTotal); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMonthlyPaymentStats = `-- name: ListMonthlyPaymentStats :many
+
+SELECT substr(date, 1, 7) as period,
+    COUNT(*) as payment_count,
+    CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as payment_total
+FROM payments
+WHERE CAST(amount AS REAL) >= 5
+    AND user_id IS NOT NULL
+    AND date >= date('now', '-13 months')
+GROUP BY 1
+`
+
+type ListMonthlyPaymentStatsRow struct {
+	Period       string `json:"period"`
+	PaymentCount int64  `json:"payment_count"`
+	PaymentTotal int64  `json:"payment_total"`
+}
+
+// ============================================================================
+// FINANCIAL OVERVIEW
+// ============================================================================
+func (q *Queries) ListMonthlyPaymentStats(ctx context.Context) ([]ListMonthlyPaymentStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMonthlyPaymentStats)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMonthlyPaymentStatsRow{}
+	for rows.Next() {
+		var i ListMonthlyPaymentStatsRow
+		if err := rows.Scan(&i.Period, &i.PaymentCount, &i.PaymentTotal); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPaymentsByUser = `-- name: ListPaymentsByUser :many
 SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE user_id = ? ORDER BY date DESC
 `
@@ -1180,6 +1268,50 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) 
 			&i.DismissedAt,
 			&i.DismissedBy,
 			&i.DismissedReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingScheduledEmails = `-- name: ListPendingScheduledEmails :many
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox
+WHERE status = 'pending' AND next_retry_at IS NOT NULL AND datetime(next_retry_at) <= datetime('now')
+ORDER BY created_at
+`
+
+func (q *Queries) ListPendingScheduledEmails(ctx context.Context) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingScheduledEmails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmailOutbox{}
+	for rows.Next() {
+		var i EmailOutbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Recipient,
+			&i.Subject,
+			&i.TemplateName,
+			&i.TemplateData,
+			&i.RenderedHtml,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.SentAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1449,12 +1581,12 @@ func (q *Queries) UndismissPayment(ctx context.Context, id int64) (Payment, erro
 
 const updateEmailOutboxStatus = `-- name: UpdateEmailOutboxStatus :one
 UPDATE email_outbox SET
-    status = ?,
-    attempts = ?,
-    last_error = ?,
-    next_retry_at = ?,
-    sent_at = ?
-WHERE id = ?
+    status = ?1,
+    attempts = ?2,
+    last_error = ?3,
+    next_retry_at = substr(?4, 1, 19),
+    sent_at = substr(?5, 1, 19)
+WHERE id = ?6
 RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
 `
 
@@ -1462,8 +1594,8 @@ type UpdateEmailOutboxStatusParams struct {
 	Status      string         `json:"status"`
 	Attempts    int64          `json:"attempts"`
 	LastError   sql.NullString `json:"last_error"`
-	NextRetryAt sql.NullTime   `json:"next_retry_at"`
-	SentAt      sql.NullTime   `json:"sent_at"`
+	NextRetryAt interface{}    `json:"next_retry_at"`
+	SentAt      interface{}    `json:"sent_at"`
 	ID          int64          `json:"id"`
 }
 
@@ -1826,7 +1958,12 @@ const upsertPayment = `-- name: UpsertPayment :one
 INSERT INTO payments (
     user_id, project_id, date, amount, kind, kind_id,
     local_account, remote_account, identification, raw_data, staff_comment
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (
+    ?1, ?2, substr(?3, 1, 10),
+    ?4, ?5, ?6,
+    ?7, ?8, ?9,
+    ?10, ?11
+)
 ON CONFLICT(kind, kind_id) DO UPDATE SET
     user_id = excluded.user_id,
     project_id = excluded.project_id,
@@ -1843,7 +1980,7 @@ RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_accoun
 type UpsertPaymentParams struct {
 	UserID         sql.NullInt64  `json:"user_id"`
 	ProjectID      sql.NullInt64  `json:"project_id"`
-	Date           time.Time      `json:"date"`
+	Date           interface{}    `json:"date"`
 	Amount         string         `json:"amount"`
 	Kind           string         `json:"kind"`
 	KindID         string         `json:"kind_id"`
@@ -1854,6 +1991,7 @@ type UpsertPaymentParams struct {
 	StaffComment   sql.NullString `json:"staff_comment"`
 }
 
+// substr normalizes Go time.Time to YYYY-MM-DD for SQLite date function compat
 func (q *Queries) UpsertPayment(ctx context.Context, arg UpsertPaymentParams) (Payment, error) {
 	row := q.db.QueryRowContext(ctx, upsertPayment,
 		arg.UserID,

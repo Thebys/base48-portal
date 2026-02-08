@@ -414,5 +414,12 @@ func (h *Handler) AdminUpdateUserStateHandler(w http.ResponseWriter, r *http.Req
 		}
 	}
 
+	// Send suspended email on transition TO "suspended"
+	if req.State == "suspended" && previousState != "suspended" {
+		if err := h.emailClient.SendMembershipSuspended(ctx, &updatedUser, ""); err != nil {
+			log.Printf("[Email] Warning: failed to send suspended email to %s: %v", updatedUser.Email, err)
+		}
+	}
+
 	h.jsonSuccess(w, fmt.Sprintf("Stav změněn na %s", req.State))
 }

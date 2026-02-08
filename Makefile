@@ -10,7 +10,6 @@ build:
 # Build all binaries
 build-all: build
 	go build -o sync_fio_payments cmd/cron/sync_fio_payments.go
-	go build -o update_debt_status cmd/cron/update_debt_status.go
 	go build -o import cmd/import/main.go
 
 # Run the application
@@ -23,7 +22,7 @@ test:
 
 # Clean build artifacts
 clean:
-	rm -f portal sync_fio_payments update_debt_status import
+	rm -f portal sync_fio_payments import
 	rm -f *.exe
 	rm -rf tmp/
 

@@ -106,6 +106,13 @@ func detectExisting(db *sql.DB) error {
 		{8, func(db *sql.DB) bool { return hasTable(db, "email_outbox") }},
 		{9, func(db *sql.DB) bool { return hasColumn(db, "users", "locale") }},
 		{10, func(db *sql.DB) bool { return hasIndex(db, "idx_payments_identification") }},
+		{11, func(db *sql.DB) bool { return hasIndex(db, "idx_fees_user_period") }},
+		{12, func(db *sql.DB) bool {
+			// Migration 012 normalizes date formats. Detect by checking no long period_start values.
+			var count int
+			db.QueryRow("SELECT COUNT(*) FROM fees WHERE length(period_start) > 10").Scan(&count)
+			return count == 0
+		}},
 	}
 
 	for _, c := range checks {

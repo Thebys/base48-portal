@@ -27,6 +27,7 @@ type Client struct {
 	config       *config.Config
 	queries      *db.Queries
 	qrpayService *qrpay.Service
+	DefaultDelay time.Duration // If set, emails are scheduled instead of sent immediately
 }
 
 // SendParams contains parameters for sending a templated email
@@ -259,6 +260,7 @@ func GetDefaultContentBlocks(lang string) map[string]map[string]string {
 }
 
 // QueueEmail creates an outbox entry and attempts immediate delivery with retry.
+// If DefaultDelay is set, the email is scheduled for later delivery instead.
 // All email sending should go through this method.
 func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 	if !c.config.EmailEnabled {
@@ -276,6 +278,12 @@ func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 	// Serialize template data to JSON for re-rendering capability
 	dataJSON, _ := json.Marshal(params.Data)
 
+	// Schedule for later if delay is set
+	var nextRetryAt sql.NullTime
+	if c.DefaultDelay > 0 {
+		nextRetryAt = sql.NullTime{Time: time.Now().Add(c.DefaultDelay), Valid: true}
+	}
+
 	// Insert into outbox
 	outboxEntry, err := c.queries.CreateEmailOutbox(ctx, db.CreateEmailOutboxParams{
 		UserID:       params.UserID,
@@ -286,10 +294,18 @@ func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 		RenderedHtml: sql.NullString{String: rendered, Valid: true},
 		Status:       "pending",
 		MaxAttempts:  3,
+		NextRetryAt:  nextRetryAt,
 	})
 	if err != nil {
 		c.logEmail(ctx, params, fmt.Errorf("outbox insert failed: %w", err))
 		return fmt.Errorf("failed to create outbox entry: %w", err)
+	}
+
+	// If delayed, don't send now — will be picked up by ProcessPendingEmails
+	if c.DefaultDelay > 0 {
+		log.Printf("[Email] Scheduled for delivery in %v (outbox #%d): %s -> %s",
+			c.DefaultDelay, outboxEntry.ID, params.TemplateName, params.Recipient)
+		return nil
 	}
 
 	// Skip SMTP if not configured
@@ -350,6 +366,37 @@ func (c *Client) RetryEmail(ctx context.Context, outboxID int64) error {
 
 	c.attemptDelivery(ctx, entry, params)
 	return nil
+}
+
+// ProcessPendingEmails sends scheduled emails whose delivery time has arrived.
+// Called from sync_fio_payments (runs every 2 min) to deliver delayed emails.
+func (c *Client) ProcessPendingEmails(ctx context.Context) int {
+	if c.config.SMTPHost == "" {
+		return 0
+	}
+
+	entries, err := c.queries.ListPendingScheduledEmails(ctx)
+	if err != nil {
+		log.Printf("[Email] Failed to list scheduled emails: %v", err)
+		return 0
+	}
+
+	sent := 0
+	for _, entry := range entries {
+		params := SendParams{
+			UserID:       entry.UserID,
+			Recipient:    entry.Recipient,
+			Subject:      entry.Subject,
+			TemplateName: entry.TemplateName,
+		}
+		c.attemptDelivery(ctx, entry, params)
+		sent++
+	}
+
+	if sent > 0 {
+		log.Printf("[Email] Processed %d scheduled emails", sent)
+	}
+	return sent
 }
 
 // attemptDelivery tries to send an email with exponential backoff retry.

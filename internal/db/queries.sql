@@ -103,10 +103,16 @@ WHERE id = ?
 RETURNING *;
 
 -- name: UpsertPayment :one
+-- substr normalizes Go time.Time to YYYY-MM-DD for SQLite date function compat
 INSERT INTO payments (
     user_id, project_id, date, amount, kind, kind_id,
     local_account, remote_account, identification, raw_data, staff_comment
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (
+    sqlc.arg(user_id), sqlc.arg(project_id), substr(sqlc.arg(date), 1, 10),
+    sqlc.arg(amount), sqlc.arg(kind), sqlc.arg(kind_id),
+    sqlc.arg(local_account), sqlc.arg(remote_account), sqlc.arg(identification),
+    sqlc.arg(raw_data), sqlc.arg(staff_comment)
+)
 ON CONFLICT(kind, kind_id) DO UPDATE SET
     user_id = excluded.user_id,
     project_id = excluded.project_id,
@@ -136,12 +142,13 @@ SELECT * FROM fees WHERE id = ? LIMIT 1;
 SELECT * FROM fees WHERE user_id = ? ORDER BY period_start DESC;
 
 -- name: CreateFee :one
+-- substr normalizes Go time.Time format ("2026-02-01 00:00:00 +0000 UTC") to "2026-02-01"
 INSERT INTO fees (user_id, level_id, period_start, amount)
-VALUES (?, ?, ?, ?)
+VALUES (sqlc.arg(user_id), sqlc.arg(level_id), substr(sqlc.arg(period_start), 1, 10), sqlc.arg(amount))
 RETURNING *;
 
 -- name: GetFeeByUserAndPeriod :one
-SELECT * FROM fees WHERE user_id = ? AND period_start = ? LIMIT 1;
+SELECT * FROM fees WHERE user_id = sqlc.arg(user_id) AND period_start = substr(sqlc.arg(period_start), 1, 10) LIMIT 1;
 
 -- name: ListAcceptedUsersForFees :many
 SELECT u.*, l.amount as level_amount
@@ -247,10 +254,15 @@ SELECT * FROM project_vs WHERE vs = ? LIMIT 1;
 -- ============================================================================
 
 -- name: CreateEmailOutbox :one
+-- substr normalizes Go time.Time to YYYY-MM-DD HH:MM:SS for SQLite datetime compat
 INSERT INTO email_outbox (
     user_id, recipient, subject, template_name,
     template_data, rendered_html, status, max_attempts, next_retry_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (
+    sqlc.arg(user_id), sqlc.arg(recipient), sqlc.arg(subject), sqlc.arg(template_name),
+    sqlc.arg(template_data), sqlc.arg(rendered_html), sqlc.arg(status),
+    sqlc.arg(max_attempts), substr(sqlc.arg(next_retry_at), 1, 19)
+)
 RETURNING *;
 
 -- name: GetEmailOutbox :one
@@ -261,12 +273,12 @@ SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT ?;
 
 -- name: UpdateEmailOutboxStatus :one
 UPDATE email_outbox SET
-    status = ?,
-    attempts = ?,
-    last_error = ?,
-    next_retry_at = ?,
-    sent_at = ?
-WHERE id = ?
+    status = sqlc.arg(status),
+    attempts = sqlc.arg(attempts),
+    last_error = sqlc.arg(last_error),
+    next_retry_at = substr(sqlc.arg(next_retry_at), 1, 19),
+    sent_at = substr(sqlc.arg(sent_at), 1, 19)
+WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: CountEmailOutboxByStatus :many
@@ -274,7 +286,12 @@ SELECT status, COUNT(*) as count FROM email_outbox GROUP BY status;
 
 -- name: CountEmailOutboxSentToday :one
 SELECT COUNT(*) as count FROM email_outbox
-WHERE status = 'sent' AND DATE(sent_at) = DATE('now');
+WHERE status = 'sent' AND substr(sent_at, 1, 10) = DATE('now');
+
+-- name: ListPendingScheduledEmails :many
+SELECT * FROM email_outbox
+WHERE status = 'pending' AND next_retry_at IS NOT NULL AND datetime(next_retry_at) <= datetime('now')
+ORDER BY created_at;
 
 -- ============================================================================
 -- EMAIL TEMPLATE CONTENT (editable text blocks)
@@ -310,3 +327,25 @@ UPDATE users SET
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;
+
+-- ============================================================================
+-- FINANCIAL OVERVIEW
+-- ============================================================================
+
+-- name: ListMonthlyPaymentStats :many
+SELECT substr(date, 1, 7) as period,
+    COUNT(*) as payment_count,
+    CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as payment_total
+FROM payments
+WHERE CAST(amount AS REAL) >= 5
+    AND user_id IS NOT NULL
+    AND date >= date('now', '-13 months')
+GROUP BY 1;
+
+-- name: ListMonthlyFeeStats :many
+SELECT substr(period_start, 1, 7) as period,
+    COUNT(*) as fee_count,
+    CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as fee_total
+FROM fees
+WHERE period_start >= date('now', '-13 months')
+GROUP BY 1;

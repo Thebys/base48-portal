@@ -11,23 +11,23 @@ import (
 	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
 
+	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/email"
 	"github.com/base48/member-portal/internal/fio"
+	"github.com/base48/member-portal/internal/keycloak"
 )
 
-// Sync payments from FIO Bank API to local database
+// Sync payments from FIO Bank API and update debt status in Keycloak
 //
 // Usage:
 //   go run cmd/cron/sync_fio_payments.go
-//   go run cmd/cron/sync_fio_payments.go --since-last  # Fetch only new transactions
-//   go run cmd/cron/sync_fio_payments.go --days 7      # Fetch last 7 days
 //
-// Nebo v crontab (každý den ve 3:00):
-//   0 3 * * * cd /path/to/portal && ./sync_fio_payments --since-last >> logs/fio-sync.log 2>&1
+// Crontab (every 2 minutes):
+//   */2 * * * * cd /path/to/portal && ./sync_fio_payments >> logs/fio-sync.log 2>&1
 
 func main() {
-	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
@@ -37,12 +37,10 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Check FIO token
 	if cfg.BankFIOToken == "" {
 		log.Fatal("BANK_FIO_TOKEN is required")
 	}
 
-	// Connect to database
 	database, err := sql.Open("sqlite", cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -52,15 +50,20 @@ func main() {
 	queries := db.New(database)
 	ctx := context.Background()
 
-	// Create FIO API client
+	fioErrors := syncFIO(ctx, cfg, queries)
+	debtErrors := updateDebtStatus(ctx, cfg, queries)
+	processScheduledEmails(ctx, cfg, queries)
+
+	if fioErrors+debtErrors > 0 {
+		log.Fatal("Job completed with errors")
+	}
+	log.Println("✓ Job completed successfully")
+}
+
+func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	fioClient := fio.NewClient(cfg.BankFIOToken)
 
-	// Determine which transactions to fetch
-	var transactions []fio.Transaction
-	var fetchErr error
-
 	// Default: fetch last 85 days (FIO API limit is 90, using 85 for safety margin)
-	// You can modify this based on command line arguments
 	daysBack := 85
 	dateFrom := time.Now().AddDate(0, 0, -daysBack)
 	dateTo := time.Now()
@@ -68,21 +71,21 @@ func main() {
 	log.Printf("Fetching FIO transactions from %s to %s...",
 		fio.FormatDate(dateFrom), fio.FormatDate(dateTo))
 
-	transactions, fetchErr = fioClient.FetchTransactionsByPeriod(
+	transactions, err := fioClient.FetchTransactionsByPeriod(
 		ctx,
 		fio.FormatDate(dateFrom),
 		fio.FormatDate(dateTo),
 	)
-
-	if fetchErr != nil {
-		log.Fatalf("Failed to fetch transactions: %v", fetchErr)
+	if err != nil {
+		log.Printf("✗ Failed to fetch transactions: %v", err)
+		return 1
 	}
 
 	log.Printf("Fetched %d transactions from FIO API", len(transactions))
 
 	if len(transactions) == 0 {
 		log.Println("✓ No new transactions to sync")
-		return
+		return 0
 	}
 
 	// Process transactions
@@ -288,14 +291,120 @@ func main() {
 		Metadata:  sql.NullString{String: fmt.Sprintf(`{"inserted":%d,"updated":%d,"skipped":%d,"unmatched":%d,"errors":%d}`, inserted, updated, skipped, totalUnmatched, errors), Valid: true},
 	})
 
-	if errors > 0 {
-		log.Fatal("Job completed with errors")
-	}
-
-	log.Println("✓ Job completed successfully")
+	return errors
 }
 
-// Helper to repeat strings (since strings.Repeat might not be imported)
+func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
+	if cfg.KeycloakServiceAccountClientID == "" || cfg.KeycloakServiceAccountClientSecret == "" {
+		log.Println("ℹ Skipping debt status update (no Keycloak service account credentials)")
+		return 0
+	}
+
+	log.Println("\n" + repeat("=", 80))
+	log.Println("DEBT STATUS UPDATE")
+	log.Println(repeat("=", 80))
+
+	serviceClient, err := auth.NewServiceAccountClient(
+		ctx, cfg,
+		cfg.KeycloakServiceAccountClientID,
+		cfg.KeycloakServiceAccountClientSecret,
+	)
+	if err != nil {
+		log.Printf("✗ Failed to create service account: %v", err)
+		return 1
+	}
+
+	token, err := serviceClient.GetAccessToken(ctx)
+	if err != nil {
+		log.Printf("✗ Failed to get access token: %v", err)
+		return 1
+	}
+
+	kcClient := keycloak.NewClient(cfg, token)
+
+	users, err := queries.ListAcceptedUsersForFees(ctx)
+	if err != nil {
+		log.Printf("✗ Failed to list accepted users: %v", err)
+		return 1
+	}
+
+	log.Printf("Checking debt status for %d accepted members...", len(users))
+
+	assigned := 0
+	removed := 0
+	errors := 0
+
+	for _, user := range users {
+		if !user.KeycloakID.Valid || user.KeycloakID.String == "" {
+			continue
+		}
+
+		keycloakID := user.KeycloakID.String
+
+		balance, err := queries.GetUserBalance(ctx, db.GetUserBalanceParams{
+			UserID:   sql.NullInt64{Int64: user.ID, Valid: true},
+			UserID_2: user.ID,
+		})
+		if err != nil {
+			log.Printf("  ⚠ Error getting balance for %s: %v", user.Email, err)
+			errors++
+			continue
+		}
+
+		hasDebtRole, err := kcClient.UserHasRole(ctx, keycloakID, "in_debt")
+		if err != nil {
+			log.Printf("  ⚠ Error checking roles for %s: %v", user.Email, err)
+			errors++
+			continue
+		}
+
+		shouldHaveDebt := balance < 0
+
+		if shouldHaveDebt && !hasDebtRole {
+			if err := kcClient.AssignRoleToUser(ctx, keycloakID, "in_debt"); err != nil {
+				log.Printf("  ✗ Failed to assign in_debt to %s: %v", user.Email, err)
+				errors++
+			} else {
+				log.Printf("  ✓ Assigned in_debt to %s (balance: %d)", user.Email, balance)
+				assigned++
+			}
+		} else if !shouldHaveDebt && hasDebtRole {
+			if err := kcClient.RemoveRoleFromUser(ctx, keycloakID, "in_debt"); err != nil {
+				log.Printf("  ✗ Failed to remove in_debt from %s: %v", user.Email, err)
+				errors++
+			} else {
+				log.Printf("  ✓ Removed in_debt from %s (balance: %d)", user.Email, balance)
+				removed++
+			}
+		}
+	}
+
+	log.Printf("\nDebt status summary:")
+	log.Printf("  Total accepted users: %d", len(users))
+	log.Printf("  in_debt assigned: %d", assigned)
+	log.Printf("  in_debt removed: %d", removed)
+	log.Printf("  Errors: %d", errors)
+
+	level := "success"
+	if errors > 0 {
+		level = "warning"
+	}
+	queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "keycloak",
+		Level:     level,
+		UserID:    sql.NullInt64{},
+		Message:   fmt.Sprintf("Debt status update: %d assigned, %d removed", assigned, removed),
+		Metadata:  sql.NullString{String: fmt.Sprintf(`{"assigned":%d,"removed":%d,"errors":%d}`, assigned, removed, errors), Valid: true},
+	})
+
+	return errors
+}
+
+func processScheduledEmails(ctx context.Context, cfg *config.Config, queries *db.Queries) {
+	emailClient := email.New(cfg, queries, nil)
+	emailClient.ProcessPendingEmails(ctx)
+}
+
 func repeat(s string, count int) string {
 	result := ""
 	for i := 0; i < count; i++ {

@@ -108,6 +108,7 @@ func main() {
 		r.Use(authenticator.RequireAuth)
 		r.Get("/users", h.RequireAdmin(h.AdminUsersHandler))
 		r.Get("/users/{id}", h.RequireAdmin(h.AdminUserProfileHandler))
+		r.Get("/finance", h.RequireAdmin(h.AdminFinanceHandler))
 		r.Get("/payments/unmatched", h.RequireAdmin(h.AdminUnmatchedPaymentsHandler))
 		r.Get("/projects", h.RequireAdmin(h.AdminProjectsHandler))
 		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))

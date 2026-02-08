@@ -43,6 +43,7 @@ func main() {
 	queries := db.New(database)
 	qrService := qrpay.NewService(cfg.BankIBAN, cfg.BankBIC)
 	emailClient := email.New(cfg, queries, qrService)
+	emailClient.DefaultDelay = 48 * time.Hour // Delay debt emails so admin can review/cancel
 	ctx := context.Background()
 
 	// Získáme první den aktuálního měsíce
@@ -111,25 +112,34 @@ func main() {
 			continue
 		}
 
-		// Pokud je balance záporná a větší než 2x měsíční poplatek, pošleme warning
+		// Zkontrolujeme dluh a pošleme příslušný e-mail
 		var monthlyFee float64
 		fmt.Sscanf(feeAmount, "%f", &monthlyFee)
 		balanceFloat := float64(balance)
 
-		if balanceFloat < -(2 * monthlyFee) {
-			// Načteme celý user záznam pro email
+		if balanceFloat <= -(2*monthlyFee) || balanceFloat <= -monthlyFee {
 			fullUser, err := queries.GetUserByID(ctx, user.ID)
 			if err != nil {
 				log.Printf("  ⚠ Failed to get user record for email: %v", err)
 				continue
 			}
 
-			// Pošleme debt warning email (gracefully - necrashne když selže)
-			if err := emailClient.SendDebtWarning(ctx, &fullUser, balanceFloat, monthlyFee); err != nil {
-				log.Printf("  ⚠ Failed to send debt warning email: %v", err)
+			if balanceFloat <= -(2 * monthlyFee) {
+				// Tier 2: dluh >= 2× fee — závažné upozornění
+				if err := emailClient.SendDebtWarning(ctx, &fullUser, balanceFloat, monthlyFee); err != nil {
+					log.Printf("  ⚠ Failed to send debt warning email: %v", err)
+				} else {
+					log.Printf("  ✉ Sent debt warning email (balance: %.0f Kč)", balanceFloat)
+					emailsSent++
+				}
 			} else {
-				log.Printf("  ✉ Sent debt warning email (balance: %.0f Kč)", balanceFloat)
-				emailsSent++
+				// Tier 1: dluh >= 1× fee — mírné upozornění
+				if err := emailClient.SendNegativeBalance(ctx, &fullUser, balanceFloat, monthlyFee); err != nil {
+					log.Printf("  ⚠ Failed to send negative balance email: %v", err)
+				} else {
+					log.Printf("  ✉ Sent negative balance email (balance: %.0f Kč)", balanceFloat)
+					emailsSent++
+				}
 			}
 		}
 	}
