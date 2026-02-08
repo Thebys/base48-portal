@@ -43,7 +43,7 @@ func main() {
 	queries := db.New(database)
 	qrService := qrpay.NewService(cfg.BankIBAN, cfg.BankBIC)
 	emailClient := email.New(cfg, queries, qrService)
-	emailClient.DefaultDelay = 48 * time.Hour // Delay debt emails so admin can review/cancel
+	emailClient.DefaultDelay = 72 * time.Hour // Delay debt emails so admin can review/cancel
 	ctx := context.Background()
 
 	// Získáme první den aktuálního měsíce

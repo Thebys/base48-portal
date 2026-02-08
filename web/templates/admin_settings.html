@@ -51,7 +51,7 @@
                 {{end}}
 
                 <!-- Summary counts -->
-                <div class="grid grid-cols-4 gap-4 mb-4">
+                <div class="grid grid-cols-5 gap-4 mb-4">
                     <div class="bg-green-50 px-4 py-3 rounded-md text-center">
                         <div class="text-lg font-bold text-green-900">{{.SentToday}}</div>
                         <div class="text-xs text-green-600">Odesláno dnes</div>
@@ -63,6 +63,10 @@
                     <div class="bg-red-50 px-4 py-3 rounded-md text-center">
                         <div class="text-lg font-bold text-red-900">{{index .OutboxCounts "failed"}}</div>
                         <div class="text-xs text-red-600">Neúspěšné</div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 rounded-md text-center">
+                        <div class="text-lg font-bold text-gray-700">{{index .OutboxCounts "cancelled"}}</div>
+                        <div class="text-xs text-gray-500">Zrušené</div>
                     </div>
                     <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
                         <div class="text-lg font-bold text-blue-900">{{index .OutboxCounts "sent"}}</div>
@@ -90,16 +94,24 @@
                                 <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{.Recipient}}</td>
                                 <td class="px-4 py-2 text-sm text-gray-900 max-w-xs truncate">{{.Subject}}</td>
                                 <td class="px-4 py-2 whitespace-nowrap">
+                                    <div class="flex items-center gap-2">
                                     {{if eq .Status "sent"}}<span class="badge badge-success">odesláno</span>
-                                    {{else if eq .Status "pending"}}<span class="badge badge-warning">čeká</span>
+                                    {{else if eq .Status "pending"}}<span class="badge badge-warning">čeká</span>{{if .TimeRemaining}}<span class="text-xs text-gray-400">za {{.TimeRemaining}}</span>{{end}}
                                     {{else if eq .Status "failed"}}<span class="badge badge-danger">chyba</span>
+                                    {{else if eq .Status "cancelled"}}<span class="badge badge-gray">zrušeno</span>
                                     {{else}}<span class="badge badge-gray">{{.Status}}</span>
                                     {{end}}
+                                    </div>
                                 </td>
                                 <td class="px-4 py-2 whitespace-nowrap text-sm">
-                                    {{if eq .Status "failed"}}
+                                    <div class="flex items-center gap-1">
+                                    {{if eq .Status "pending"}}
+                                    <button onclick="sendNowEmail({{.ID}})" class="btn btn-sm btn-primary">Odeslat</button>
+                                    <button onclick="cancelEmail({{.ID}})" class="btn btn-sm btn-danger">Zrušit</button>
+                                    {{else if eq .Status "failed"}}
                                     <button onclick="retryEmail({{.ID}})" class="btn btn-sm btn-primary">Znovu</button>
                                     {{end}}
+                                    </div>
                                 </td>
                             </tr>
                             {{end}}
@@ -419,6 +431,44 @@ function retryEmail(id) {
     if (!confirm('Znovu odeslat tento e-mail?')) return;
 
     fetch('/api/admin/email/retry', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
+function cancelEmail(id) {
+    if (!confirm('Zrušit odeslání tohoto e-mailu?')) return;
+
+    fetch('/api/admin/email/cancel', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
+function sendNowEmail(id) {
+    if (!confirm('Odeslat tento e-mail ihned?')) return;
+
+    fetch('/api/admin/email/send-now', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({id: id})

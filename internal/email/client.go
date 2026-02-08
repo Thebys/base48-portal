@@ -368,6 +368,37 @@ func (c *Client) RetryEmail(ctx context.Context, outboxID int64) error {
 	return nil
 }
 
+// SendNow forces immediate delivery of a pending scheduled email.
+func (c *Client) SendNow(ctx context.Context, outboxID int64) error {
+	entry, err := c.queries.GetEmailOutbox(ctx, outboxID)
+	if err != nil {
+		return fmt.Errorf("outbox entry not found: %w", err)
+	}
+	if entry.Status != "pending" {
+		return fmt.Errorf("can only send pending emails, current status: %s", entry.Status)
+	}
+
+	// Clear schedule and reset attempts
+	entry, err = c.queries.UpdateEmailOutboxStatus(ctx, db.UpdateEmailOutboxStatusParams{
+		Status:   "pending",
+		Attempts: 0,
+		ID:       entry.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reset outbox entry: %w", err)
+	}
+
+	params := SendParams{
+		UserID:       entry.UserID,
+		Recipient:    entry.Recipient,
+		Subject:      entry.Subject,
+		TemplateName: entry.TemplateName,
+	}
+
+	c.attemptDelivery(ctx, entry, params)
+	return nil
+}
+
 // ProcessPendingEmails sends scheduled emails whose delivery time has arrived.
 // Called from sync_fio_payments (runs every 2 min) to deliver delayed emails.
 func (c *Client) ProcessPendingEmails(ctx context.Context) int {

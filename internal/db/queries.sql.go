@@ -74,6 +74,36 @@ func (q *Queries) AssignPayment(ctx context.Context, arg AssignPaymentParams) (P
 	return i, err
 }
 
+const cancelEmailOutbox = `-- name: CancelEmailOutbox :one
+UPDATE email_outbox SET
+    status = 'cancelled',
+    next_retry_at = NULL
+WHERE id = ? AND status = 'pending'
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
+`
+
+func (q *Queries) CancelEmailOutbox(ctx context.Context, id int64) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, cancelEmailOutbox, id)
+	var i EmailOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const countEmailOutboxByStatus = `-- name: CountEmailOutboxByStatus :many
 SELECT status, COUNT(*) as count FROM email_outbox GROUP BY status
 `

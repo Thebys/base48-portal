@@ -128,6 +128,8 @@ func main() {
 		r.Get("/email/templates", h.RequireAdmin(h.AdminGetTemplateContentHandler))
 		r.Post("/email/templates", h.RequireAdmin(h.AdminSaveTemplateContentHandler))
 		r.Post("/email/retry", h.RequireAdmin(h.AdminRetryEmailHandler))
+		r.Post("/email/cancel", h.RequireAdmin(h.AdminCancelEmailHandler))
+		r.Post("/email/send-now", h.RequireAdmin(h.AdminSendNowEmailHandler))
 		r.Post("/email/preview", h.RequireAdmin(h.AdminPreviewEmailHandler))
 		r.Post("/payments/assign", h.RequireAdmin(h.AdminAssignPaymentHandler))
 		r.Post("/payments/update", h.RequireAdmin(h.AdminUpdatePaymentHandler))

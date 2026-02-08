@@ -293,6 +293,13 @@ SELECT * FROM email_outbox
 WHERE status = 'pending' AND next_retry_at IS NOT NULL AND datetime(next_retry_at) <= datetime('now')
 ORDER BY created_at;
 
+-- name: CancelEmailOutbox :one
+UPDATE email_outbox SET
+    status = 'cancelled',
+    next_retry_at = NULL
+WHERE id = ? AND status = 'pending'
+RETURNING *;
+
 -- ============================================================================
 -- EMAIL TEMPLATE CONTENT (editable text blocks)
 -- ============================================================================

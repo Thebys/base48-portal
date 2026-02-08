@@ -15,6 +15,12 @@ import (
 	"github.com/base48/member-portal/internal/email"
 )
 
+// EmailOutboxView wraps an outbox entry with computed display fields.
+type EmailOutboxView struct {
+	db.EmailOutbox
+	TimeRemaining string // "47h 23m" or "" if not scheduled
+}
+
 // AdminSettingsHandler shows admin settings page
 func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
@@ -41,7 +47,7 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Outbox data
-	recentEmails, err := h.queries.ListRecentEmailOutbox(ctx, 50)
+	recentEmails, err := h.queries.ListRecentEmailOutbox(ctx, 80)
 	if err != nil {
 		log.Printf("[Handler] failed to fetch recent email outbox: %v", err)
 	}
@@ -59,6 +65,24 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		countsMap[c.Status] = c.Count
 	}
 
+	// Enrich outbox entries with countdown
+	now := time.Now()
+	var emailViews []EmailOutboxView
+	for _, e := range recentEmails {
+		view := EmailOutboxView{EmailOutbox: e}
+		if e.Status == "pending" && e.NextRetryAt.Valid && e.NextRetryAt.Time.After(now) {
+			remaining := e.NextRetryAt.Time.Sub(now)
+			hours := int(remaining.Hours())
+			minutes := int(remaining.Minutes()) % 60
+			if hours > 0 {
+				view.TimeRemaining = fmt.Sprintf("%dh %dm", hours, minutes)
+			} else {
+				view.TimeRemaining = fmt.Sprintf("%dm", minutes)
+			}
+		}
+		emailViews = append(emailViews, view)
+	}
+
 	data := map[string]interface{}{
 		"Title":          "Nastavení",
 		"User":           user,
@@ -68,7 +92,7 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"SMTPSkipTLS":    h.config.SMTPSkipTLS,
 		"EmailEnabled":   h.config.EmailEnabled,
 		"BankAccountCZ":  h.config.BankAccountCZ,
-		"RecentEmails":   recentEmails,
+		"RecentEmails":   emailViews,
 		"OutboxCounts":   countsMap,
 		"SentToday":      sentToday,
 	}
@@ -292,6 +316,67 @@ func (h *Handler) AdminRetryEmailHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.jsonSuccess(w, "Email znovu odeslán")
+}
+
+// AdminCancelEmailHandler cancels a pending outbox email.
+// POST /api/admin/email/cancel
+func (h *Handler) AdminCancelEmailHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		idStr := r.FormValue("id")
+		if idStr == "" {
+			h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		var err2 error
+		req.ID, err2 = strconv.ParseInt(idStr, 10, 64)
+		if err2 != nil {
+			h.jsonError(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+	}
+
+	_, err := h.queries.CancelEmailOutbox(ctx, req.ID)
+	if err != nil {
+		h.jsonError(w, "Zrušení selhalo: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonSuccess(w, "Email zrušen")
+}
+
+// AdminSendNowEmailHandler forces immediate delivery of a pending outbox email.
+// POST /api/admin/email/send-now
+func (h *Handler) AdminSendNowEmailHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		idStr := r.FormValue("id")
+		if idStr == "" {
+			h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		var err2 error
+		req.ID, err2 = strconv.ParseInt(idStr, 10, 64)
+		if err2 != nil {
+			h.jsonError(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if err := h.emailClient.SendNow(ctx, req.ID); err != nil {
+		h.jsonError(w, "Odeslání selhalo: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonSuccess(w, "Email odeslán")
 }
 
 // buildEmailTestData builds template data and resolves the template filename
