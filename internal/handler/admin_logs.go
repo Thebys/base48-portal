@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -12,17 +13,7 @@ import (
 // AdminLogsHandler shows system logs with filtering
 // GET /admin/logs
 func (h *Handler) AdminLogsHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	if !user.IsAdmin() {
-		http.Error(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
-
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 	ctx := r.Context()
 
 	// Get filter parameters
@@ -79,10 +70,13 @@ func (h *Handler) AdminLogsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get DBUser for layout
-	dbUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+	dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
 		String: user.ID,
 		Valid:  true,
 	})
+	if err != nil {
+		log.Printf("[Handler] failed to fetch admin DB user: %v", err)
+	}
 
 	data := map[string]interface{}{
 		"Title":       "Systémové logy",

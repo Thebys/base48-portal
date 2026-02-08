@@ -20,21 +20,8 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         h1 {
-            color: #dc2626;
+            color: #2563eb;
             margin-top: 0;
-        }
-        .alert {
-            background: #fef2f2;
-            border-left: 4px solid #dc2626;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .reason {
-            background: #f9fafb;
-            padding: 15px;
-            border-radius: 6px;
-            margin: 20px 0;
-            font-style: italic;
         }
         .button {
             display: inline-block;
@@ -60,20 +47,13 @@
 
         <p>{{index .Labels "greeting_prefix"}} {{.Name}},</p>
 
-        <div class="alert">
-            <strong>{{index .Content "intro_text"}}</strong>
-        </div>
+        <p>{{index .Content "intro_text"}}</p>
 
-        <p><strong>{{index .Labels "reason_heading"}}</strong></p>
-        <div class="reason">
-            {{.Reason}}
-        </div>
+        <p style="white-space: pre-line">{{index .Content "next_steps_text"}}</p>
 
-        <p style="white-space: pre-line">{{index .Content "consequences_text"}}</p>
+        <p style="white-space: pre-line">{{index .Content "wiki_text"}}</p>
 
-        <p style="white-space: pre-line">{{index .Content "recovery_text"}}</p>
-
-        <a href="{{.PortalURL}}/profile" class="button">{{index .Labels "button_my_profile"}}</a>
+        <a href="{{.PortalURL}}" class="button">{{index .Labels "button_portal"}}</a>
 
         <div class="footer">
             <p>{{index .Content "footer"}}</p>

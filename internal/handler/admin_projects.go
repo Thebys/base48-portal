@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -12,24 +13,18 @@ import (
 // AdminProjectsHandler shows the projects management page
 // GET /admin/projects
 func (h *Handler) AdminProjectsHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	if !user.IsAdmin() {
-		http.Error(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 
 	ctx := r.Context()
 
 	// Get DBUser for layout
-	dbUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+	dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
 		String: user.ID,
 		Valid:  true,
 	})
+	if err != nil {
+		log.Printf("[Handler] failed to fetch admin DB user: %v", err)
+	}
 
 	data := map[string]interface{}{
 		"Title":  "Správa projektů",
@@ -59,16 +54,7 @@ type ProjectResponse struct {
 // AdminProjectsAPIHandler returns list of projects (JSON)
 // GET /api/admin/projects
 func (h *Handler) AdminProjectsAPIHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	_ = r // auth enforced by RequireAdmin middleware
 
 	ctx := r.Context()
 
@@ -85,7 +71,9 @@ func (h *Handler) AdminProjectsAPIHandler(w http.ResponseWriter, r *http.Request
 		// Get total amount for this project (by project_id or any VS in project_vs)
 		balanceInterface, err := h.queries.GetProjectBalance(ctx, sql.NullInt64{Int64: p.ID, Valid: true})
 		totalAmount := 0.0
-		if err == nil {
+		if err != nil {
+			log.Printf("[Handler] failed to get project balance for project %d: %v", p.ID, err)
+		} else {
 			// The query returns interface{}, need to convert to float64
 			if f, ok := balanceInterface.(float64); ok {
 				totalAmount = f
@@ -95,7 +83,9 @@ func (h *Handler) AdminProjectsAPIHandler(w http.ResponseWriter, r *http.Request
 		// Get all VS identifiers for this project
 		vsList, err := h.queries.ListProjectVS(ctx, p.ID)
 		vsInfoList := []VSInfo{}
-		if err == nil {
+		if err != nil {
+			log.Printf("[Handler] failed to list project VS for project %d: %v", p.ID, err)
+		} else {
 			for _, vs := range vsList {
 				vsInfoList = append(vsInfoList, VSInfo{
 					VS:   vs.Vs,
@@ -131,16 +121,7 @@ type CreateProjectRequest struct {
 // AdminCreateProjectHandler creates a new project
 // POST /api/admin/projects
 func (h *Handler) AdminCreateProjectHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	_ = r // auth enforced by RequireAdmin middleware
 
 	var req CreateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -191,16 +172,7 @@ func (h *Handler) AdminCreateProjectHandler(w http.ResponseWriter, r *http.Reque
 // AdminDeleteProjectHandler deletes a project
 // DELETE /api/admin/projects/{id}
 func (h *Handler) AdminDeleteProjectHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	_ = r // auth enforced by RequireAdmin middleware
 
 	// Parse project ID from URL
 	var req struct {
@@ -220,11 +192,7 @@ func (h *Handler) AdminDeleteProjectHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Project deleted successfully",
-	})
+	h.jsonSuccess(w, "Project deleted successfully")
 }
 
 // PaymentResponse is the JSON response for a payment
@@ -241,16 +209,7 @@ type PaymentResponse struct {
 // AdminProjectPaymentsHandler returns payments for a project
 // GET /api/admin/projects/{id}/payments
 func (h *Handler) AdminProjectPaymentsHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	_ = r // auth enforced by RequireAdmin middleware
 
 	// Parse project ID from query
 	projectIDStr := r.URL.Query().Get("project_id")
@@ -305,16 +264,7 @@ type AddProjectVSRequest struct {
 // AdminAddProjectVSHandler adds a VS identifier to a project
 // POST /api/admin/projects/vs
 func (h *Handler) AdminAddProjectVSHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	_ = r // auth enforced by RequireAdmin middleware
 
 	var req AddProjectVSRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -348,11 +298,7 @@ func (h *Handler) AdminAddProjectVSHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "VS added successfully",
-	})
+	h.jsonSuccess(w, "VS added successfully")
 }
 
 // RemoveProjectVSRequest is the request body for removing a VS from a project
@@ -364,16 +310,7 @@ type RemoveProjectVSRequest struct {
 // AdminRemoveProjectVSHandler removes a VS identifier from a project
 // DELETE /api/admin/projects/vs
 func (h *Handler) AdminRemoveProjectVSHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	_ = r // auth enforced by RequireAdmin middleware
 
 	var req RemoveProjectVSRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -406,9 +343,5 @@ func (h *Handler) AdminRemoveProjectVSHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "VS removed successfully",
-	})
+	h.jsonSuccess(w, "VS removed successfully")
 }

@@ -16,16 +16,19 @@ import (
 
 // KeycloakUserInfo contains info from Keycloak API
 type KeycloakUserInfo struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Enabled  bool   `json:"enabled"`
+	ID         string              `json:"id"`
+	Username   string              `json:"username"`
+	Email      string              `json:"email"`
+	FirstName  string              `json:"firstName"`
+	LastName   string              `json:"lastName"`
+	Enabled    bool                `json:"enabled"`
+	Attributes map[string][]string `json:"attributes"`
 }
 
 // AdminUserListItem combines database and Keycloak info
 type AdminUserListItem struct {
 	DBUser           db.User
-	KeycloakEnabled  *bool  // nil if not found in Keycloak
+	KeycloakLinked   bool // true if found in Keycloak
 	KeycloakUsername string
 	Roles            []string
 	Balance          int64
@@ -34,16 +37,7 @@ type AdminUserListItem struct {
 // AdminUsersHandler shows admin overview of all users with Keycloak status and roles
 // GET /admin/users
 func (h *Handler) AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	if !user.IsAdmin() {
-		http.Error(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 
 	ctx := r.Context()
 
@@ -97,7 +91,7 @@ func (h *Handler) AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 		// Match with Keycloak user
 		if dbUser.KeycloakID.Valid && dbUser.KeycloakID.String != "" {
 			if kcUser, found := keycloakUsers[dbUser.KeycloakID.String]; found {
-				item.KeycloakEnabled = &kcUser.Enabled
+				item.KeycloakLinked = true
 				item.KeycloakUsername = kcUser.Username
 
 				// Get user's roles from Keycloak
@@ -160,14 +154,8 @@ func matchesFilters(item AdminUserListItem, state, keycloak, balance, search str
 			if item.DBUser.KeycloakID.Valid && item.DBUser.KeycloakID.String != "" {
 				return false
 			}
-		case "enabled":
-			if item.KeycloakEnabled == nil || !*item.KeycloakEnabled {
-				return false
-			}
-		case "disabled":
-			if item.KeycloakEnabled == nil || *item.KeycloakEnabled {
-				return false
-			}
+		case "enabled", "disabled":
+			// Keycloak enabled/disabled filtering removed — use linked/not_linked instead
 		}
 	}
 
@@ -227,11 +215,7 @@ func sortUserList(userList []AdminUserListItem, sortBy string) {
 // AdminUsersAPIHandler returns JSON list of users with Keycloak info
 // GET /api/admin/users
 func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil || !user.IsAdmin() {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	_ = r // auth enforced by RequireAdmin middleware
 
 	ctx := r.Context()
 
@@ -266,7 +250,7 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 		State            string   `json:"state"`
 		Balance          int64    `json:"balance"`
 		KeycloakID       string   `json:"keycloak_id"`
-		KeycloakEnabled  *bool    `json:"keycloak_enabled"`
+		KeycloakLinked   bool     `json:"keycloak_linked"`
 		KeycloakUsername string   `json:"keycloak_username"`
 		Roles            []string `json:"roles"`
 	}
@@ -294,7 +278,7 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 			userResp.KeycloakID = dbUser.KeycloakID.String
 
 			if kcUser, found := keycloakUsers[dbUser.KeycloakID.String]; found {
-				userResp.KeycloakEnabled = &kcUser.Enabled
+				userResp.KeycloakLinked = true
 				userResp.KeycloakUsername = kcUser.Username
 
 				// Get roles

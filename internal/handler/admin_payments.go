@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -23,17 +24,7 @@ type UnmatchedPaymentInfo struct {
 // AdminUnmatchedPaymentsHandler shows all payments that couldn't be automatically matched to users
 // GET /admin/payments/unmatched
 func (h *Handler) AdminUnmatchedPaymentsHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	if !user.IsAdmin() {
-		http.Error(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
-
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 	ctx := r.Context()
 
 	// Get database user
@@ -191,16 +182,7 @@ type AssignPaymentRequest struct {
 // IMPORTANT: This also sets the payment's identification to the user's payments_id
 // so that it will be counted in the user's balance calculation
 func (h *Handler) AdminAssignPaymentHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 
 	var req AssignPaymentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -252,10 +234,13 @@ func (h *Handler) AdminAssignPaymentHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Log the assignment
-	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+	adminDBUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
 		String: user.ID,
 		Valid:  true,
 	})
+	if err != nil {
+		log.Printf("[Handler] failed to fetch admin DB user: %v", err)
+	}
 
 	adminUsername := "unknown"
 	if adminDBUser.Username.Valid {
@@ -266,6 +251,7 @@ func (h *Handler) AdminAssignPaymentHandler(w http.ResponseWriter, r *http.Reque
 		targetUsername = targetUser.Username.String
 	}
 
+	// best-effort audit log
 	h.queries.CreateLog(ctx, db.CreateLogParams{
 		Subsystem: "admin",
 		Level:     "info",
@@ -275,18 +261,17 @@ func (h *Handler) AdminAssignPaymentHandler(w http.ResponseWriter, r *http.Reque
 			payment.ID, parseFloat(payment.Amount),
 			targetUsername, targetUser.Email,
 			targetUser.PaymentsID.String),
-		Metadata: sql.NullString{
-			String: fmt.Sprintf(`{"admin_user_id":%d,"target_user_id":%d,"payment_id":%d,"amount":"%s","vs":"%s","staff_comment":"%s"}`,
-				adminDBUser.ID, targetUser.ID, payment.ID, payment.Amount, targetUser.PaymentsID.String, req.StaffComment),
-			Valid: true,
-		},
+		Metadata: logMetadata(map[string]interface{}{
+			"admin_user_id":  adminDBUser.ID,
+			"target_user_id": targetUser.ID,
+			"payment_id":     payment.ID,
+			"amount":         payment.Amount,
+			"vs":             targetUser.PaymentsID.String,
+			"staff_comment":  req.StaffComment,
+		}),
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Payment successfully assigned and VS updated",
-	})
+	h.jsonSuccess(w, "Payment successfully assigned and VS updated")
 }
 
 // Helper function to parse float from string
@@ -305,16 +290,7 @@ type DismissPaymentRequest struct {
 // AdminDismissPaymentHandler marks a payment as dismissed (seen/ignored)
 // POST /api/admin/payments/dismiss
 func (h *Handler) AdminDismissPaymentHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 
 	var req DismissPaymentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -367,6 +343,7 @@ func (h *Handler) AdminDismissPaymentHandler(w http.ResponseWriter, r *http.Requ
 		adminUsername = adminDBUser.Username.String
 	}
 
+	// best-effort audit log
 	h.queries.CreateLog(ctx, db.CreateLogParams{
 		Subsystem: "admin",
 		Level:     "info",
@@ -375,18 +352,15 @@ func (h *Handler) AdminDismissPaymentHandler(w http.ResponseWriter, r *http.Requ
 			adminUsername, adminDBUser.Email,
 			payment.ID, parseFloat(payment.Amount),
 			req.Reason),
-		Metadata: sql.NullString{
-			String: fmt.Sprintf(`{"admin_user_id":%d,"payment_id":%d,"amount":"%s","reason":"%s"}`,
-				adminDBUser.ID, payment.ID, payment.Amount, req.Reason),
-			Valid: true,
-		},
+		Metadata: logMetadata(map[string]interface{}{
+			"admin_user_id": adminDBUser.ID,
+			"payment_id":    payment.ID,
+			"amount":        payment.Amount,
+			"reason":        req.Reason,
+		}),
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Payment dismissed successfully",
-	})
+	h.jsonSuccess(w, "Payment dismissed successfully")
 }
 
 // UndismissPaymentRequest is the request body for undismissing a payment
@@ -397,16 +371,7 @@ type UndismissPaymentRequest struct {
 // AdminUndismissPaymentHandler restores a dismissed payment back to unmatched
 // POST /api/admin/payments/undismiss
 func (h *Handler) AdminUndismissPaymentHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 
 	var req UndismissPaymentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -446,6 +411,7 @@ func (h *Handler) AdminUndismissPaymentHandler(w http.ResponseWriter, r *http.Re
 		adminUsername = adminDBUser.Username.String
 	}
 
+	// best-effort audit log
 	h.queries.CreateLog(ctx, db.CreateLogParams{
 		Subsystem: "admin",
 		Level:     "info",
@@ -453,18 +419,14 @@ func (h *Handler) AdminUndismissPaymentHandler(w http.ResponseWriter, r *http.Re
 		Message: fmt.Sprintf("Admin %s (%s) restored payment #%d (%.2f Kč) from archive",
 			adminUsername, adminDBUser.Email,
 			payment.ID, parseFloat(payment.Amount)),
-		Metadata: sql.NullString{
-			String: fmt.Sprintf(`{"admin_user_id":%d,"payment_id":%d,"amount":"%s"}`,
-				adminDBUser.ID, payment.ID, payment.Amount),
-			Valid: true,
-		},
+		Metadata: logMetadata(map[string]interface{}{
+			"admin_user_id": adminDBUser.ID,
+			"payment_id":    payment.ID,
+			"amount":        payment.Amount,
+		}),
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Payment restored successfully",
-	})
+	h.jsonSuccess(w, "Payment restored successfully")
 }
 
 // UpdatePaymentRequest is the request body for updating a payment
@@ -482,16 +444,7 @@ type UpdatePaymentRequest struct {
 // AdminUpdatePaymentHandler updates payment data and optionally assigns it
 // POST /api/admin/payments/update
 func (h *Handler) AdminUpdatePaymentHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if !user.IsAdmin() {
-		h.jsonError(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 
 	var req UpdatePaymentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -570,19 +523,22 @@ func (h *Handler) AdminUpdatePaymentHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Log the update action
-	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+	adminDBUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
 		String: user.ID,
 		Valid:  true,
 	})
+	if err != nil {
+		log.Printf("[Handler] failed to fetch admin DB user: %v", err)
+	}
 
 	adminUsername := "unknown"
 	if adminDBUser.Username.Valid {
 		adminUsername = adminDBUser.Username.String
 	}
 
-	// Build log message based on action type
+	// Build log message and metadata based on action type
 	var logMessage string
-	var metadata string
+	var md map[string]interface{}
 
 	switch req.AssignType {
 	case "user":
@@ -595,8 +551,15 @@ func (h *Handler) AdminUpdatePaymentHandler(w http.ResponseWriter, r *http.Reque
 			payment.ID, parseFloat(payment.Amount),
 			targetUsername, targetUser.Email,
 			identification)
-		metadata = fmt.Sprintf(`{"admin_user_id":%d,"action":"assign_user","payment_id":%d,"target_user_id":%d,"amount":"%s","vs":"%s","staff_comment":"%s"}`,
-			adminDBUser.ID, payment.ID, targetUser.ID, payment.Amount, identification, req.StaffComment)
+		md = map[string]interface{}{
+			"admin_user_id":  adminDBUser.ID,
+			"action":         "assign_user",
+			"payment_id":     payment.ID,
+			"target_user_id": targetUser.ID,
+			"amount":         payment.Amount,
+			"vs":             identification,
+			"staff_comment":  req.StaffComment,
+		}
 
 	case "project":
 		logMessage = fmt.Sprintf("Admin %s (%s) updated payment #%d (%.2f Kč) and assigned to project '%s', VS set to '%s'",
@@ -604,32 +567,41 @@ func (h *Handler) AdminUpdatePaymentHandler(w http.ResponseWriter, r *http.Reque
 			payment.ID, parseFloat(payment.Amount),
 			targetProject.Name,
 			identification)
-		metadata = fmt.Sprintf(`{"admin_user_id":%d,"action":"assign_project","payment_id":%d,"target_project_id":%d,"project_name":"%s","amount":"%s","vs":"%s","staff_comment":"%s"}`,
-			adminDBUser.ID, payment.ID, targetProject.ID, targetProject.Name, payment.Amount, identification, req.StaffComment)
+		md = map[string]interface{}{
+			"admin_user_id":     adminDBUser.ID,
+			"action":            "assign_project",
+			"payment_id":        payment.ID,
+			"target_project_id": targetProject.ID,
+			"project_name":      targetProject.Name,
+			"amount":            payment.Amount,
+			"vs":                identification,
+			"staff_comment":     req.StaffComment,
+		}
 
 	default: // "unmatched" or no assignment
 		logMessage = fmt.Sprintf("Admin %s (%s) updated payment #%d (%.2f Kč) data without assignment, VS set to '%s'",
 			adminUsername, adminDBUser.Email,
 			payment.ID, parseFloat(payment.Amount),
 			identification)
-		metadata = fmt.Sprintf(`{"admin_user_id":%d,"action":"update_unmatched","payment_id":%d,"amount":"%s","vs":"%s","message":"%s","staff_comment":"%s"}`,
-			adminDBUser.ID, payment.ID, payment.Amount, identification, req.Message, req.StaffComment)
+		md = map[string]interface{}{
+			"admin_user_id": adminDBUser.ID,
+			"action":        "update_unmatched",
+			"payment_id":    payment.ID,
+			"amount":        payment.Amount,
+			"vs":            identification,
+			"message":       req.Message,
+			"staff_comment": req.StaffComment,
+		}
 	}
 
+	// best-effort audit log
 	h.queries.CreateLog(ctx, db.CreateLogParams{
 		Subsystem: "admin",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: adminDBUser.ID, Valid: true},
 		Message:   logMessage,
-		Metadata: sql.NullString{
-			String: metadata,
-			Valid:  true,
-		},
+		Metadata:  logMetadata(md),
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Payment updated successfully",
-	})
+	h.jsonSuccess(w, "Payment updated successfully")
 }

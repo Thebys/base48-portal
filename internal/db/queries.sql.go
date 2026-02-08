@@ -74,25 +74,25 @@ func (q *Queries) AssignPayment(ctx context.Context, arg AssignPaymentParams) (P
 	return i, err
 }
 
-const countUsersByState = `-- name: CountUsersByState :many
-SELECT state, COUNT(*) as count FROM users GROUP BY state
+const countEmailOutboxByStatus = `-- name: CountEmailOutboxByStatus :many
+SELECT status, COUNT(*) as count FROM email_outbox GROUP BY status
 `
 
-type CountUsersByStateRow struct {
-	State string `json:"state"`
-	Count int64  `json:"count"`
+type CountEmailOutboxByStatusRow struct {
+	Status string `json:"status"`
+	Count  int64  `json:"count"`
 }
 
-func (q *Queries) CountUsersByState(ctx context.Context) ([]CountUsersByStateRow, error) {
-	rows, err := q.db.QueryContext(ctx, countUsersByState)
+func (q *Queries) CountEmailOutboxByStatus(ctx context.Context) ([]CountEmailOutboxByStatusRow, error) {
+	rows, err := q.db.QueryContext(ctx, countEmailOutboxByStatus)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []CountUsersByStateRow{}
+	items := []CountEmailOutboxByStatusRow{}
 	for rows.Next() {
-		var i CountUsersByStateRow
-		if err := rows.Scan(&i.State, &i.Count); err != nil {
+		var i CountEmailOutboxByStatusRow
+		if err := rows.Scan(&i.Status, &i.Count); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -104,6 +104,74 @@ func (q *Queries) CountUsersByState(ctx context.Context) ([]CountUsersByStateRow
 		return nil, err
 	}
 	return items, nil
+}
+
+const countEmailOutboxSentToday = `-- name: CountEmailOutboxSentToday :one
+SELECT COUNT(*) as count FROM email_outbox
+WHERE status = 'sent' AND DATE(sent_at) = DATE('now')
+`
+
+func (q *Queries) CountEmailOutboxSentToday(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countEmailOutboxSentToday)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createEmailOutbox = `-- name: CreateEmailOutbox :one
+
+INSERT INTO email_outbox (
+    user_id, recipient, subject, template_name,
+    template_data, rendered_html, status, max_attempts, next_retry_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
+`
+
+type CreateEmailOutboxParams struct {
+	UserID       sql.NullInt64  `json:"user_id"`
+	Recipient    string         `json:"recipient"`
+	Subject      string         `json:"subject"`
+	TemplateName string         `json:"template_name"`
+	TemplateData sql.NullString `json:"template_data"`
+	RenderedHtml sql.NullString `json:"rendered_html"`
+	Status       string         `json:"status"`
+	MaxAttempts  int64          `json:"max_attempts"`
+	NextRetryAt  sql.NullTime   `json:"next_retry_at"`
+}
+
+// ============================================================================
+// EMAIL OUTBOX
+// ============================================================================
+func (q *Queries) CreateEmailOutbox(ctx context.Context, arg CreateEmailOutboxParams) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, createEmailOutbox,
+		arg.UserID,
+		arg.Recipient,
+		arg.Subject,
+		arg.TemplateName,
+		arg.TemplateData,
+		arg.RenderedHtml,
+		arg.Status,
+		arg.MaxAttempts,
+		arg.NextRetryAt,
+	)
+	var i EmailOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const createFee = `-- name: CreateFee :one
@@ -133,31 +201,6 @@ func (q *Queries) CreateFee(ctx context.Context, arg CreateFeeParams) (Fee, erro
 		&i.LevelID,
 		&i.PeriodStart,
 		&i.Amount,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const createLevel = `-- name: CreateLevel :one
-INSERT INTO levels (name, amount, active)
-VALUES (?, ?, ?)
-RETURNING id, name, amount, active, created_at
-`
-
-type CreateLevelParams struct {
-	Name   string `json:"name"`
-	Amount string `json:"amount"`
-	Active bool   `json:"active"`
-}
-
-func (q *Queries) CreateLevel(ctx context.Context, arg CreateLevelParams) (Level, error) {
-	row := q.db.QueryRowContext(ctx, createLevel, arg.Name, arg.Amount, arg.Active)
-	var i Level
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Amount,
-		&i.Active,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -198,62 +241,6 @@ func (q *Queries) CreateLog(ctx context.Context, arg CreateLogParams) (SystemLog
 	return i, err
 }
 
-const createPayment = `-- name: CreatePayment :one
-INSERT INTO payments (
-    user_id, date, amount, kind, kind_id,
-    local_account, remote_account, identification, raw_data, staff_comment
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason
-`
-
-type CreatePaymentParams struct {
-	UserID         sql.NullInt64  `json:"user_id"`
-	Date           time.Time      `json:"date"`
-	Amount         string         `json:"amount"`
-	Kind           string         `json:"kind"`
-	KindID         string         `json:"kind_id"`
-	LocalAccount   string         `json:"local_account"`
-	RemoteAccount  string         `json:"remote_account"`
-	Identification string         `json:"identification"`
-	RawData        sql.NullString `json:"raw_data"`
-	StaffComment   sql.NullString `json:"staff_comment"`
-}
-
-func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error) {
-	row := q.db.QueryRowContext(ctx, createPayment,
-		arg.UserID,
-		arg.Date,
-		arg.Amount,
-		arg.Kind,
-		arg.KindID,
-		arg.LocalAccount,
-		arg.RemoteAccount,
-		arg.Identification,
-		arg.RawData,
-		arg.StaffComment,
-	)
-	var i Payment
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Date,
-		&i.Amount,
-		&i.Kind,
-		&i.KindID,
-		&i.LocalAccount,
-		&i.RemoteAccount,
-		&i.Identification,
-		&i.RawData,
-		&i.StaffComment,
-		&i.CreatedAt,
-		&i.ProjectID,
-		&i.DismissedAt,
-		&i.DismissedBy,
-		&i.DismissedReason,
-	)
-	return i, err
-}
-
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (name, payments_id, description)
 VALUES (?, ?, ?)
@@ -282,9 +269,9 @@ const createUser = `-- name: CreateUser :one
 INSERT INTO users (
     keycloak_id, email, username, realname, phone, alt_contact,
     level_id, level_actual_amount, payments_id, state,
-    is_council, is_staff
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+    is_council, is_staff, locale
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
 `
 
 type CreateUserParams struct {
@@ -300,6 +287,7 @@ type CreateUserParams struct {
 	State             string         `json:"state"`
 	IsCouncil         bool           `json:"is_council"`
 	IsStaff           bool           `json:"is_staff"`
+	Locale            string         `json:"locale"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -316,6 +304,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.State,
 		arg.IsCouncil,
 		arg.IsStaff,
+		arg.Locale,
 	)
 	var i User
 	err := row.Scan(
@@ -337,6 +326,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -448,6 +438,32 @@ func (q *Queries) GetDistinctSubsystems(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getEmailOutbox = `-- name: GetEmailOutbox :one
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetEmailOutbox(ctx context.Context, id int64) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, getEmailOutbox, id)
+	var i EmailOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getFee = `-- name: GetFee :one
@@ -689,7 +705,7 @@ func (q *Queries) GetProjectVSByVS(ctx context.Context, vs string) (ProjectV, er
 }
 
 const getUserBalance = `-- name: GetUserBalance :one
-SELECT
+SELECT CAST(ROUND(
     COALESCE((
         SELECT SUM(CAST(p.amount AS REAL))
         FROM payments p
@@ -697,7 +713,8 @@ SELECT
         WHERE p.user_id = ?
         AND p.identification = u.payments_id
     ), 0) -
-    COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = ?), 0) as balance
+    COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = ?), 0)
+) AS INTEGER) as balance
 `
 
 type GetUserBalanceParams struct {
@@ -706,6 +723,7 @@ type GetUserBalanceParams struct {
 }
 
 // Calculate membership fee balance (only payments matching user's payments_id VS)
+// ROUND prevents float precision artifacts (e.g. 6.00000000000093) that break int64 scan
 func (q *Queries) GetUserBalance(ctx context.Context, arg GetUserBalanceParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, getUserBalance, arg.UserID, arg.UserID_2)
 	var balance int64
@@ -714,7 +732,7 @@ func (q *Queries) GetUserBalance(ctx context.Context, arg GetUserBalanceParams) 
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE email = ? LIMIT 1
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users WHERE email = ? LIMIT 1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -739,12 +757,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE id = ? LIMIT 1
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -769,12 +788,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const getUserByKeycloakID = `-- name: GetUserByKeycloakID :one
-SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE keycloak_id = ? LIMIT 1
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users WHERE keycloak_id = ? LIMIT 1
 `
 
 func (q *Queries) GetUserByKeycloakID(ctx context.Context, keycloakID sql.NullString) (User, error) {
@@ -799,12 +819,13 @@ func (q *Queries) GetUserByKeycloakID(ctx context.Context, keycloakID sql.NullSt
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const getUserByPaymentsID = `-- name: GetUserByPaymentsID :one
-SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE payments_id = ? LIMIT 1
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users WHERE payments_id = ? LIMIT 1
 `
 
 func (q *Queries) GetUserByPaymentsID(ctx context.Context, paymentsID sql.NullString) (User, error) {
@@ -829,6 +850,7 @@ func (q *Queries) GetUserByPaymentsID(ctx context.Context, paymentsID sql.NullSt
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -838,7 +860,7 @@ UPDATE users SET
     keycloak_id = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE email = ? AND keycloak_id IS NULL
-RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
 `
 
 type LinkKeycloakIDParams struct {
@@ -868,12 +890,13 @@ func (q *Queries) LinkKeycloakID(ctx context.Context, arg LinkKeycloakIDParams) 
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const listAcceptedUsersForFees = `-- name: ListAcceptedUsersForFees :many
-SELECT u.id, u.keycloak_id, u.email, u.username, u.realname, u.phone, u.alt_contact, u.level_id, u.level_actual_amount, u.payments_id, u.date_joined, u.keys_granted, u.keys_returned, u.state, u.is_council, u.is_staff, u.created_at, u.updated_at, l.amount as level_amount
+SELECT u.id, u.keycloak_id, u.email, u.username, u.realname, u.phone, u.alt_contact, u.level_id, u.level_actual_amount, u.payments_id, u.date_joined, u.keys_granted, u.keys_returned, u.state, u.is_council, u.is_staff, u.created_at, u.updated_at, u.locale, l.amount as level_amount
 FROM users u
 JOIN levels l ON u.level_id = l.id
 WHERE u.state = 'accepted'
@@ -899,6 +922,7 @@ type ListAcceptedUsersForFeesRow struct {
 	IsStaff           bool           `json:"is_staff"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
+	Locale            string         `json:"locale"`
 	LevelAmount       string         `json:"level_amount"`
 }
 
@@ -930,40 +954,8 @@ func (q *Queries) ListAcceptedUsersForFees(ctx context.Context) ([]ListAcceptedU
 			&i.IsStaff,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Locale,
 			&i.LevelAmount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAllLevels = `-- name: ListAllLevels :many
-SELECT id, name, amount, active, created_at FROM levels ORDER BY amount
-`
-
-func (q *Queries) ListAllLevels(ctx context.Context) ([]Level, error) {
-	rows, err := q.db.QueryContext(ctx, listAllLevels)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Level{}
-	for rows.Next() {
-		var i Level
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Amount,
-			&i.Active,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1022,26 +1014,37 @@ func (q *Queries) ListDismissedPayments(ctx context.Context) ([]Payment, error) 
 	return items, nil
 }
 
-const listFeesByPeriod = `-- name: ListFeesByPeriod :many
-SELECT id, user_id, level_id, period_start, amount, created_at FROM fees WHERE period_start = ? ORDER BY user_id
+const listEmailTemplateContentByTemplateLang = `-- name: ListEmailTemplateContentByTemplateLang :many
+
+SELECT id, template_name, block_name, lang, content, updated_by, updated_at FROM email_template_content
+WHERE template_name = ? AND lang = ? ORDER BY block_name
 `
 
-func (q *Queries) ListFeesByPeriod(ctx context.Context, periodStart time.Time) ([]Fee, error) {
-	rows, err := q.db.QueryContext(ctx, listFeesByPeriod, periodStart)
+type ListEmailTemplateContentByTemplateLangParams struct {
+	TemplateName string `json:"template_name"`
+	Lang         string `json:"lang"`
+}
+
+// ============================================================================
+// EMAIL TEMPLATE CONTENT (editable text blocks)
+// ============================================================================
+func (q *Queries) ListEmailTemplateContentByTemplateLang(ctx context.Context, arg ListEmailTemplateContentByTemplateLangParams) ([]EmailTemplateContent, error) {
+	rows, err := q.db.QueryContext(ctx, listEmailTemplateContentByTemplateLang, arg.TemplateName, arg.Lang)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Fee{}
+	items := []EmailTemplateContent{}
 	for rows.Next() {
-		var i Fee
+		var i EmailTemplateContent
 		if err := rows.Scan(
 			&i.ID,
-			&i.UserID,
-			&i.LevelID,
-			&i.PeriodStart,
-			&i.Amount,
-			&i.CreatedAt,
+			&i.TemplateName,
+			&i.BlockName,
+			&i.Lang,
+			&i.Content,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1075,119 +1078,6 @@ func (q *Queries) ListFeesByUser(ctx context.Context, userID int64) ([]Fee, erro
 			&i.LevelID,
 			&i.PeriodStart,
 			&i.Amount,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLevels = `-- name: ListLevels :many
-SELECT id, name, amount, active, created_at FROM levels WHERE active = TRUE ORDER BY amount
-`
-
-func (q *Queries) ListLevels(ctx context.Context) ([]Level, error) {
-	rows, err := q.db.QueryContext(ctx, listLevels)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Level{}
-	for rows.Next() {
-		var i Level
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Amount,
-			&i.Active,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLogsBySubsystem = `-- name: ListLogsBySubsystem :many
-SELECT id, subsystem, level, user_id, message, metadata, created_at FROM system_logs WHERE subsystem = ? ORDER BY created_at DESC LIMIT ?
-`
-
-type ListLogsBySubsystemParams struct {
-	Subsystem string `json:"subsystem"`
-	Limit     int64  `json:"limit"`
-}
-
-func (q *Queries) ListLogsBySubsystem(ctx context.Context, arg ListLogsBySubsystemParams) ([]SystemLog, error) {
-	rows, err := q.db.QueryContext(ctx, listLogsBySubsystem, arg.Subsystem, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []SystemLog{}
-	for rows.Next() {
-		var i SystemLog
-		if err := rows.Scan(
-			&i.ID,
-			&i.Subsystem,
-			&i.Level,
-			&i.UserID,
-			&i.Message,
-			&i.Metadata,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listLogsByUser = `-- name: ListLogsByUser :many
-SELECT id, subsystem, level, user_id, message, metadata, created_at FROM system_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
-`
-
-type ListLogsByUserParams struct {
-	UserID sql.NullInt64 `json:"user_id"`
-	Limit  int64         `json:"limit"`
-}
-
-func (q *Queries) ListLogsByUser(ctx context.Context, arg ListLogsByUserParams) ([]SystemLog, error) {
-	rows, err := q.db.QueryContext(ctx, listLogsByUser, arg.UserID, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []SystemLog{}
-	for rows.Next() {
-		var i SystemLog
-		if err := rows.Scan(
-			&i.ID,
-			&i.Subsystem,
-			&i.Level,
-			&i.UserID,
-			&i.Message,
-			&i.Metadata,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -1246,56 +1136,6 @@ func (q *Queries) ListLogsFiltered(ctx context.Context, arg ListLogsFilteredPara
 			&i.Message,
 			&i.Metadata,
 			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listMembershipPaymentsByUser = `-- name: ListMembershipPaymentsByUser :many
-SELECT p.id, p.user_id, p.date, p.amount, p.kind, p.kind_id, p.local_account, p.remote_account, p.identification, p.raw_data, p.staff_comment, p.created_at, p.project_id, p.dismissed_at, p.dismissed_by, p.dismissed_reason
-FROM payments p
-JOIN users u ON p.user_id = u.id
-WHERE p.user_id = ?
-AND p.identification = u.payments_id
-ORDER BY p.date DESC
-`
-
-// Only payments that match the user's membership VS (payments_id)
-func (q *Queries) ListMembershipPaymentsByUser(ctx context.Context, userID sql.NullInt64) ([]Payment, error) {
-	rows, err := q.db.QueryContext(ctx, listMembershipPaymentsByUser, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Payment{}
-	for rows.Next() {
-		var i Payment
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Date,
-			&i.Amount,
-			&i.Kind,
-			&i.KindID,
-			&i.LocalAccount,
-			&i.RemoteAccount,
-			&i.Identification,
-			&i.RawData,
-			&i.StaffComment,
-			&i.CreatedAt,
-			&i.ProjectID,
-			&i.DismissedAt,
-			&i.DismissedBy,
-			&i.DismissedReason,
 		); err != nil {
 			return nil, err
 		}
@@ -1427,71 +1267,34 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 	return items, nil
 }
 
-const listRecentLogs = `-- name: ListRecentLogs :many
-SELECT id, subsystem, level, user_id, message, metadata, created_at FROM system_logs ORDER BY created_at DESC LIMIT ?
+const listRecentEmailOutbox = `-- name: ListRecentEmailOutbox :many
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox ORDER BY created_at DESC LIMIT ?
 `
 
-func (q *Queries) ListRecentLogs(ctx context.Context, limit int64) ([]SystemLog, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentLogs, limit)
+func (q *Queries) ListRecentEmailOutbox(ctx context.Context, limit int64) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentEmailOutbox, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []SystemLog{}
+	items := []EmailOutbox{}
 	for rows.Next() {
-		var i SystemLog
-		if err := rows.Scan(
-			&i.ID,
-			&i.Subsystem,
-			&i.Level,
-			&i.UserID,
-			&i.Message,
-			&i.Metadata,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRecentPayments = `-- name: ListRecentPayments :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments ORDER BY date DESC LIMIT ?
-`
-
-func (q *Queries) ListRecentPayments(ctx context.Context, limit int64) ([]Payment, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentPayments, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Payment{}
-	for rows.Next() {
-		var i Payment
+		var i EmailOutbox
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
-			&i.Date,
-			&i.Amount,
-			&i.Kind,
-			&i.KindID,
-			&i.LocalAccount,
-			&i.RemoteAccount,
-			&i.Identification,
-			&i.RawData,
-			&i.StaffComment,
+			&i.Recipient,
+			&i.Subject,
+			&i.TemplateName,
+			&i.TemplateData,
+			&i.RenderedHtml,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.SentAt,
 			&i.CreatedAt,
-			&i.ProjectID,
-			&i.DismissedAt,
-			&i.DismissedBy,
-			&i.DismissedReason,
 		); err != nil {
 			return nil, err
 		}
@@ -1551,7 +1354,7 @@ func (q *Queries) ListUnassignedPayments(ctx context.Context) ([]Payment, error)
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users ORDER BY realname, email
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users ORDER BY realname, email
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -1582,52 +1385,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.IsStaff,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUsersByState = `-- name: ListUsersByState :many
-SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at FROM users WHERE state = ? ORDER BY realname, email
-`
-
-func (q *Queries) ListUsersByState(ctx context.Context, state string) ([]User, error) {
-	rows, err := q.db.QueryContext(ctx, listUsersByState, state)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []User{}
-	for rows.Next() {
-		var i User
-		if err := rows.Scan(
-			&i.ID,
-			&i.KeycloakID,
-			&i.Email,
-			&i.Username,
-			&i.Realname,
-			&i.Phone,
-			&i.AltContact,
-			&i.LevelID,
-			&i.LevelActualAmount,
-			&i.PaymentsID,
-			&i.DateJoined,
-			&i.KeysGranted,
-			&i.KeysReturned,
-			&i.State,
-			&i.IsCouncil,
-			&i.IsStaff,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.Locale,
 		); err != nil {
 			return nil, err
 		}
@@ -1689,69 +1447,51 @@ func (q *Queries) UndismissPayment(ctx context.Context, id int64) (Payment, erro
 	return i, err
 }
 
-const updateLevel = `-- name: UpdateLevel :one
-UPDATE levels SET
-    name = ?,
-    amount = ?,
-    active = ?
+const updateEmailOutboxStatus = `-- name: UpdateEmailOutboxStatus :one
+UPDATE email_outbox SET
+    status = ?,
+    attempts = ?,
+    last_error = ?,
+    next_retry_at = ?,
+    sent_at = ?
 WHERE id = ?
-RETURNING id, name, amount, active, created_at
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
 `
 
-type UpdateLevelParams struct {
-	Name   string `json:"name"`
-	Amount string `json:"amount"`
-	Active bool   `json:"active"`
-	ID     int64  `json:"id"`
-}
-
-func (q *Queries) UpdateLevel(ctx context.Context, arg UpdateLevelParams) (Level, error) {
-	row := q.db.QueryRowContext(ctx, updateLevel,
-		arg.Name,
-		arg.Amount,
-		arg.Active,
-		arg.ID,
-	)
-	var i Level
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Amount,
-		&i.Active,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const updateProject = `-- name: UpdateProject :one
-UPDATE projects SET
-    name = ?,
-    payments_id = ?,
-    description = ?
-WHERE id = ?
-RETURNING id, name, payments_id, description
-`
-
-type UpdateProjectParams struct {
-	Name        string         `json:"name"`
-	PaymentsID  sql.NullString `json:"payments_id"`
-	Description sql.NullString `json:"description"`
+type UpdateEmailOutboxStatusParams struct {
+	Status      string         `json:"status"`
+	Attempts    int64          `json:"attempts"`
+	LastError   sql.NullString `json:"last_error"`
+	NextRetryAt sql.NullTime   `json:"next_retry_at"`
+	SentAt      sql.NullTime   `json:"sent_at"`
 	ID          int64          `json:"id"`
 }
 
-func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
-	row := q.db.QueryRowContext(ctx, updateProject,
-		arg.Name,
-		arg.PaymentsID,
-		arg.Description,
+func (q *Queries) UpdateEmailOutboxStatus(ctx context.Context, arg UpdateEmailOutboxStatusParams) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, updateEmailOutboxStatus,
+		arg.Status,
+		arg.Attempts,
+		arg.LastError,
+		arg.NextRetryAt,
+		arg.SentAt,
 		arg.ID,
 	)
-	var i Project
+	var i EmailOutbox
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
-		&i.PaymentsID,
-		&i.Description,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -1773,7 +1513,7 @@ UPDATE users SET
     keys_returned = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
 `
 
 type UpdateUserParams struct {
@@ -1830,6 +1570,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -1839,7 +1580,7 @@ UPDATE users SET
     level_actual_amount = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
 `
 
 type UpdateUserCustomFeeParams struct {
@@ -1869,6 +1610,7 @@ func (q *Queries) UpdateUserCustomFee(ctx context.Context, arg UpdateUserCustomF
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -1876,18 +1618,20 @@ func (q *Queries) UpdateUserCustomFee(ctx context.Context, arg UpdateUserCustomF
 const updateUserKeycloakInfo = `-- name: UpdateUserKeycloakInfo :one
 UPDATE users SET
     username = ?,
+    locale = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
 `
 
 type UpdateUserKeycloakInfoParams struct {
 	Username sql.NullString `json:"username"`
+	Locale   string         `json:"locale"`
 	ID       int64          `json:"id"`
 }
 
 func (q *Queries) UpdateUserKeycloakInfo(ctx context.Context, arg UpdateUserKeycloakInfoParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, updateUserKeycloakInfo, arg.Username, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateUserKeycloakInfo, arg.Username, arg.Locale, arg.ID)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -1908,34 +1652,26 @@ func (q *Queries) UpdateUserKeycloakInfo(ctx context.Context, arg UpdateUserKeyc
 		&i.IsStaff,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
-const updateUserProfile = `-- name: UpdateUserProfile :one
+const updateUserLocale = `-- name: UpdateUserLocale :one
 UPDATE users SET
-    realname = ?,
-    phone = ?,
-    alt_contact = ?,
+    locale = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
-RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
 `
 
-type UpdateUserProfileParams struct {
-	Realname   sql.NullString `json:"realname"`
-	Phone      sql.NullString `json:"phone"`
-	AltContact sql.NullString `json:"alt_contact"`
-	ID         int64          `json:"id"`
+type UpdateUserLocaleParams struct {
+	Locale string `json:"locale"`
+	ID     int64  `json:"id"`
 }
 
-func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, updateUserProfile,
-		arg.Realname,
-		arg.Phone,
-		arg.AltContact,
-		arg.ID,
-	)
+func (q *Queries) UpdateUserLocale(ctx context.Context, arg UpdateUserLocaleParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserLocale, arg.Locale, arg.ID)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -1955,6 +1691,132 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.IsCouncil,
 		&i.IsStaff,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Locale,
+	)
+	return i, err
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :one
+UPDATE users SET
+    phone = ?,
+    alt_contact = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
+`
+
+type UpdateUserProfileParams struct {
+	Phone      sql.NullString `json:"phone"`
+	AltContact sql.NullString `json:"alt_contact"`
+	ID         int64          `json:"id"`
+}
+
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserProfile, arg.Phone, arg.AltContact, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Locale,
+	)
+	return i, err
+}
+
+const updateUserState = `-- name: UpdateUserState :one
+
+UPDATE users SET
+    state = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
+`
+
+type UpdateUserStateParams struct {
+	State string `json:"state"`
+	ID    int64  `json:"id"`
+}
+
+// ============================================================================
+// USER STATE UPDATE
+// ============================================================================
+func (q *Queries) UpdateUserState(ctx context.Context, arg UpdateUserStateParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserState, arg.State, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Locale,
+	)
+	return i, err
+}
+
+const upsertEmailTemplateContent = `-- name: UpsertEmailTemplateContent :one
+INSERT INTO email_template_content (template_name, block_name, lang, content, updated_by)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(template_name, block_name, lang) DO UPDATE SET
+    content = excluded.content,
+    updated_by = excluded.updated_by,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING id, template_name, block_name, lang, content, updated_by, updated_at
+`
+
+type UpsertEmailTemplateContentParams struct {
+	TemplateName string         `json:"template_name"`
+	BlockName    string         `json:"block_name"`
+	Lang         string         `json:"lang"`
+	Content      string         `json:"content"`
+	UpdatedBy    sql.NullString `json:"updated_by"`
+}
+
+func (q *Queries) UpsertEmailTemplateContent(ctx context.Context, arg UpsertEmailTemplateContentParams) (EmailTemplateContent, error) {
+	row := q.db.QueryRowContext(ctx, upsertEmailTemplateContent,
+		arg.TemplateName,
+		arg.BlockName,
+		arg.Lang,
+		arg.Content,
+		arg.UpdatedBy,
+	)
+	var i EmailTemplateContent
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateName,
+		&i.BlockName,
+		&i.Lang,
+		&i.Content,
+		&i.UpdatedBy,
 		&i.UpdatedAt,
 	)
 	return i, err

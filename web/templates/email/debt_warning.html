@@ -66,50 +66,42 @@
 </head>
 <body>
     <div class="container">
-        <h1>⚠️ Upozornění na dluh za členství</h1>
+        <h1>{{index .Content "heading"}}</h1>
 
-        <p>Ahoj {{.Name}},</p>
+        <p>{{index .Labels "greeting_prefix"}} {{.Name}},</p>
 
         <div class="warning">
-            <strong>⚠️ Důležité upozornění</strong><br>
-            Tvůj dluh za členské příspěvky přesáhl dvojnásobek měsíčního poplatku.
+            <strong>{{index .Content "warning_text"}}</strong>
         </div>
 
         <div class="balance">
-            Aktuální dluh: <strong>{{printf "%.0f" .Balance}} Kč</strong><br>
-            Měsíční příspěvek: {{printf "%.0f" .MonthlyFee}} Kč
+            {{index .Labels "current_debt_label"}} <strong>{{printf "%.0f" .Balance}}&nbsp;Kč</strong><br>
+            {{index .Labels "monthly_fee_label"}} {{printf "%.0f" .MonthlyFee}}&nbsp;Kč
         </div>
 
-        <p><strong>Co to znamená?</strong></p>
-        <p>Pokud dluh nebude uhrazen v brzké době, může dojít k pozastavení členství a omezení přístupu do prostoru.</p>
+        <p style="white-space: pre-line">{{index .Content "consequences_text"}}</p>
 
-        <p><strong>Jak to vyřešit?</strong></p>
-        <ol>
-            <li>Uhraď dluh co nejdříve pomocí níže uvedených platebních údajů</li>
-            <li>Pokud máš finanční problémy, kontaktuj nás - můžeme se domluvit na splátkách nebo snížení příspěvku</li>
-            <li>Zkontroluj si v portálu, zda všechny tvé platby byly správně přiřazeny</li>
-        </ol>
+        <p style="white-space: pre-line">{{index .Content "steps_text"}}</p>
 
         <div class="payment-info">
-            <strong>Platební údaje:</strong><br>
-            Číslo účtu: <strong>2800691518/2010</strong> (Fio banka)<br>
-            Variabilní symbol: <strong>{{.PaymentsID}}</strong><br>
-            Částka k úhradě: <strong>{{printf "%.0f" (- .Balance)}} Kč</strong> (nebo alespoň část)<br>
-            Zpráva pro příjemce: <em>Úhrada členského příspěvku</em>
+            <strong>{{index .Labels "payment_heading"}}</strong><br>
+            {{index .Labels "account_label"}} <strong>{{.BankAccountCZ}}</strong> ({{index .Labels "bank_name"}})<br>
+            {{index .Labels "vs_label"}} <strong>{{.PaymentsID}}</strong><br>
+            {{index .Labels "amount_due_label"}} <strong>{{printf "%.0f" .AbsBalance}}&nbsp;Kč</strong> {{index .Labels "or_partial"}}<br>
+            {{index .Labels "payment_message_label"}} <em>{{index .Labels "debt_payment_ref"}}</em>
             {{if .PaymentQRCode}}
             <div style="margin-top: 15px; text-align: center;">
-                <img src="{{.PaymentQRCode}}" alt="QR platba" width="180" height="180" style="border: 1px solid #e5e7eb; border-radius: 8px;">
-                <p style="margin: 10px 0 0 0; font-size: 13px; color: #6b7280;">Naskenuj QR kód v bankovní aplikaci</p>
+                <img src="{{.PaymentQRCode}}" alt="QR" width="180" height="180" style="border: 1px solid #e5e7eb; border-radius: 8px;">
+                <p style="margin: 10px 0 0 0; font-size: 13px; color: #6b7280;">{{index .Labels "qr_instruction"}}</p>
             </div>
             {{end}}
         </div>
 
-        <a href="{{.PortalURL}}/profile" class="button">Zobrazit detail v portálu</a>
+        <a href="{{.PortalURL}}/profile" class="button">{{index .Labels "button_view_profile"}}</a>
 
         <div class="footer">
-            <p><strong>Potřebuješ pomoc?</strong><br>
-            Pokud máš dotazy nebo potřebuješ domluvit individuální řešení, neváhej nás kontaktovat. Jsme tu, abychom ti pomohli.</p>
-            <p><strong>Base48 Hackerspace</strong></p>
+            <p>{{index .Content "footer"}}</p>
+            <p><strong>{{index .Content "sign_off"}}</strong></p>
         </div>
     </div>
 </body>

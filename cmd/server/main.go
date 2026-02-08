@@ -76,6 +76,7 @@ func main() {
 
 	// Public routes
 	r.Get("/", h.HomeHandler)
+	r.Get("/api/qr", h.QRPaymentHandler)
 
 	// Auth routes
 	r.Route("/auth", func(r chi.Router) {
@@ -110,6 +111,12 @@ func main() {
 		r.Post("/roles/remove", h.RequireAdmin(h.AdminRemoveRoleHandler))
 		r.Get("/users/roles", h.RequireAdmin(h.AdminGetUserRolesHandler))
 		r.Post("/test-email", h.RequireAdmin(h.AdminTestEmailHandler))
+		r.Post("/users/{id}/state", h.RequireAdmin(h.AdminUpdateUserStateHandler))
+		r.Post("/users/{id}/locale", h.RequireAdmin(h.AdminUpdateUserLocaleHandler))
+		r.Get("/email/templates", h.RequireAdmin(h.AdminGetTemplateContentHandler))
+		r.Post("/email/templates", h.RequireAdmin(h.AdminSaveTemplateContentHandler))
+		r.Post("/email/retry", h.RequireAdmin(h.AdminRetryEmailHandler))
+		r.Post("/email/preview", h.RequireAdmin(h.AdminPreviewEmailHandler))
 		r.Post("/payments/assign", h.RequireAdmin(h.AdminAssignPaymentHandler))
 		r.Post("/payments/update", h.RequireAdmin(h.AdminUpdatePaymentHandler))
 		r.Post("/payments/dismiss", h.RequireAdmin(h.AdminDismissPaymentHandler))

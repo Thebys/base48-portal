@@ -48,15 +48,38 @@
             </div>
 
             <div>
-                <dt class="text-sm font-medium text-gray-500">Přezdívka</dt>
+                <dt class="text-sm font-medium text-gray-500">Přezdívka (username)</dt>
                 <dd class="mt-1">
                     <input type="text" value="{{if .TargetDBUser.Username.Valid}}{{.TargetDBUser.Username.String}}{{else}}{{.TargetUser.PreferredName}}{{end}}" disabled
                         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
                 </dd>
-                <dd class="mt-1 text-xs text-gray-500">
-                    Synchronizováno z Keycloaku ({{.TargetUser.PreferredName}})
+            </div>
+
+            {{if .KeycloakInfo}}
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Jméno (first name)</dt>
+                <dd class="mt-1">
+                    <input type="text" value="{{.KeycloakInfo.FirstName}}" disabled
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
                 </dd>
             </div>
+
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Příjmení (last name)</dt>
+                <dd class="mt-1">
+                    <input type="text" value="{{.KeycloakInfo.LastName}}" disabled
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
+                </dd>
+            </div>
+
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Locale</dt>
+                <dd class="mt-1">
+                    <input type="text" value="{{.TargetDBUser.Locale}}" disabled
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
+                </dd>
+            </div>
+            {{end}}
         </dl>
     </div>
 
@@ -131,9 +154,30 @@
 
             <div>
                 <dt class="text-sm font-medium text-gray-500">Stav členství</dt>
-                <dd class="mt-1">
+                <dd class="mt-1 flex items-center gap-3">
                     <span class="badge badge-{{ .TargetDBUser.State }}">{{ .TargetDBUser.State }}</span>
+                    <select id="state-select" class="text-sm border-gray-300 rounded-md py-1 px-2">
+                        <option value="">-- Změnit --</option>
+                        <option value="awaiting">awaiting</option>
+                        <option value="accepted">accepted</option>
+                        <option value="rejected">rejected</option>
+                        <option value="exmember">exmember</option>
+                        <option value="suspended">suspended</option>
+                    </select>
+                    <button onclick="changeUserState()" class="btn btn-sm btn-primary">Uložit</button>
                 </dd>
+            </div>
+
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Jazyk e-mailů</dt>
+                <dd class="mt-1 flex items-center gap-3">
+                    <select id="locale-select" class="text-sm border-gray-300 rounded-md py-1 px-2">
+                        <option value="cs" {{if eq .TargetDBUser.Locale "cs"}}selected{{end}}>Čeština (cs)</option>
+                        <option value="en" {{if eq .TargetDBUser.Locale "en"}}selected{{end}}>English (en)</option>
+                    </select>
+                    <button onclick="changeUserLocale()" class="btn btn-sm btn-primary">Uložit</button>
+                </dd>
+                <dd class="mt-1 text-xs text-gray-500">Jazyk synchronizován z Keycloaku při přihlášení</dd>
             </div>
 
             {{if .TargetUser.Roles}}
@@ -262,4 +306,49 @@
         </details>
     </div>
 </div>
+
+<script>
+function changeUserLocale() {
+    const select = document.getElementById('locale-select');
+    const newLocale = select.value;
+    if (!newLocale) return;
+
+    fetch('/api/admin/users/{{.TargetDBUser.ID}}/locale', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({locale: newLocale})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
+function changeUserState() {
+    const select = document.getElementById('state-select');
+    const newState = select.value;
+    if (!newState) return;
+    if (!confirm('Opravdu chcete změnit stav na: ' + newState + '?\n\nPokud měníte na "accepted", bude odeslán uvítací e-mail.')) return;
+
+    fetch('/api/admin/users/{{.TargetDBUser.ID}}/state', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({state: newState})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+</script>
 {{end}}

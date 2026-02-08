@@ -54,6 +54,30 @@ func (s *Service) GeneratePaymentQR(params GenerateParams) (string, error) {
 	return GenerateQRBase64(spayd, size)
 }
 
+// GeneratePaymentPNG generates a QR code as raw PNG bytes.
+// Useful for serving QR codes via HTTP endpoints.
+func (s *Service) GeneratePaymentPNG(params GenerateParams) ([]byte, error) {
+	if s.bankIBAN == "" {
+		return nil, fmt.Errorf("bank IBAN not configured")
+	}
+
+	spayd := GenerateSPAYD(PaymentParams{
+		IBAN:           s.bankIBAN,
+		BIC:            s.bankBIC,
+		Amount:         params.Amount,
+		Currency:       "CZK",
+		VariableSymbol: params.VariableSymbol,
+		Message:        params.Message,
+	})
+
+	size := params.Size
+	if size <= 0 {
+		size = DefaultQRSize
+	}
+
+	return GenerateQRPNG(spayd, size)
+}
+
 // GenerateSPAYDString generates just the SPAYD string without QR code.
 // Useful for debugging or alternative display methods.
 func (s *Service) GenerateSPAYDString(params GenerateParams) string {

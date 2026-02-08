@@ -418,7 +418,7 @@
                         <td class="account">{{.RemoteAccount}}</td>
                         <td class="reason" style="font-size: 12px;">{{if .StaffComment.Valid}}{{.StaffComment.String}}{{else}}-{{end}}</td>
                         <td>
-                            <button class="btn btn-sm" style="background: #10b981; color: white;" onclick="undismissPayment({{.ID}})">
+                            <button class="btn btn-sm btn-success" onclick="undismissPayment({{.ID}})">
                                 Oživit
                             </button>
                         </td>

@@ -38,6 +38,10 @@ type Config struct {
 	SMTPPassword string
 	SMTPFrom     string
 
+	// Email system
+	EmailEnabled  bool   // Global email toggle
+	BankAccountCZ string // Czech bank account number for payment emails
+
 	// Paths
 	WebRoot string // Base directory for web assets (templates, static files)
 }
@@ -62,6 +66,8 @@ func Load() (*Config, error) {
 		SMTPUsername:                       getEnv("SMTP_USERNAME", ""),
 		SMTPPassword:                       getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:                           getEnv("SMTP_FROM", ""),
+		EmailEnabled:                       getEnvBool("EMAIL_ENABLED", false),
+		BankAccountCZ:                      getEnv("BANK_ACCOUNT_CZ", "2800691518/2010"),
 		WebRoot:                            getEnv("WEB_ROOT", "web"),
 	}
 
@@ -96,6 +102,13 @@ func (c *Config) OAuthCallbackURL() string {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		return value == "true" || value == "1" || value == "yes"
 	}
 	return defaultValue
 }

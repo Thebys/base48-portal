@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -171,6 +172,16 @@ func (h *Handler) AdminGetUserRolesHandler(w http.ResponseWriter, r *http.Reques
 		"success": true,
 		"roles":   roles,
 	})
+}
+
+// logMetadata safely marshals a map into a JSON string for log metadata.
+// Uses json.Marshal to prevent injection via user-controlled values.
+func logMetadata(kv map[string]interface{}) sql.NullString {
+	b, err := json.Marshal(kv)
+	if err != nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: string(b), Valid: true}
 }
 
 // jsonError sends a JSON error response

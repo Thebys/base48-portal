@@ -60,38 +60,38 @@
 </head>
 <body>
     <div class="container">
-        <h1>Záporná bilance členského příspěvku</h1>
+        <h1>{{index .Content "heading"}}</h1>
 
-        <p>Ahoj {{.Name}},</p>
+        <p>{{index .Labels "greeting_prefix"}} {{.Name}},</p>
 
-        <p>Tvá aktuální bilance členského příspěvku je záporná:</p>
+        <p style="white-space: pre-line">{{index .Content "intro_text"}}</p>
 
         <div class="balance">
-            <strong>{{printf "%.0f" .Balance}} Kč</strong>
+            <strong>{{printf "%.0f" .Balance}}&nbsp;Kč</strong>
         </div>
 
-        <p>To znamená, že dlužíš Base48 za členské příspěvky. Prosíme tě o úhradu co nejdříve.</p>
+        <p style="white-space: pre-line">{{index .Content "action_text"}}</p>
 
         <div class="payment-info">
-            <strong>Platební údaje:</strong><br>
-            Číslo účtu: <strong>2800691518/2010</strong> (Fio banka)<br>
-            Variabilní symbol: <strong>{{.PaymentsID}}</strong><br>
-            Zpráva pro příjemce: <em>Členský příspěvek Base48</em>
+            <strong>{{index .Labels "payment_heading"}}</strong><br>
+            {{index .Labels "account_label"}} <strong>{{.BankAccountCZ}}</strong> ({{index .Labels "bank_name"}})<br>
+            {{index .Labels "vs_label"}} <strong>{{.PaymentsID}}</strong><br>
+            {{index .Labels "payment_message_label"}} <em>{{index .Labels "payment_ref_text"}}</em>
             {{if .PaymentQRCode}}
             <div style="margin-top: 15px; text-align: center;">
-                <img src="{{.PaymentQRCode}}" alt="QR platba" width="180" height="180" style="border: 1px solid #e5e7eb; border-radius: 8px;">
-                <p style="margin: 10px 0 0 0; font-size: 13px; color: #6b7280;">Naskenuj QR kód v bankovní aplikaci</p>
+                <img src="{{.PaymentQRCode}}" alt="QR" width="180" height="180" style="border: 1px solid #e5e7eb; border-radius: 8px;">
+                <p style="margin: 10px 0 0 0; font-size: 13px; color: #6b7280;">{{index .Labels "qr_instruction"}}</p>
             </div>
             {{end}}
         </div>
 
-        <p><strong>Důležité:</strong> Použij svůj variabilní symbol ({{.PaymentsID}}), ať můžeme platbu automaticky přiřadit k tvému účtu.</p>
+        <p>{{printf (index .Labels "vs_reminder") .PaymentsID}}</p>
 
-        <a href="{{.PortalURL}}/profile" class="button">Zobrazit detail v portálu</a>
+        <a href="{{.PortalURL}}/profile" class="button">{{index .Labels "button_view_profile"}}</a>
 
         <div class="footer">
-            <p>Pokud máš dotazy ohledně své bilance nebo máš problémy s platbou, kontaktuj nás prosím.</p>
-            <p><strong>Base48 Hackerspace</strong></p>
+            <p>{{index .Content "footer"}}</p>
+            <p><strong>{{index .Content "sign_off"}}</strong></p>
         </div>
     </div>
 </body>

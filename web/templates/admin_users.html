@@ -33,8 +33,6 @@
                     <option value="">All</option>
                     <option value="linked" {{ if eq .FilterKeycloak "linked" }}selected{{ end }}>Linked</option>
                     <option value="not_linked" {{ if eq .FilterKeycloak "not_linked" }}selected{{ end }}>Not Linked</option>
-                    <option value="enabled" {{ if eq .FilterKeycloak "enabled" }}selected{{ end }}>Enabled</option>
-                    <option value="disabled" {{ if eq .FilterKeycloak "disabled" }}selected{{ end }}>Disabled</option>
                 </select>
             </div>
 
@@ -97,12 +95,8 @@
                     {{ .Balance }}&nbsp;Kč
                 </td>
                 <td>
-                    {{ if .KeycloakEnabled }}
-                        {{ if .KeycloakEnabled }}
-                            <span class="badge badge-success">✓ Enabled</span>
-                        {{ else }}
-                            <span class="badge badge-danger">✗ Disabled</span>
-                        {{ end }}
+                    {{ if .KeycloakLinked }}
+                        <span class="badge badge-success">✓ Linked</span>
                     {{ else }}
                         <span class="badge badge-warning">Not Linked</span>
                     {{ end }}

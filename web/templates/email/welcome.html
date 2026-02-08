@@ -49,32 +49,26 @@
 </head>
 <body>
     <div class="container">
-        <h1>Vítej v Base48! 🎉</h1>
+        <h1>{{index .Content "heading"}}</h1>
 
-        <p>Ahoj {{.Name}},</p>
+        <p>{{index .Labels "greeting_prefix"}} {{.Name}},</p>
 
-        <p>Tvé členství v Base48 bylo schváleno! Vítáme tě v naší komunitě.</p>
+        <p>{{index .Content "intro_text"}}</p>
 
         <div class="highlight">
-            <strong>Tvé přihlašovací údaje:</strong><br>
-            Uživatelské jméno: <strong>{{.Username}}</strong><br>
-            Email: <strong>{{.Email}}</strong>
+            <strong>{{index .Labels "credentials_heading"}}</strong><br>
+            {{index .Labels "username_label"}} <strong>{{.Username}}</strong>
         </div>
 
-        <p>Co dál?</p>
-        <ul>
-            <li>Přihlas se do <a href="{{.PortalURL}}">členského portálu</a> a zkontroluj své údaje</li>
-            <li>Nastav si preferovanou výši členského příspěvku (pokud jsi tak ještě neučinil/a)</li>
-            <li>Sleduj svou bilance plateb v profilu</li>
-            <li>Přijď se podívat do našeho prostoru!</li>
-        </ul>
+        <p style="white-space: pre-line">{{index .Content "resources_text"}}</p>
 
-        <a href="{{.PortalURL}}" class="button">Otevřít členský portál</a>
+        <p>{{index .Content "membership_text"}}</p>
+
+        <a href="{{.PortalURL}}" class="button">{{index .Labels "button_portal"}}</a>
 
         <div class="footer">
-            <p>Pokud máš jakékoliv dotazy, neváhej nás kontaktovat.</p>
-            <p><strong>Base48 Hackerspace</strong><br>
-            Komunita nadšenců pro technologie</p>
+            <p>{{index .Content "footer"}}</p>
+            <p><strong>{{index .Content "sign_off"}}</strong></p>
         </div>
     </div>
 </body>

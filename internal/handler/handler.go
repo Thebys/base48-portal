@@ -5,8 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/config"
@@ -96,13 +99,26 @@ func (h *Handler) HomeHandler(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User, error) {
 	ctx := r.Context()
 
+	// Resolve locale from Keycloak (fallback to "cs")
+	locale := kcUser.Locale
+	if locale == "" {
+		locale = "cs"
+	}
+
 	// Try to find by Keycloak ID first
 	dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{String: kcUser.ID, Valid: true})
 	if err == nil {
-		// Sync username from Keycloak if it changed
+		// Sync username + locale from Keycloak on every login
+		needsUpdate := dbUser.Locale != locale
+		newUsername := dbUser.Username
 		if kcUser.PreferredName != "" && dbUser.Username.String != kcUser.PreferredName {
+			newUsername = sql.NullString{String: kcUser.PreferredName, Valid: true}
+			needsUpdate = true
+		}
+		if needsUpdate {
 			updatedUser, err := h.queries.UpdateUserKeycloakInfo(ctx, db.UpdateUserKeycloakInfoParams{
-				Username: sql.NullString{String: kcUser.PreferredName, Valid: true},
+				Username: newUsername,
+				Locale:   locale,
 				ID:       dbUser.ID,
 			})
 			if err == nil {
@@ -132,19 +148,22 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 			Subsystem: "keycloak",
 			Level:     "success",
 			UserID:    sql.NullInt64{Int64: linkedUser.ID, Valid: true},
-			Message:   fmt.Sprintf("Keycloak ID associated: %s", kcUser.Email),
-			Metadata:  sql.NullString{String: fmt.Sprintf(`{"keycloak_id":"%s","email":"%s"}`, kcUser.ID, kcUser.Email), Valid: true},
+			Message:  fmt.Sprintf("Keycloak ID associated: %s", kcUser.Email),
+			Metadata: logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email}),
 		})
 
-		// Sync username from Keycloak (overwrite old 'ident' if different)
+		// Sync username + locale from Keycloak
+		newUsername := linkedUser.Username
 		if kcUser.PreferredName != "" && linkedUser.Username.String != kcUser.PreferredName {
-			updatedUser, err := h.queries.UpdateUserKeycloakInfo(ctx, db.UpdateUserKeycloakInfoParams{
-				Username: sql.NullString{String: kcUser.PreferredName, Valid: true},
-				ID:       linkedUser.ID,
-			})
-			if err == nil {
-				return &updatedUser, nil
-			}
+			newUsername = sql.NullString{String: kcUser.PreferredName, Valid: true}
+		}
+		updatedUser, err := h.queries.UpdateUserKeycloakInfo(ctx, db.UpdateUserKeycloakInfoParams{
+			Username: newUsername,
+			Locale:   locale,
+			ID:       linkedUser.ID,
+		})
+		if err == nil {
+			return &updatedUser, nil
 		}
 		return &linkedUser, nil
 	}
@@ -166,6 +185,7 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		State:             "awaiting",
 		IsCouncil:         false,
 		IsStaff:           false,
+		Locale:            locale,
 	})
 	if err != nil {
 		return nil, err
@@ -176,9 +196,18 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		Subsystem: "auth",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: newUser.ID, Valid: true},
-		Message:   fmt.Sprintf("New user registered: %s", kcUser.Email),
-		Metadata:  sql.NullString{String: fmt.Sprintf(`{"keycloak_id":"%s","email":"%s"}`, kcUser.ID, kcUser.Email), Valid: true},
+		Message:  fmt.Sprintf("New user registered: %s", kcUser.Email),
+		Metadata: logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email}),
 	})
+
+	// Send registration confirmation email (non-blocking, 30s timeout)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := h.emailClient.SendRegistration(ctx, &newUser); err != nil {
+			log.Printf("[Email] Warning: failed to send registration email to %s: %v", newUser.Email, err)
+		}
+	}()
 
 	return &newUser, nil
 }
@@ -205,9 +234,8 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Update profile (member portal fields only)
+		// Update profile (member portal fields only — realname handled by Keycloak IDP)
 		_, err := h.queries.UpdateUserProfile(r.Context(), db.UpdateUserProfileParams{
-			Realname:   sql.NullString{String: r.FormValue("realname"), Valid: r.FormValue("realname") != ""},
 			Phone:      sql.NullString{String: r.FormValue("phone"), Valid: r.FormValue("phone") != ""},
 			AltContact: sql.NullString{String: r.FormValue("alt_contact"), Valid: r.FormValue("alt_contact") != ""},
 			ID:         dbUser.ID,
@@ -282,11 +310,50 @@ func (h *Handler) handleCustomFeeUpdate(w http.ResponseWriter, r *http.Request, 
 		Subsystem: "membership",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
-		Message:   fmt.Sprintf("Custom fee amount updated: %.0f Kč (minimum: %s Kč)", customFee, level.Amount),
-		Metadata:  sql.NullString{String: fmt.Sprintf(`{"old_amount":"%s","new_amount":"%.0f","level_minimum":"%s"}`, dbUser.LevelActualAmount, customFee, level.Amount), Valid: true},
+		Message:  fmt.Sprintf("Custom fee amount updated: %.0f Kč (minimum: %s Kč)", customFee, level.Amount),
+		Metadata: logMetadata(map[string]interface{}{"old_amount": dbUser.LevelActualAmount, "new_amount": fmt.Sprintf("%.0f", customFee), "level_minimum": level.Amount}),
 	})
 
 	http.Redirect(w, r, "/profile?success=1", http.StatusSeeOther)
+}
+
+// QRPaymentHandler serves a QR payment code as PNG image.
+// GET /api/qr?vs=123&amount=1000
+// Public endpoint — the QR encodes only bank IBAN + VS + amount (same info as in the email text).
+func (h *Handler) QRPaymentHandler(w http.ResponseWriter, r *http.Request) {
+	vs := r.URL.Query().Get("vs")
+	amountStr := r.URL.Query().Get("amount")
+
+	if vs == "" || amountStr == "" {
+		http.Error(w, "vs and amount parameters required", http.StatusBadRequest)
+		return
+	}
+
+	amount, err := strconv.ParseFloat(amountStr, 64)
+	if err != nil || amount <= 0 {
+		http.Error(w, "invalid amount", http.StatusBadRequest)
+		return
+	}
+
+	if h.qrpayService == nil || !h.qrpayService.IsConfigured() {
+		http.Error(w, "QR payment service not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	png, err := h.qrpayService.GeneratePaymentPNG(qrpay.GenerateParams{
+		Amount:         amount,
+		VariableSymbol: vs,
+		Message:        "CLENSKY PRISPEVEK BASE48",
+		Size:           250,
+	})
+	if err != nil {
+		http.Error(w, "failed to generate QR code", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Write(png)
 }
 
 // render is a helper to render templates

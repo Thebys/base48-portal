@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"math"
 	"net/http"
 	"strconv"
@@ -19,16 +20,7 @@ import (
 // AdminUserProfileHandler displays a user's profile (admin view - read only)
 // GET /admin/users/:id
 func (h *Handler) AdminUserProfileHandler(w http.ResponseWriter, r *http.Request) {
-	currentUser := h.auth.GetUser(r)
-	if currentUser == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	if !currentUser.IsAdmin() {
-		http.Error(w, "Forbidden - admin access required", http.StatusForbidden)
-		return
-	}
+	currentUser := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 
 	ctx := r.Context()
 
@@ -55,12 +47,13 @@ func (h *Handler) AdminUserProfileHandler(w http.ResponseWriter, r *http.Request
 
 	// Fetch Keycloak info for target user (if linked)
 	var targetKeycloakUser *auth.User
+	var kcInfo *KeycloakUserInfo
 	if targetDBUser.KeycloakID.Valid && targetDBUser.KeycloakID.String != "" {
 		// Get service account token
 		accessToken, err := h.getServiceAccountToken(ctx)
 		if err == nil {
 			// Fetch user from Keycloak
-			targetKeycloakUser, _ = h.fetchKeycloakUserByID(ctx, accessToken, targetDBUser.KeycloakID.String)
+			targetKeycloakUser, kcInfo, _ = h.fetchKeycloakUserByID(ctx, accessToken, targetDBUser.KeycloakID.String)
 		}
 	}
 
@@ -87,6 +80,7 @@ func (h *Handler) AdminUserProfileHandler(w http.ResponseWriter, r *http.Request
 	data["DBUser"] = adminDBUser              // For layout navbar (logged-in admin)
 	data["TargetUser"] = data["ViewedUser"]   // The user being viewed (rename for template)
 	data["Title"] = fmt.Sprintf("Profil uživatele: %s", targetDBUser.Email)
+	data["KeycloakInfo"] = kcInfo             // Full Keycloak profile (may be nil)
 
 	// Log admin action (track who viewed whose profile)
 	adminUsername := "unknown"
@@ -105,12 +99,12 @@ func (h *Handler) AdminUserProfileHandler(w http.ResponseWriter, r *http.Request
 		Message: fmt.Sprintf("Admin %s (%s) viewed profile of user %s (%s)",
 			adminUsername, adminDBUser.Email,
 			targetUsername, targetDBUser.Email),
-		Metadata: sql.NullString{
-			String: fmt.Sprintf(`{"admin_user_id":%d,"admin_email":"%s","target_user_id":%d,"target_email":"%s"}`,
-				adminDBUser.ID, adminDBUser.Email,
-				userID, targetDBUser.Email),
-			Valid: true,
-		},
+		Metadata: logMetadata(map[string]interface{}{
+			"admin_user_id": adminDBUser.ID,
+			"admin_email":   adminDBUser.Email,
+			"target_user_id": userID,
+			"target_email":   targetDBUser.Email,
+		}),
 	})
 
 	// Render using separate admin template (keeps logic clean and extensible)
@@ -217,30 +211,31 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 	}, nil
 }
 
-// fetchKeycloakUserByID fetches a user from Keycloak by their ID
-func (h *Handler) fetchKeycloakUserByID(ctx context.Context, accessToken, keycloakID string) (*auth.User, error) {
+// fetchKeycloakUserByID fetches a user from Keycloak by their ID.
+// Returns the auth.User (for template compatibility) and the raw KeycloakUserInfo (for attributes).
+func (h *Handler) fetchKeycloakUserByID(ctx context.Context, accessToken, keycloakID string) (*auth.User, *KeycloakUserInfo, error) {
 	url := fmt.Sprintf("%s/admin/realms/%s/users/%s", h.config.KeycloakURL, h.config.KeycloakRealm, keycloakID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("keycloak returned status %d", resp.StatusCode)
+		return nil, nil, fmt.Errorf("keycloak returned status %d", resp.StatusCode)
 	}
 
 	var kcUser KeycloakUserInfo
 	if err := json.NewDecoder(resp.Body).Decode(&kcUser); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Fetch roles for this user
@@ -249,9 +244,11 @@ func (h *Handler) fetchKeycloakUserByID(ctx context.Context, accessToken, keyclo
 	return &auth.User{
 		ID:            kcUser.ID,
 		Email:         kcUser.Email,
+		GivenName:     kcUser.FirstName,
+		FamilyName:    kcUser.LastName,
 		PreferredName: kcUser.Username,
 		Roles:         roles,
-	}, nil
+	}, &kcUser, nil
 }
 
 // fetchUserRolesFromKeycloak fetches roles for a specific user
@@ -289,4 +286,133 @@ func (h *Handler) fetchUserRolesFromKeycloak(ctx context.Context, accessToken, k
 	}
 
 	return roles, nil
+}
+
+// AdminUpdateUserLocaleHandler changes a user's email locale.
+// POST /api/admin/users/{id}/locale
+func (h *Handler) AdminUpdateUserLocaleHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
+
+	ctx := r.Context()
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Locale string `json:"locale"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	validLocales := map[string]bool{"cs": true, "en": true}
+	if !validLocales[req.Locale] {
+		h.jsonError(w, "Invalid locale value", http.StatusBadRequest)
+		return
+	}
+
+	_, err = h.queries.UpdateUserLocale(ctx, db.UpdateUserLocaleParams{
+		Locale: req.Locale,
+		ID:     userID,
+	})
+	if err != nil {
+		h.jsonError(w, "Failed to update locale", http.StatusInternalServerError)
+		return
+	}
+
+	// Log the change
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+		String: user.ID, Valid: true,
+	})
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "admin",
+		Level:     "info",
+		UserID:    sql.NullInt64{Int64: userID, Valid: true},
+		Message:   fmt.Sprintf("Locale changed to %s (by admin %s)", req.Locale, adminDBUser.Email),
+	})
+
+	h.jsonSuccess(w, fmt.Sprintf("Jazyk změněn na %s", req.Locale))
+}
+
+// AdminUpdateUserStateHandler changes a user's membership state.
+// POST /api/admin/users/{id}/state
+// When changing TO "accepted", sends welcome email.
+func (h *Handler) AdminUpdateUserStateHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
+
+	ctx := r.Context()
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	validStates := map[string]bool{
+		"awaiting": true, "accepted": true, "rejected": true,
+		"exmember": true, "suspended": true,
+	}
+	if !validStates[req.State] {
+		h.jsonError(w, "Invalid state value", http.StatusBadRequest)
+		return
+	}
+
+	// Get current state for transition detection
+	targetUser, err := h.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		h.jsonError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	previousState := targetUser.State
+
+	updatedUser, err := h.queries.UpdateUserState(ctx, db.UpdateUserStateParams{
+		State: req.State,
+		ID:    userID,
+	})
+	if err != nil {
+		h.jsonError(w, "Failed to update state", http.StatusInternalServerError)
+		return
+	}
+
+	// Log the state change
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+		String: user.ID, Valid: true,
+	})
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "admin",
+		Level:     "info",
+		UserID:    sql.NullInt64{Int64: userID, Valid: true},
+		Message: fmt.Sprintf("State changed: %s -> %s (by admin %s)",
+			previousState, req.State, adminDBUser.Email),
+		Metadata: logMetadata(map[string]interface{}{
+			"previous_state": previousState,
+			"new_state":      req.State,
+			"admin_email":    adminDBUser.Email,
+		}),
+	})
+
+	// Send welcome email on transition TO "accepted"
+	if req.State == "accepted" && previousState != "accepted" {
+		if err := h.emailClient.SendWelcome(ctx, &updatedUser); err != nil {
+			// Don't fail the state change because of email failure
+			log.Printf("[Email] Warning: failed to send welcome email to %s: %v", updatedUser.Email, err)
+		}
+	}
+
+	h.jsonSuccess(w, fmt.Sprintf("Stav změněn na %s", req.State))
 }

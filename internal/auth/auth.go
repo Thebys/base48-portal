@@ -31,8 +31,11 @@ type User struct {
 	Email         string   `json:"email"`
 	EmailVerified bool     `json:"email_verified"`
 	Name          string   `json:"name"`
+	GivenName     string   `json:"given_name"`
+	FamilyName    string   `json:"family_name"`
 	PreferredName string   `json:"preferred_username"`
 	Roles         []string `json:"roles"`
+	Locale        string   `json:"locale"`
 }
 
 // Authenticator handles Keycloak OIDC authentication
@@ -193,7 +196,10 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
 		Name          string `json:"name"`
+		GivenName     string `json:"given_name"`
+		FamilyName    string `json:"family_name"`
 		PreferredName string `json:"preferred_username"`
+		Locale        string `json:"locale"`
 		RealmAccess   struct {
 			Roles []string `json:"roles"`
 		} `json:"realm_access"`
@@ -237,8 +243,11 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 		Email:         claims.Email,
 		EmailVerified: claims.EmailVerified,
 		Name:          claims.Name,
+		GivenName:     claims.GivenName,
+		FamilyName:    claims.FamilyName,
 		PreferredName: claims.PreferredName,
 		Roles:         roles,
+		Locale:        claims.Locale,
 	}
 
 	// Store user in session (but NOT the full token - it's too big for cookies)

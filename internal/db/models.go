@@ -9,6 +9,33 @@ import (
 	"time"
 )
 
+type EmailOutbox struct {
+	ID           int64          `json:"id"`
+	UserID       sql.NullInt64  `json:"user_id"`
+	Recipient    string         `json:"recipient"`
+	Subject      string         `json:"subject"`
+	TemplateName string         `json:"template_name"`
+	TemplateData sql.NullString `json:"template_data"`
+	RenderedHtml sql.NullString `json:"rendered_html"`
+	Status       string         `json:"status"`
+	Attempts     int64          `json:"attempts"`
+	MaxAttempts  int64          `json:"max_attempts"`
+	LastError    sql.NullString `json:"last_error"`
+	NextRetryAt  sql.NullTime   `json:"next_retry_at"`
+	SentAt       sql.NullTime   `json:"sent_at"`
+	CreatedAt    time.Time      `json:"created_at"`
+}
+
+type EmailTemplateContent struct {
+	ID           int64          `json:"id"`
+	TemplateName string         `json:"template_name"`
+	BlockName    string         `json:"block_name"`
+	Lang         string         `json:"lang"`
+	Content      string         `json:"content"`
+	UpdatedBy    sql.NullString `json:"updated_by"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+}
+
 type Fee struct {
 	ID          int64     `json:"id"`
 	UserID      int64     `json:"user_id"`
@@ -89,4 +116,5 @@ type User struct {
 	IsStaff           bool           `json:"is_staff"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
+	Locale            string         `json:"locale"`
 }

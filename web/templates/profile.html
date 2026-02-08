@@ -44,13 +44,34 @@
             </div>
 
             <div>
-                <dt class="text-sm font-medium text-gray-500">Přezdívka</dt>
+                <dt class="text-sm font-medium text-gray-500">Přezdívka (username)</dt>
                 <dd class="mt-1">
                     <input type="text" value="{{if .DBUser.Username.Valid}}{{.DBUser.Username.String}}{{else}}{{.User.PreferredName}}{{end}}" disabled
                         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
                 </dd>
-                <dd class="mt-1 text-xs text-gray-500">
-                    Synchronizováno z Keycloaku ({{.User.PreferredName}})
+            </div>
+
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Jméno (first name)</dt>
+                <dd class="mt-1">
+                    <input type="text" value="{{.User.GivenName}}" disabled
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
+                </dd>
+            </div>
+
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Příjmení (last name)</dt>
+                <dd class="mt-1">
+                    <input type="text" value="{{.User.FamilyName}}" disabled
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
+                </dd>
+            </div>
+
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Locale</dt>
+                <dd class="mt-1">
+                    <input type="text" value="{{.DBUser.Locale}}" disabled
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
                 </dd>
             </div>
         </dl>
@@ -211,18 +232,6 @@
                 </p>
 
                 <form method="POST" action="/profile" class="space-y-6">
-                    <div>
-                        <label for="realname" class="block text-sm font-medium text-gray-700">
-                            Skutečné jméno
-                            <span class="text-gray-400 font-normal">(volitelné)</span>
-                        </label>
-                        <input type="text" name="realname" id="realname"
-                            value="{{if .DBUser.Realname.Valid}}{{.DBUser.Realname.String}}{{end}}"
-                            placeholder="Jan Novák"
-                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <p class="mt-1 text-xs text-gray-500">Zobrazeno v členském přehledu</p>
-                    </div>
-
                     <div>
                         <label for="phone" class="block text-sm font-medium text-gray-700">
                             Telefon

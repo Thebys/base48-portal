@@ -20,15 +20,12 @@ RETURNING *;
 -- name: ListUsers :many
 SELECT * FROM users ORDER BY realname, email;
 
--- name: ListUsersByState :many
-SELECT * FROM users WHERE state = ? ORDER BY realname, email;
-
 -- name: CreateUser :one
 INSERT INTO users (
     keycloak_id, email, username, realname, phone, alt_contact,
     level_id, level_actual_amount, payments_id, state,
-    is_council, is_staff
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    is_council, is_staff, locale
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: UpdateUser :one
@@ -52,7 +49,6 @@ RETURNING *;
 
 -- name: UpdateUserProfile :one
 UPDATE users SET
-    realname = ?,
     phone = ?,
     alt_contact = ?,
     updated_at = CURRENT_TIMESTAMP
@@ -69,6 +65,7 @@ RETURNING *;
 -- name: UpdateUserKeycloakInfo :one
 UPDATE users SET
     username = ?,
+    locale = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;
@@ -76,39 +73,11 @@ RETURNING *;
 -- name: GetLevel :one
 SELECT * FROM levels WHERE id = ? LIMIT 1;
 
--- name: ListLevels :many
-SELECT * FROM levels WHERE active = TRUE ORDER BY amount;
-
--- name: ListAllLevels :many
-SELECT * FROM levels ORDER BY amount;
-
--- name: CreateLevel :one
-INSERT INTO levels (name, amount, active)
-VALUES (?, ?, ?)
-RETURNING *;
-
--- name: UpdateLevel :one
-UPDATE levels SET
-    name = ?,
-    amount = ?,
-    active = ?
-WHERE id = ?
-RETURNING *;
-
 -- name: GetPayment :one
 SELECT * FROM payments WHERE id = ? LIMIT 1;
 
 -- name: ListPaymentsByUser :many
 SELECT * FROM payments WHERE user_id = ? ORDER BY date DESC;
-
--- name: ListMembershipPaymentsByUser :many
--- Only payments that match the user's membership VS (payments_id)
-SELECT p.*
-FROM payments p
-JOIN users u ON p.user_id = u.id
-WHERE p.user_id = ?
-AND p.identification = u.payments_id
-ORDER BY p.date DESC;
 
 -- name: ListUnassignedPayments :many
 SELECT * FROM payments WHERE user_id IS NULL AND dismissed_at IS NULL ORDER BY date DESC;
@@ -131,16 +100,6 @@ UPDATE payments SET
     dismissed_by = NULL,
     dismissed_reason = NULL
 WHERE id = ?
-RETURNING *;
-
--- name: ListRecentPayments :many
-SELECT * FROM payments ORDER BY date DESC LIMIT ?;
-
--- name: CreatePayment :one
-INSERT INTO payments (
-    user_id, date, amount, kind, kind_id,
-    local_account, remote_account, identification, raw_data, staff_comment
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: UpsertPayment :one
@@ -176,9 +135,6 @@ SELECT * FROM fees WHERE id = ? LIMIT 1;
 -- name: ListFeesByUser :many
 SELECT * FROM fees WHERE user_id = ? ORDER BY period_start DESC;
 
--- name: ListFeesByPeriod :many
-SELECT * FROM fees WHERE period_start = ? ORDER BY user_id;
-
 -- name: CreateFee :one
 INSERT INTO fees (user_id, level_id, period_start, amount)
 VALUES (?, ?, ?, ?)
@@ -196,7 +152,8 @@ ORDER BY u.id;
 
 -- name: GetUserBalance :one
 -- Calculate membership fee balance (only payments matching user's payments_id VS)
-SELECT
+-- ROUND prevents float precision artifacts (e.g. 6.00000000000093) that break int64 scan
+SELECT CAST(ROUND(
     COALESCE((
         SELECT SUM(CAST(p.amount AS REAL))
         FROM payments p
@@ -204,24 +161,13 @@ SELECT
         WHERE p.user_id = ?
         AND p.identification = u.payments_id
     ), 0) -
-    COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = ?), 0) as balance;
-
--- name: CountUsersByState :many
-SELECT state, COUNT(*) as count FROM users GROUP BY state;
+    COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = ?), 0)
+) AS INTEGER) as balance;
 
 -- name: CreateLog :one
 INSERT INTO system_logs (subsystem, level, user_id, message, metadata)
 VALUES (?, ?, ?, ?, ?)
 RETURNING *;
-
--- name: ListLogsBySubsystem :many
-SELECT * FROM system_logs WHERE subsystem = ? ORDER BY created_at DESC LIMIT ?;
-
--- name: ListLogsByUser :many
-SELECT * FROM system_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?;
-
--- name: ListRecentLogs :many
-SELECT * FROM system_logs ORDER BY created_at DESC LIMIT ?;
 
 -- name: ListLogsFiltered :many
 SELECT * FROM system_logs
@@ -255,14 +201,6 @@ WHERE pv.vs = ? LIMIT 1;
 -- name: CreateProject :one
 INSERT INTO projects (name, payments_id, description)
 VALUES (?, ?, ?)
-RETURNING *;
-
--- name: UpdateProject :one
-UPDATE projects SET
-    name = ?,
-    payments_id = ?,
-    description = ?
-WHERE id = ?
 RETURNING *;
 
 -- name: DeleteProject :exec
@@ -303,3 +241,72 @@ DELETE FROM project_vs WHERE project_id = ? AND vs = ?;
 
 -- name: GetProjectVSByVS :one
 SELECT * FROM project_vs WHERE vs = ? LIMIT 1;
+
+-- ============================================================================
+-- EMAIL OUTBOX
+-- ============================================================================
+
+-- name: CreateEmailOutbox :one
+INSERT INTO email_outbox (
+    user_id, recipient, subject, template_name,
+    template_data, rendered_html, status, max_attempts, next_retry_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetEmailOutbox :one
+SELECT * FROM email_outbox WHERE id = ? LIMIT 1;
+
+-- name: ListRecentEmailOutbox :many
+SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT ?;
+
+-- name: UpdateEmailOutboxStatus :one
+UPDATE email_outbox SET
+    status = ?,
+    attempts = ?,
+    last_error = ?,
+    next_retry_at = ?,
+    sent_at = ?
+WHERE id = ?
+RETURNING *;
+
+-- name: CountEmailOutboxByStatus :many
+SELECT status, COUNT(*) as count FROM email_outbox GROUP BY status;
+
+-- name: CountEmailOutboxSentToday :one
+SELECT COUNT(*) as count FROM email_outbox
+WHERE status = 'sent' AND DATE(sent_at) = DATE('now');
+
+-- ============================================================================
+-- EMAIL TEMPLATE CONTENT (editable text blocks)
+-- ============================================================================
+
+-- name: ListEmailTemplateContentByTemplateLang :many
+SELECT * FROM email_template_content
+WHERE template_name = ? AND lang = ? ORDER BY block_name;
+
+-- name: UpsertEmailTemplateContent :one
+INSERT INTO email_template_content (template_name, block_name, lang, content, updated_by)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(template_name, block_name, lang) DO UPDATE SET
+    content = excluded.content,
+    updated_by = excluded.updated_by,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING *;
+
+-- ============================================================================
+-- USER STATE UPDATE
+-- ============================================================================
+
+-- name: UpdateUserState :one
+UPDATE users SET
+    state = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateUserLocale :one
+UPDATE users SET
+    locale = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
