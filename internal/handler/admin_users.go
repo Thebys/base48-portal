@@ -42,11 +42,16 @@ func (h *Handler) AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Get filter and sort parameters from query string
+	// Default: show accepted members sorted by balance ascending (debt first)
 	filterState := r.URL.Query().Get("state")
 	filterKeycloak := r.URL.Query().Get("keycloak")
 	filterBalance := r.URL.Query().Get("balance")
 	filterSearch := strings.ToLower(r.URL.Query().Get("search"))
 	sortBy := r.URL.Query().Get("sort")
+	if len(r.URL.Query()) == 0 {
+		filterState = "accepted"
+		sortBy = "balance_asc"
+	}
 
 	// Get all users from database
 	dbUsers, err := h.queries.ListUsers(ctx)
