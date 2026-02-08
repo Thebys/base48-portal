@@ -28,6 +28,7 @@
                         <span class="badge badge-warning">SMTP chybí</span>
                         {{else if .SMTPReachable}}
                         <span class="badge badge-success">SMTP OK</span>
+                        {{if .SMTPSkipTLS}}<span class="badge badge-warning">no TLS</span>{{end}}
                         {{else}}
                         <span class="badge badge-danger">SMTP nedostupné</span>
                         {{end}}

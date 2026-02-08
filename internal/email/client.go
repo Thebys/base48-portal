@@ -3,12 +3,14 @@ package email
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"math"
+	"net"
 	"net/smtp"
 	"path/filepath"
 	"regexp"
@@ -378,12 +380,66 @@ func (c *Client) attemptDelivery(ctx context.Context, entry db.EmailOutbox, para
 	c.logEmail(ctx, params, fmt.Errorf("failed after %d attempts", entry.MaxAttempts))
 }
 
-// sendSMTP sends a pre-rendered email via SMTP
+// sendSMTP sends a pre-rendered email via SMTP.
+// When SMTPSkipTLS is set, it connects without STARTTLS and skips authentication
+// (suitable for local relays like Postfix that don't require TLS or auth).
 func (c *Client) sendSMTP(recipient, subject, htmlBody string) error {
-	auth := smtp.PlainAuth("", c.config.SMTPUsername, c.config.SMTPPassword, c.config.SMTPHost)
 	addr := fmt.Sprintf("%s:%d", c.config.SMTPHost, c.config.SMTPPort)
 	message := c.formatMessage(recipient, subject, htmlBody)
-	return smtp.SendMail(addr, auth, c.config.SMTPFrom, []string{recipient}, []byte(message))
+
+	if !c.config.SMTPSkipTLS {
+		auth := smtp.PlainAuth("", c.config.SMTPUsername, c.config.SMTPPassword, c.config.SMTPHost)
+		return smtp.SendMail(addr, auth, c.config.SMTPFrom, []string{recipient}, []byte(message))
+	}
+
+	// Plain TCP connection without TLS — for local relays
+	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("smtp dial: %w", err)
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, c.config.SMTPHost)
+	if err != nil {
+		return fmt.Errorf("smtp client: %w", err)
+	}
+	defer client.Close()
+
+	// Try STARTTLS with InsecureSkipVerify — if the server supports it, use it;
+	// if not, continue without TLS.
+	if ok, _ := client.Extension("STARTTLS"); ok {
+		if err := client.StartTLS(&tls.Config{InsecureSkipVerify: true}); err != nil {
+			log.Printf("[Email] STARTTLS failed (continuing without TLS): %v", err)
+		}
+	}
+
+	// Authenticate only if credentials are provided
+	if c.config.SMTPUsername != "" {
+		auth := smtp.PlainAuth("", c.config.SMTPUsername, c.config.SMTPPassword, c.config.SMTPHost)
+		if err := client.Auth(auth); err != nil {
+			return fmt.Errorf("smtp auth: %w", err)
+		}
+	}
+
+	if err := client.Mail(c.config.SMTPFrom); err != nil {
+		return fmt.Errorf("smtp MAIL FROM: %w", err)
+	}
+	if err := client.Rcpt(recipient); err != nil {
+		return fmt.Errorf("smtp RCPT TO: %w", err)
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("smtp DATA: %w", err)
+	}
+	if _, err := w.Write([]byte(message)); err != nil {
+		return fmt.Errorf("smtp write: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("smtp data close: %w", err)
+	}
+
+	return client.Quit()
 }
 
 // renderTemplate renders an email template and returns the HTML string

@@ -32,11 +32,12 @@ type Config struct {
 	SessionSecret string
 
 	// SMTP Email
-	SMTPHost     string
-	SMTPPort     int
+	SMTPHost    string
+	SMTPPort    int
 	SMTPUsername string
 	SMTPPassword string
-	SMTPFrom     string
+	SMTPFrom    string
+	SMTPSkipTLS bool // Skip STARTTLS (for local relays like Postfix without TLS)
 
 	// Email system
 	EmailEnabled  bool   // Global email toggle
@@ -66,6 +67,7 @@ func Load() (*Config, error) {
 		SMTPUsername:                       getEnv("SMTP_USERNAME", ""),
 		SMTPPassword:                       getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:                           getEnv("SMTP_FROM", ""),
+		SMTPSkipTLS:                        getEnvBool("SMTP_SKIP_TLS", false),
 		EmailEnabled:                       getEnvBool("EMAIL_ENABLED", false),
 		BankAccountCZ:                      getEnv("BANK_ACCOUNT_CZ", "2800691518/2010"),
 		WebRoot:                            getEnv("WEB_ROOT", "web"),

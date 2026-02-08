@@ -65,6 +65,7 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"DBUser":         dbUser,
 		"SMTPConfigured": smtpConfigured,
 		"SMTPReachable":  smtpReachable,
+		"SMTPSkipTLS":    h.config.SMTPSkipTLS,
 		"EmailEnabled":   h.config.EmailEnabled,
 		"BankAccountCZ":  h.config.BankAccountCZ,
 		"RecentEmails":   recentEmails,
