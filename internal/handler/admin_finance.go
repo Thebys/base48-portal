@@ -114,12 +114,14 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		balanceAfterFloat := float64(balanceAfterFee)
 
 		emailTier := ""
-		if balanceAfterFloat <= -(2 * feeFloat) {
-			emailTier = "debt_warning"
-			previewDebtWarning++
-		} else if balanceAfterFloat <= -feeFloat {
-			emailTier = "negative_balance"
-			previewNegBalance++
+		if feeFloat > 0 {
+			if balanceAfterFloat <= -(2 * feeFloat) {
+				emailTier = "debt_warning"
+				previewDebtWarning++
+			} else if balanceAfterFloat <= -feeFloat {
+				emailTier = "negative_balance"
+				previewNegBalance++
+			}
 		}
 
 		previewTotalFees += int64(feeFloat)
