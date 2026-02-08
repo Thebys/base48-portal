@@ -3,75 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #dc2626;
-            margin-top: 0;
-        }
-        .alert {
-            background: #fef2f2;
-            border-left: 4px solid #dc2626;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .reason {
-            background: #f9fafb;
-            padding: 15px;
-            border-radius: 6px;
-            margin: 20px 0;
-            font-style: italic;
-        }
-        /* .button styles moved inline for Gmail compatibility */
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            font-size: 14px;
-            color: #6b7280;
-        }
-    </style>
+    <title>{{index .Content "subject"}}</title>
 </head>
-<body>
+<body style="margin:0;padding:0;background-color:#f5f5f5;">
     {{with index .Content "preheader"}}<div style="display:none;font-size:1px;color:#f5f5f5;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">{{.}}</div>{{end}}
-    <div class="container">
-        <h1>{{index .Content "heading"}}</h1>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f5f5;">
+        <tr><td align="center" style="padding:20px 10px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;">
+                <!-- Logo -->
+                <tr>
+                    <td style="padding:24px 30px 16px;border-bottom:2px solid #2563eb;">
+                        <a href="{{.PortalURL}}" style="text-decoration:none;">
+                            <img src="{{.PortalURL}}/static/images/logo-email.png" alt="BASE48" width="160" style="max-width:160px;height:auto;display:block;" />
+                        </a>
+                    </td>
+                </tr>
+                <!-- Content -->
+                <tr>
+                    <td style="padding:24px 30px 30px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#333333;">
+                        <h1 style="color:#dc2626;margin:0 0 20px;font-size:24px;font-weight:bold;">{{index .Content "heading"}}</h1>
 
-        <p>{{index .Labels "greeting_prefix"}} {{.Name}},</p>
+                        <p style="margin:0 0 16px;">{{index .Labels "greeting_prefix"}} {{.Name}},</p>
 
-        <div class="alert">
-            <strong>{{index .Content "intro_text"}}</strong>
-        </div>
+                        <!-- Alert box -->
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 20px;">
+                            <tr>
+                                <td style="background:#fef2f2;border-left:4px solid #dc2626;padding:15px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;color:#333333;">
+                                    <strong>{{index .Content "intro_text"}}</strong>
+                                </td>
+                            </tr>
+                        </table>
 
-        <p><strong>{{index .Labels "reason_heading"}}</strong></p>
-        <div class="reason">
-            {{.Reason}}
-        </div>
+                        <p style="margin:0 0 8px;font-weight:bold;">{{index .Labels "reason_heading"}}</p>
+                        <!-- Reason box -->
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 20px;">
+                            <tr>
+                                <td style="background:#f9fafb;padding:15px;border-radius:6px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;font-style:italic;color:#333333;">
+                                    {{.Reason}}
+                                </td>
+                            </tr>
+                        </table>
 
-        <p style="white-space: pre-line">{{index .Content "consequences_text"}}</p>
+                        <p style="margin:0 0 16px;white-space:pre-line;">{{index .Content "consequences_text"}}</p>
 
-        <p style="white-space: pre-line">{{index .Content "recovery_text"}}</p>
+                        <p style="margin:0 0 20px;white-space:pre-line;">{{index .Content "recovery_text"}}</p>
 
-        <a href="{{.PortalURL}}/profile" style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:6px;margin:20px 0;font-weight:bold;">{{index .Labels "button_my_profile"}}</a>
-
-        <div class="footer">
-            <p>{{index .Content "footer"}}</p>
-            <p><strong>{{index .Content "sign_off"}}</strong></p>
-        </div>
-    </div>
+                        <!-- Button -->
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+                            <tr>
+                                <td style="background:#2563eb;border-radius:6px;">
+                                    <a href="{{.PortalURL}}/profile" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:bold;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;">{{index .Labels "button_my_profile"}}</a>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                <!-- Footer -->
+                <tr>
+                    <td style="padding:20px 30px;border-top:1px solid #e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#6b7280;">
+                        <p style="margin:0 0 8px;">{{index .Content "footer"}}</p>
+                        <p style="margin:0;font-weight:bold;color:#333333;">{{index .Content "sign_off"}}</p>
+                    </td>
+                </tr>
+            </table>
+        </td></tr>
+    </table>
 </body>
 </html>
