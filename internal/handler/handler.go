@@ -233,8 +233,11 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		// Check which form was submitted
 		if r.FormValue("action") == "update_custom_fee" {
-			// Handle custom fee update
 			h.handleCustomFeeUpdate(w, r, dbUser)
+			return
+		}
+		if r.FormValue("action") == "upgrade_level" {
+			h.handleLevelUpgrade(w, r, dbUser)
 			return
 		}
 
@@ -316,6 +319,64 @@ func (h *Handler) handleCustomFeeUpdate(w http.ResponseWriter, r *http.Request, 
 		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
 		Message:  fmt.Sprintf("Custom fee amount updated: %.0f Kč (minimum: %s Kč)", customFee, level.Amount),
 		Metadata: logMetadata(map[string]interface{}{"old_amount": dbUser.LevelActualAmount, "new_amount": fmt.Sprintf("%.0f", customFee), "level_minimum": level.Amount}),
+	})
+
+	http.Redirect(w, r, "/profile?success=1", http.StatusSeeOther)
+}
+
+// handleLevelUpgrade handles self-service membership level upgrade
+func (h *Handler) handleLevelUpgrade(w http.ResponseWriter, r *http.Request, dbUser *db.User) {
+	newLevelIDStr := r.FormValue("new_level_id")
+	newLevelID, err := strconv.ParseInt(newLevelIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Neplatná úroveň členství", http.StatusBadRequest)
+		return
+	}
+
+	// Get current level
+	currentLevel, err := h.queries.GetLevel(r.Context(), dbUser.LevelID)
+	if err != nil {
+		http.Error(w, "Chyba při načítání aktuální úrovně", http.StatusInternalServerError)
+		return
+	}
+
+	// Get target level
+	newLevel, err := h.queries.GetLevel(r.Context(), newLevelID)
+	if err != nil {
+		http.Error(w, "Zvolená úroveň členství neexistuje", http.StatusBadRequest)
+		return
+	}
+
+	if !newLevel.Active {
+		http.Error(w, "Zvolená úroveň členství není aktivní", http.StatusBadRequest)
+		return
+	}
+
+	// Validate: new level must have higher amount than current
+	var currentAmount, newAmount float64
+	fmt.Sscanf(currentLevel.Amount, "%f", &currentAmount)
+	fmt.Sscanf(newLevel.Amount, "%f", &newAmount)
+	if newAmount <= currentAmount {
+		http.Error(w, "Lze přejít pouze na vyšší úroveň členství", http.StatusBadRequest)
+		return
+	}
+
+	// Update level (resets custom fee to 0)
+	_, err = h.queries.UpdateUserLevel(r.Context(), db.UpdateUserLevelParams{
+		LevelID: newLevelID,
+		ID:      dbUser.ID,
+	})
+	if err != nil {
+		http.Error(w, "Chyba při změně úrovně členství", http.StatusInternalServerError)
+		return
+	}
+
+	h.queries.CreateLog(r.Context(), db.CreateLogParams{
+		Subsystem: "membership",
+		Level:     "info",
+		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
+		Message:   fmt.Sprintf("Membership level upgraded: %s (%s Kč) → %s (%s Kč)", currentLevel.Name, currentLevel.Amount, newLevel.Name, newLevel.Amount),
+		Metadata:  logMetadata(map[string]interface{}{"old_level_id": dbUser.LevelID, "new_level_id": newLevelID, "old_level": currentLevel.Name, "new_level": newLevel.Name}),
 	})
 
 	http.Redirect(w, r, "/profile?success=1", http.StatusSeeOther)

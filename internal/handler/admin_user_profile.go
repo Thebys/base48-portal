@@ -197,10 +197,28 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 		}
 	}
 
+	// Fetch upgrade levels (active levels with higher amount than current)
+	var currentAmount float64
+	fmt.Sscanf(level.Amount, "%f", &currentAmount)
+	allLevels, err := h.queries.ListActiveLevels(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch levels: %w", err)
+	}
+	var upgradeLevels []db.Level
+	for _, l := range allLevels {
+		var amt float64
+		fmt.Sscanf(l.Amount, "%f", &amt)
+		if amt > currentAmount {
+			upgradeLevels = append(upgradeLevels, l)
+		}
+	}
+
 	return map[string]interface{}{
 		"ViewedUser":         targetUser,    // The user being viewed (renamed for clarity)
 		"TargetDBUser":       targetDBUser,  // The user being viewed (DB record)
 		"Level":              level,
+		"UpgradeLevels":      upgradeLevels,
+		"AllActiveLevels":    allLevels,
 		"Payments":           displayPayments, // Filtered: only payments >= 5 Kč
 		"Fees":               fees,
 		"Balance":            float64(balance),
@@ -465,4 +483,75 @@ func (h *Handler) AdminUpdateUserStateHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	h.jsonSuccess(w, fmt.Sprintf("Stav změněn na %s", req.State))
+}
+
+// AdminUpdateUserLevelHandler changes a user's membership level.
+// POST /api/admin/users/{id}/level
+func (h *Handler) AdminUpdateUserLevelHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+	ctx := r.Context()
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		LevelID int64 `json:"level_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate the new level exists and is active
+	newLevel, err := h.queries.GetLevel(ctx, req.LevelID)
+	if err != nil {
+		h.jsonError(w, "Zvolená úroveň neexistuje", http.StatusBadRequest)
+		return
+	}
+	if !newLevel.Active {
+		h.jsonError(w, "Zvolená úroveň není aktivní", http.StatusBadRequest)
+		return
+	}
+
+	// Get current user for logging
+	targetUser, err := h.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		h.jsonError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	previousLevel, _ := h.queries.GetLevel(ctx, targetUser.LevelID)
+
+	_, err = h.queries.UpdateUserLevel(ctx, db.UpdateUserLevelParams{
+		LevelID: req.LevelID,
+		ID:      userID,
+	})
+	if err != nil {
+		h.jsonError(w, "Failed to update level", http.StatusInternalServerError)
+		return
+	}
+
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+		String: user.ID, Valid: true,
+	})
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "admin",
+		Level:     "info",
+		UserID:    sql.NullInt64{Int64: userID, Valid: true},
+		Message: fmt.Sprintf("Level changed: %s (%s Kč) -> %s (%s Kč) (by admin %s)",
+			previousLevel.Name, previousLevel.Amount, newLevel.Name, newLevel.Amount, adminDBUser.Email),
+		Metadata: logMetadata(map[string]interface{}{
+			"previous_level_id": targetUser.LevelID,
+			"new_level_id":     req.LevelID,
+			"previous_level":   previousLevel.Name,
+			"new_level":        newLevel.Name,
+			"admin_email":      adminDBUser.Email,
+		}),
+	})
+
+	h.jsonSuccess(w, fmt.Sprintf("Úroveň změněna na %s", newLevel.Name))
 }

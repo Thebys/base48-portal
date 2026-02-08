@@ -180,6 +180,18 @@
                 <dd class="mt-1 text-xs text-gray-500">Jazyk synchronizován z Keycloaku při přihlášení</dd>
             </div>
 
+            <div>
+                <dt class="text-sm font-medium text-gray-500">Nastavit úroveň členství</dt>
+                <dd class="mt-1 flex items-center gap-3">
+                    <select id="level-select" class="text-sm border-gray-300 rounded-md py-1 px-2">
+                        {{range .AllActiveLevels}}
+                        <option value="{{.ID}}" {{if eq .ID $.Level.ID}}selected{{end}}>{{.Name}} ({{.Amount}} Kč)</option>
+                        {{end}}
+                    </select>
+                    <button onclick="changeUserLevel()" class="btn btn-sm btn-primary">Uložit</button>
+                </dd>
+            </div>
+
             {{if .TargetUser.Roles}}
             <div class="sm:col-span-2">
                 <dt class="text-sm font-medium text-gray-500 mb-2">Role v systému</dt>
@@ -317,6 +329,29 @@ function changeUserLocale() {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({locale: newLocale})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
+function changeUserLevel() {
+    const select = document.getElementById('level-select');
+    const newLevelID = parseInt(select.value);
+    if (!newLevelID) return;
+    const selectedText = select.options[select.selectedIndex].text;
+    if (!confirm('Změnit úroveň členství na: ' + selectedText + '?\n\nCustom fee bude resetována na výchozí.')) return;
+
+    fetch('/api/admin/users/{{.TargetDBUser.ID}}/level', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({level_id: newLevelID})
     })
     .then(r => r.json())
     .then(data => {

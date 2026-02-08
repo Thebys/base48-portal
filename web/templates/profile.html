@@ -166,6 +166,33 @@
         </dl>
     </div>
 
+    {{if .UpgradeLevels}}
+    <!-- Membership Level Upgrade -->
+    <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-2">Změna úrovně členství</h2>
+        <p class="text-sm text-gray-500 mb-4">
+            Podpořte base48 vyšším členským příspěvkem.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {{range .UpgradeLevels}}
+            <form method="POST" action="/profile">
+                <input type="hidden" name="action" value="upgrade_level">
+                <input type="hidden" name="new_level_id" value="{{.ID}}">
+                <div class="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 hover:shadow-sm transition-all">
+                    <div class="font-semibold text-gray-900">{{.Name}}</div>
+                    <div class="text-sm text-gray-500 mt-1">{{.Amount}} Kč/měsíc</div>
+                    <button type="submit"
+                        class="mt-3 w-full inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        onclick="return confirm('Opravdu chcete přejít na úroveň {{.Name}} ({{.Amount}} Kč/měsíc)?')">
+                        Přejít na {{.Name}}
+                    </button>
+                </div>
+            </form>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+
     <!-- Custom Membership Fee Amount (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group">

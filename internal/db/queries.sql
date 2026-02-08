@@ -73,6 +73,38 @@ RETURNING *;
 -- name: GetLevel :one
 SELECT * FROM levels WHERE id = ? LIMIT 1;
 
+-- name: ListActiveLevels :many
+SELECT * FROM levels WHERE active = 1 ORDER BY CAST(amount AS REAL) ASC;
+
+-- name: UpdateUserLevel :one
+UPDATE users SET
+    level_id = ?,
+    level_actual_amount = '0',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: ListAllLevels :many
+SELECT * FROM levels ORDER BY CAST(amount AS REAL) ASC;
+
+-- name: CreateLevel :one
+INSERT INTO levels (name, amount, active) VALUES (?, ?, 1) RETURNING *;
+
+-- name: UpdateLevelActive :one
+UPDATE levels SET active = ? WHERE id = ? RETURNING *;
+
+-- name: UpdateLevel :one
+UPDATE levels SET name = ?, amount = ? WHERE id = ? RETURNING *;
+
+-- name: DeleteLevel :exec
+DELETE FROM levels WHERE id = ?;
+
+-- name: CountUsersByLevel :many
+SELECT level_id, COUNT(*) as count FROM users GROUP BY level_id;
+
+-- name: CountFeesByLevel :many
+SELECT level_id, COUNT(*) as count FROM fees GROUP BY level_id;
+
 -- name: GetPayment :one
 SELECT * FROM payments WHERE id = ? LIMIT 1;
 

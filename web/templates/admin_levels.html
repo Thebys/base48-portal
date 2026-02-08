@@ -1,0 +1,194 @@
+{{define "content"}}
+<div class="px-4 sm:px-6 lg:px-8">
+    <div class="sm:flex sm:items-center mb-6">
+        <div class="sm:flex-auto">
+            <h1 class="text-2xl font-semibold text-gray-900">Úrovně členství</h1>
+            <p class="mt-2 text-sm text-gray-700">
+                Správa tarifů a úrovní členství
+            </p>
+        </div>
+    </div>
+
+    <!-- Levels Table -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Název</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Částka</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stav</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uživatelů</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Akce</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {{range .Levels}}
+                    <tr id="row-{{.ID}}" class="{{if not .Active}}bg-gray-50 text-gray-400{{end}}">
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{{.ID}}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium {{if .Active}}text-gray-900{{else}}text-gray-400{{end}}">
+                            <span class="view-mode-{{.ID}}">{{.Name}}</span>
+                            <input type="text" class="edit-mode-{{.ID}} hidden w-32 text-sm border-gray-300 rounded-md py-1 px-2" value="{{.Name}}">
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm {{if .Active}}text-gray-900{{else}}text-gray-400{{end}}">
+                            <span class="view-mode-{{.ID}}">{{.Amount}} Kč/měsíc</span>
+                            <div class="edit-mode-{{.ID}} hidden flex items-center gap-1">
+                                <input type="number" min="0" class="w-24 text-sm border-gray-300 rounded-md py-1 px-2" value="{{.Amount}}">
+                                <span class="text-sm text-gray-500">Kč</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap">
+                            {{if .Active}}
+                            <span class="badge badge-success">aktivní</span>
+                            {{else}}
+                            <span class="badge badge-gray">neaktivní</span>
+                            {{end}}
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                            {{index $.UserCounts .ID}}
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm">
+                            <div class="flex items-center gap-1">
+                                <button onclick="startEdit({{.ID}})" class="view-mode-{{.ID}} btn btn-sm btn-view">Upravit</button>
+                                <button onclick="saveEdit({{.ID}})" class="edit-mode-{{.ID}} hidden btn btn-sm btn-primary">Uložit</button>
+                                <button onclick="cancelEdit({{.ID}})" class="edit-mode-{{.ID}} hidden btn btn-sm btn-secondary">Zrušit</button>
+                                {{if .Active}}
+                                <button onclick="toggleLevel({{.ID}}, false, '{{.Name}}')" class="view-mode-{{.ID}} btn btn-sm btn-secondary">Deaktivovat</button>
+                                {{else}}
+                                <button onclick="toggleLevel({{.ID}}, true, '{{.Name}}')" class="view-mode-{{.ID}} btn btn-sm btn-success">Aktivovat</button>
+                                {{end}}
+                                {{if and (eq (index $.UserCounts .ID) 0) (eq (index $.FeeCounts .ID) 0)}}
+                                <button onclick="deleteLevel({{.ID}}, '{{.Name}}')" class="view-mode-{{.ID}} btn btn-sm btn-danger">Smazat</button>
+                                {{end}}
+                            </div>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Create New Level -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Nová úroveň</h2>
+        <div class="flex flex-wrap items-end gap-4">
+            <div>
+                <label for="new-level-name" class="block text-sm font-medium text-gray-700">Název</label>
+                <input type="text" id="new-level-name" placeholder="např. Premium"
+                    class="mt-1 block w-48 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="new-level-amount" class="block text-sm font-medium text-gray-700">Částka (Kč/měsíc)</label>
+                <input type="number" id="new-level-amount" min="0" placeholder="1000"
+                    class="mt-1 block w-36 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+            <button onclick="createLevel()" class="btn btn-sm btn-primary">Vytvořit</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function startEdit(id) {
+    document.querySelectorAll('.view-mode-' + id).forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.edit-mode-' + id).forEach(el => el.classList.remove('hidden'));
+}
+
+function cancelEdit(id) {
+    document.querySelectorAll('.view-mode-' + id).forEach(el => el.classList.remove('hidden'));
+    document.querySelectorAll('.edit-mode-' + id).forEach(el => el.classList.add('hidden'));
+}
+
+function saveEdit(id) {
+    const row = document.getElementById('row-' + id);
+    const inputs = row.querySelectorAll('input');
+    const name = inputs[0].value.trim();
+    const amount = inputs[1].value.trim();
+
+    if (!name || !amount) {
+        alert('Vyplňte název i částku.');
+        return;
+    }
+
+    fetch('/api/admin/levels/update', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id, name: name, amount: amount})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
+function toggleLevel(id, active, name) {
+    const action = active ? 'aktivovat' : 'deaktivovat';
+    if (!confirm('Opravdu chcete ' + action + ' úroveň "' + name + '"?')) return;
+
+    fetch('/api/admin/levels/toggle', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id, active: active})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
+function deleteLevel(id, name) {
+    if (!confirm('Opravdu chcete smazat úroveň "' + name + '"? Tato akce je nevratná.')) return;
+
+    fetch('/api/admin/levels', {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
+function createLevel() {
+    const name = document.getElementById('new-level-name').value.trim();
+    const amount = document.getElementById('new-level-amount').value.trim();
+
+    if (!name || !amount) {
+        alert('Vyplňte název i částku.');
+        return;
+    }
+
+    fetch('/api/admin/levels', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, amount: amount})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+</script>
+{{end}}

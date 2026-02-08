@@ -148,6 +148,70 @@ func (q *Queries) CountEmailOutboxSentToday(ctx context.Context) (int64, error) 
 	return count, err
 }
 
+const countFeesByLevel = `-- name: CountFeesByLevel :many
+SELECT level_id, COUNT(*) as count FROM fees GROUP BY level_id
+`
+
+type CountFeesByLevelRow struct {
+	LevelID int64 `json:"level_id"`
+	Count   int64 `json:"count"`
+}
+
+func (q *Queries) CountFeesByLevel(ctx context.Context) ([]CountFeesByLevelRow, error) {
+	rows, err := q.db.QueryContext(ctx, countFeesByLevel)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountFeesByLevelRow{}
+	for rows.Next() {
+		var i CountFeesByLevelRow
+		if err := rows.Scan(&i.LevelID, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countUsersByLevel = `-- name: CountUsersByLevel :many
+SELECT level_id, COUNT(*) as count FROM users GROUP BY level_id
+`
+
+type CountUsersByLevelRow struct {
+	LevelID int64 `json:"level_id"`
+	Count   int64 `json:"count"`
+}
+
+func (q *Queries) CountUsersByLevel(ctx context.Context) ([]CountUsersByLevelRow, error) {
+	rows, err := q.db.QueryContext(ctx, countUsersByLevel)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountUsersByLevelRow{}
+	for rows.Next() {
+		var i CountUsersByLevelRow
+		if err := rows.Scan(&i.LevelID, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createEmailOutbox = `-- name: CreateEmailOutbox :one
 
 INSERT INTO email_outbox (
@@ -237,6 +301,28 @@ func (q *Queries) CreateFee(ctx context.Context, arg CreateFeeParams) (Fee, erro
 		&i.LevelID,
 		&i.PeriodStart,
 		&i.Amount,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createLevel = `-- name: CreateLevel :one
+INSERT INTO levels (name, amount, active) VALUES (?, ?, 1) RETURNING id, name, amount, active, created_at
+`
+
+type CreateLevelParams struct {
+	Name   string `json:"name"`
+	Amount string `json:"amount"`
+}
+
+func (q *Queries) CreateLevel(ctx context.Context, arg CreateLevelParams) (Level, error) {
+	row := q.db.QueryRowContext(ctx, createLevel, arg.Name, arg.Amount)
+	var i Level
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Amount,
+		&i.Active,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -365,6 +451,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Locale,
 	)
 	return i, err
+}
+
+const deleteLevel = `-- name: DeleteLevel :exec
+DELETE FROM levels WHERE id = ?
+`
+
+func (q *Queries) DeleteLevel(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteLevel, id)
+	return err
 }
 
 const deleteProject = `-- name: DeleteProject :exec
@@ -992,6 +1087,72 @@ func (q *Queries) ListAcceptedUsersForFees(ctx context.Context) ([]ListAcceptedU
 			&i.UpdatedAt,
 			&i.Locale,
 			&i.LevelAmount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveLevels = `-- name: ListActiveLevels :many
+SELECT id, name, amount, active, created_at FROM levels WHERE active = 1 ORDER BY CAST(amount AS REAL) ASC
+`
+
+func (q *Queries) ListActiveLevels(ctx context.Context) ([]Level, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveLevels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Level{}
+	for rows.Next() {
+		var i Level
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Amount,
+			&i.Active,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllLevels = `-- name: ListAllLevels :many
+SELECT id, name, amount, active, created_at FROM levels ORDER BY CAST(amount AS REAL) ASC
+`
+
+func (q *Queries) ListAllLevels(ctx context.Context) ([]Level, error) {
+	rows, err := q.db.QueryContext(ctx, listAllLevels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Level{}
+	for rows.Next() {
+		var i Level
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Amount,
+			&i.Active,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1658,6 +1819,51 @@ func (q *Queries) UpdateEmailOutboxStatus(ctx context.Context, arg UpdateEmailOu
 	return i, err
 }
 
+const updateLevel = `-- name: UpdateLevel :one
+UPDATE levels SET name = ?, amount = ? WHERE id = ? RETURNING id, name, amount, active, created_at
+`
+
+type UpdateLevelParams struct {
+	Name   string `json:"name"`
+	Amount string `json:"amount"`
+	ID     int64  `json:"id"`
+}
+
+func (q *Queries) UpdateLevel(ctx context.Context, arg UpdateLevelParams) (Level, error) {
+	row := q.db.QueryRowContext(ctx, updateLevel, arg.Name, arg.Amount, arg.ID)
+	var i Level
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Amount,
+		&i.Active,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateLevelActive = `-- name: UpdateLevelActive :one
+UPDATE levels SET active = ? WHERE id = ? RETURNING id, name, amount, active, created_at
+`
+
+type UpdateLevelActiveParams struct {
+	Active bool  `json:"active"`
+	ID     int64 `json:"id"`
+}
+
+func (q *Queries) UpdateLevelActive(ctx context.Context, arg UpdateLevelActiveParams) (Level, error) {
+	row := q.db.QueryRowContext(ctx, updateLevelActive, arg.Active, arg.ID)
+	var i Level
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Amount,
+		&i.Active,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateUser = `-- name: UpdateUser :one
 UPDATE users SET
     email = ?,
@@ -1794,6 +2000,47 @@ type UpdateUserKeycloakInfoParams struct {
 
 func (q *Queries) UpdateUserKeycloakInfo(ctx context.Context, arg UpdateUserKeycloakInfoParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, updateUserKeycloakInfo, arg.Username, arg.Locale, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Locale,
+	)
+	return i, err
+}
+
+const updateUserLevel = `-- name: UpdateUserLevel :one
+UPDATE users SET
+    level_id = ?,
+    level_actual_amount = '0',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
+`
+
+type UpdateUserLevelParams struct {
+	LevelID int64 `json:"level_id"`
+	ID      int64 `json:"id"`
+}
+
+func (q *Queries) UpdateUserLevel(ctx context.Context, arg UpdateUserLevelParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserLevel, arg.LevelID, arg.ID)
 	var i User
 	err := row.Scan(
 		&i.ID,
