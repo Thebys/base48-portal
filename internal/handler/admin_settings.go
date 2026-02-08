@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
@@ -26,7 +28,17 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[Handler] failed to fetch admin DB user: %v", err)
 	}
 
+	// Check SMTP: not just configured, but actually reachable
 	smtpConfigured := h.config.SMTPHost != "" && h.config.SMTPPort != 0
+	smtpReachable := false
+	if smtpConfigured {
+		addr := fmt.Sprintf("%s:%d", h.config.SMTPHost, h.config.SMTPPort)
+		conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+		if err == nil {
+			conn.Close()
+			smtpReachable = true
+		}
+	}
 
 	// Outbox data
 	recentEmails, err := h.queries.ListRecentEmailOutbox(ctx, 50)
@@ -52,6 +64,7 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"User":           user,
 		"DBUser":         dbUser,
 		"SMTPConfigured": smtpConfigured,
+		"SMTPReachable":  smtpReachable,
 		"EmailEnabled":   h.config.EmailEnabled,
 		"BankAccountCZ":  h.config.BankAccountCZ,
 		"RecentEmails":   recentEmails,

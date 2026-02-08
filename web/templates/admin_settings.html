@@ -24,10 +24,12 @@
                         {{else}}
                         <span class="badge badge-warning">Email vypnut</span>
                         {{end}}
-                        {{if .SMTPConfigured}}
+                        {{if not .SMTPConfigured}}
+                        <span class="badge badge-warning">SMTP chybí</span>
+                        {{else if .SMTPReachable}}
                         <span class="badge badge-success">SMTP OK</span>
                         {{else}}
-                        <span class="badge badge-warning">SMTP chybí</span>
+                        <span class="badge badge-danger">SMTP nedostupné</span>
                         {{end}}
                         <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
                     </div>
