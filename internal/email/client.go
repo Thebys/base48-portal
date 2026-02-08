@@ -413,11 +413,15 @@ func (c *Client) sendSMTP(recipient, subject, htmlBody string) error {
 		}
 	}
 
-	// Authenticate only if credentials are provided
+	// Authenticate only if credentials are provided and server supports it
 	if c.config.SMTPUsername != "" {
-		auth := smtp.PlainAuth("", c.config.SMTPUsername, c.config.SMTPPassword, c.config.SMTPHost)
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("smtp auth: %w", err)
+		if ok, _ := client.Extension("AUTH"); ok {
+			auth := smtp.PlainAuth("", c.config.SMTPUsername, c.config.SMTPPassword, c.config.SMTPHost)
+			if err := client.Auth(auth); err != nil {
+				return fmt.Errorf("smtp auth: %w", err)
+			}
+		} else {
+			log.Printf("[Email] Server does not advertise AUTH, skipping authentication")
 		}
 	}
 
