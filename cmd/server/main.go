@@ -21,6 +21,8 @@ import (
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/handler"
+	"github.com/base48/member-portal/internal/migrate"
+	"github.com/base48/member-portal/migrations"
 )
 
 func main() {
@@ -43,6 +45,11 @@ func main() {
 	// Enable foreign keys for SQLite
 	if _, err := database.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		log.Fatalf("Failed to enable foreign keys: %v", err)
+	}
+
+	// Run database migrations
+	if err := migrate.Run(database, migrations.FS); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
 	// Initialize queries
