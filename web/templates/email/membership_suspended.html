@@ -34,6 +34,7 @@
                             </tr>
                         </table>
 
+                        {{if .Reason}}
                         <p style="margin:0 0 8px;font-weight:bold;">{{index .Labels "reason_heading"}}</p>
                         <!-- Reason box -->
                         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 20px;">
@@ -43,6 +44,7 @@
                                 </td>
                             </tr>
                         </table>
+                        {{end}}
 
                         <p style="margin:0 0 16px;white-space:pre-line;">{{index .Content "consequences_text"}}</p>
 

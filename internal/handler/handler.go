@@ -59,7 +59,9 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 	}
 
 	// Initialize email client (with QR service for payment codes in emails)
+	// 24h delay gives admin time to review/cancel before delivery
 	emailClient := email.New(cfg, queries, qrService)
+	emailClient.DefaultDelay = 24 * time.Hour
 
 	// Note: templates is set to nil, we'll parse on each request
 	// This is simpler than managing template name conflicts
