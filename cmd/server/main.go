@@ -25,6 +25,10 @@ import (
 	"github.com/base48/member-portal/migrations"
 )
 
+// BuildDate is set at build time via -ldflags "-X main.BuildDate=..."
+// When not set (go run / go build without flags), it stays "dev".
+var BuildDate = "dev"
+
 func main() {
 	// Load .env file if exists
 	godotenv.Load()
@@ -63,7 +67,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	h, err := handler.New(authenticator, database, cfg)
+	h, err := handler.New(authenticator, database, cfg, BuildDate)
 	if err != nil {
 		log.Fatalf("Failed to create handler: %v", err)
 	}

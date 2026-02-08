@@ -58,7 +58,7 @@ dev:
 
 # Build for production
 prod:
-	CGO_ENABLED=1 go build -ldflags="-s -w" -o portal cmd/server/main.go
+	CGO_ENABLED=1 go build -ldflags="-s -w -X 'main.BuildDate=$(shell date -u '+%Y-%m-%d %H:%M UTC')'" -o portal cmd/server/main.go
 
 # Help
 help:

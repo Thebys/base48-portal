@@ -85,6 +85,10 @@
         </div>
     </nav>
 
+    {{if .DevMode}}
+    <div class="bg-green-500 text-white text-center text-sm font-semibold py-1">LOCAL DEVELOPMENT ENVIRONMENT</div>
+    {{end}}
+
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {{template "content" .}}
     </main>
@@ -92,7 +96,7 @@
     <footer class="bg-white border-t mt-auto">
         <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
             <p class="text-center text-gray-500 text-sm">
-                Base48 Hackerspace &copy; 2010-2026
+                Base48 Hackerspace &copy; 2010-2026{{if not .DevMode}} · Build {{.BuildDate}}{{end}}
             </p>
         </div>
     </footer>

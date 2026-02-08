@@ -28,10 +28,11 @@ type Handler struct {
 	emailClient    *email.Client
 	qrpayService   *qrpay.Service
 	webRoot        string
+	buildDate      string
 }
 
 // New creates a new Handler instance
-func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config) (*Handler, error) {
+func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config, buildDate string) (*Handler, error) {
 	queries := db.New(database)
 
 	// Initialize service account if credentials are provided
@@ -71,6 +72,7 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 		emailClient:    emailClient,
 		qrpayService:   qrService,
 		webRoot:        cfg.WebRoot,
+		buildDate:      buildDate,
 	}, nil
 }
 
@@ -360,9 +362,11 @@ func (h *Handler) QRPaymentHandler(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	// Add BaseURL to template data for OG tags
+	// Add global template data
 	if dataMap, ok := data.(map[string]interface{}); ok {
 		dataMap["BaseURL"] = h.config.BaseURL
+		dataMap["BuildDate"] = h.buildDate
+		dataMap["DevMode"] = h.buildDate == "dev"
 	}
 
 	// Parse templates fresh each time to avoid name conflicts
