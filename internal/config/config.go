@@ -32,12 +32,14 @@ type Config struct {
 	SessionSecret string
 
 	// SMTP Email
-	SMTPHost    string
-	SMTPPort    int
+	SMTPHost     string
+	SMTPPort     int
 	SMTPUsername string
 	SMTPPassword string
-	SMTPFrom    string
-	SMTPSkipTLS bool // Skip STARTTLS (for local relays like Postfix without TLS)
+	SMTPFrom     string
+	SMTPFromName string // Display name for From header (e.g. "Base48 Hackerspace")
+	SMTPReplyTo  string // Reply-To address
+	SMTPSkipTLS  bool   // Skip STARTTLS (for local relays like Postfix without TLS)
 
 	// Email system
 	EmailEnabled  bool   // Global email toggle
@@ -67,6 +69,8 @@ func Load() (*Config, error) {
 		SMTPUsername:                       getEnv("SMTP_USERNAME", ""),
 		SMTPPassword:                       getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:                           getEnv("SMTP_FROM", ""),
+		SMTPFromName:                       getEnv("SMTP_FROM_NAME", "Base48 Hackerspace"),
+		SMTPReplyTo:                        getEnv("SMTP_REPLY_TO", "rada@lists.base48.cz"),
 		SMTPSkipTLS:                        getEnvBool("SMTP_SKIP_TLS", false),
 		EmailEnabled:                       getEnvBool("EMAIL_ENABLED", false),
 		BankAccountCZ:                      getEnv("BANK_ACCOUNT_CZ", "2800691518/2010"),

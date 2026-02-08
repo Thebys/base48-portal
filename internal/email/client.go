@@ -80,6 +80,7 @@ var defaultContentBlocks = map[string]map[string]string{
 	"registration": {
 		"subject":         "Tvůj účet v Base48 je připraven",
 		"heading":         "Tvůj účet je připraven",
+		"preheader":       "Tvůj účet na portálu Base48 je připraven.",
 		"intro_text":      "Tvůj účet na členském portálu Base48 je vytvořen.",
 		"next_steps_text": "Co bude dál: tvé členství bude schváleno na nejbližším setkání komunity. Jakmile budeš přijat/a, pošleme ti uvítací e-mail s dalšími informacemi — obvykle to trvá týden nebo dva.",
 		"wiki_text":       "Mezitím se můžeš podívat na naši wiki:\n→ https://wiki.base48.cz",
@@ -89,6 +90,7 @@ var defaultContentBlocks = map[string]map[string]string{
 	"welcome": {
 		"subject":         "Vítej v Base48 — jsi členem!",
 		"heading":         "Vítej v Base48 — jsi členem! 🎉",
+		"preheader":       "Jsi členem Base48! Vítej na palubě.",
 		"intro_text":      "Tvé členství v Base48 je aktivní. Vítej na palubě.",
 		"resources_text":  "1. PŘIPOJ SE KE KONVERZACI\n   Matrix: https://matrix.to/#/#base48:matrix.org\n\n2. PŘEČTI SI PRAVIDLA\n   → https://wiki.base48.cz/wiki/Rules\n\n3. PROZKOUMEJ WIKI\n   Návody k nástrojům, dokumentace projektů a vše ostatní:\n   → https://wiki.base48.cz",
 		"membership_text": "Tvé členství je aktivní. Přihlas se do portálu, zkontroluj svůj variabilní symbol a nastav si výši příspěvku.",
@@ -98,6 +100,7 @@ var defaultContentBlocks = map[string]map[string]string{
 	"negative_balance": {
 		"subject":     "Záporná bilance členského příspěvku",
 		"heading":     "Záporná bilance členského příspěvku",
+		"preheader":   "Tvá bilance členského příspěvku je záporná.",
 		"intro_text":  "Tvá aktuální bilance členského příspěvku je záporná:",
 		"action_text": "To znamená, že dlužíš Base48 za členské příspěvky. Prosíme tě o úhradu co nejdříve.",
 		"sign_off":    "Base48 hackerspace",
@@ -106,6 +109,7 @@ var defaultContentBlocks = map[string]map[string]string{
 	"debt_warning": {
 		"subject":           "⚠️ Upozornění na dluh za členství",
 		"heading":           "⚠️ Upozornění na dluh za členství",
+		"preheader":         "Tvůj dluh přesáhl dvojnásobek měsíčního příspěvku.",
 		"warning_text":      "Tvůj dluh za členské příspěvky přesáhl dvojnásobek měsíčního poplatku.",
 		"consequences_text": "Pokud dluh nebude uhrazen v brzké době, může dojít k pozastavení členství a omezení přístupu do prostoru.",
 		"steps_text":        "1. Uhraď dluh co nejdříve pomocí níže uvedených platebních údajů\n2. Pokud máš finanční problémy, kontaktuj nás - můžeme se domluvit na splátkách nebo snížení příspěvku\n3. Zkontroluj si v portálu, zda všechny tvé platby byly správně přiřazeny",
@@ -115,6 +119,7 @@ var defaultContentBlocks = map[string]map[string]string{
 	"membership_suspended": {
 		"subject":           "Pozastavení členství v Base48",
 		"heading":           "Pozastavení členství v Base48",
+		"preheader":         "Tvé členství v Base48 bylo pozastaveno.",
 		"intro_text":        "Tvé členství v Base48 bylo pozastaveno.",
 		"consequences_text": "Přístup do prostoru Base48 je dočasně omezen. Členské benefity jsou pozastaveny.",
 		"recovery_text":     "Zkontroluj si svou bilanci v portálu. Pokud je důvodem neuhrazený dluh, uhraď prosím částku co nejdříve.",
@@ -128,6 +133,7 @@ var defaultContentBlocksEN = map[string]map[string]string{
 	"registration": {
 		"subject":         "Your Base48 account is ready",
 		"heading":         "Your account is ready",
+		"preheader":       "Your Base48 portal account is ready.",
 		"intro_text":      "Your account on the Base48 member portal is set up.",
 		"next_steps_text": "What happens next: your membership will be reviewed at our next community meeting. We'll email you as soon as you're approved — usually within a week or two.",
 		"wiki_text":       "While you wait, check out our wiki:\n→ https://wiki.base48.cz",
@@ -137,6 +143,7 @@ var defaultContentBlocksEN = map[string]map[string]string{
 	"welcome": {
 		"subject":         "Welcome to Base48 — you're a member!",
 		"heading":         "Welcome to Base48 — you're a member! 🎉",
+		"preheader":       "You're a Base48 member! Welcome aboard.",
 		"intro_text":      "Your Base48 membership is now active. Welcome aboard.",
 		"resources_text":  "1. JOIN THE CONVERSATION\n   Matrix: https://matrix.to/#/#base48:matrix.org\n\n2. KNOW THE RULES\n   → https://wiki.base48.cz/wiki/Rules\n\n3. EXPLORE THE WIKI\n   Tool guides, project docs, and everything else:\n   → https://wiki.base48.cz",
 		"membership_text": "Your membership is active. Log in to the portal, check your variable symbol, and set your fee amount.",
@@ -146,6 +153,7 @@ var defaultContentBlocksEN = map[string]map[string]string{
 	"negative_balance": {
 		"subject":     "Negative membership fee balance",
 		"heading":     "Negative membership fee balance",
+		"preheader":   "Your membership fee balance is negative.",
 		"intro_text":  "Your current membership fee balance is negative:",
 		"action_text": "This means you owe Base48 for membership fees. Please make a payment as soon as possible.",
 		"sign_off":    "Base48 hackerspace",
@@ -154,6 +162,7 @@ var defaultContentBlocksEN = map[string]map[string]string{
 	"debt_warning": {
 		"subject":           "⚠️ Membership debt warning",
 		"heading":           "⚠️ Membership debt warning",
+		"preheader":         "Your debt has exceeded twice your monthly fee.",
 		"warning_text":      "Your membership fee debt has exceeded twice your monthly fee.",
 		"consequences_text": "If the debt is not settled soon, your membership may be suspended and access to the space restricted.",
 		"steps_text":        "1. Pay the debt as soon as possible using the payment details below\n2. If you have financial difficulties, contact us — we can arrange installments or a fee reduction\n3. Check the portal to make sure all your payments have been correctly assigned",
@@ -163,6 +172,7 @@ var defaultContentBlocksEN = map[string]map[string]string{
 	"membership_suspended": {
 		"subject":           "Base48 membership suspended",
 		"heading":           "Base48 membership suspended",
+		"preheader":         "Your Base48 membership has been suspended.",
 		"intro_text":        "Your Base48 membership has been suspended.",
 		"consequences_text": "Access to the Base48 space is temporarily restricted. Membership benefits are suspended.",
 		"recovery_text":     "Check your balance in the portal. If the reason is unpaid debt, please pay the amount as soon as possible.",
@@ -473,13 +483,20 @@ func (c *Client) RenderPreview(params SendParams) (string, error) {
 
 // formatMessage creates RFC 2822 compliant email message
 func (c *Client) formatMessage(to, subject, body string) string {
-	return fmt.Sprintf(
-		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
-		c.config.SMTPFrom,
-		to,
-		subject,
-		body,
+	from := c.config.SMTPFrom
+	if c.config.SMTPFromName != "" {
+		from = fmt.Sprintf("%s <%s>", c.config.SMTPFromName, c.config.SMTPFrom)
+	}
+
+	headers := fmt.Sprintf(
+		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8",
+		from, to, subject,
 	)
+	if c.config.SMTPReplyTo != "" {
+		headers += fmt.Sprintf("\r\nReply-To: %s", c.config.SMTPReplyTo)
+	}
+
+	return headers + "\r\n\r\n" + body
 }
 
 // logEmail logs the email attempt to database

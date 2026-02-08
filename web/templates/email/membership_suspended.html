@@ -36,15 +36,7 @@
             margin: 20px 0;
             font-style: italic;
         }
-        .button {
-            display: inline-block;
-            background: #2563eb;
-            color: white;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 6px;
-            margin: 20px 0;
-        }
+        /* .button styles moved inline for Gmail compatibility */
         .footer {
             margin-top: 30px;
             padding-top: 20px;
@@ -55,6 +47,7 @@
     </style>
 </head>
 <body>
+    {{with index .Content "preheader"}}<div style="display:none;font-size:1px;color:#f5f5f5;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">{{.}}</div>{{end}}
     <div class="container">
         <h1>{{index .Content "heading"}}</h1>
 
@@ -73,7 +66,7 @@
 
         <p style="white-space: pre-line">{{index .Content "recovery_text"}}</p>
 
-        <a href="{{.PortalURL}}/profile" class="button">{{index .Labels "button_my_profile"}}</a>
+        <a href="{{.PortalURL}}/profile" style="display:inline-block;background:#2563eb;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:6px;margin:20px 0;font-weight:bold;">{{index .Labels "button_my_profile"}}</a>
 
         <div class="footer">
             <p>{{index .Content "footer"}}</p>
