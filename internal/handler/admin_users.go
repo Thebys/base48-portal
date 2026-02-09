@@ -217,11 +217,10 @@ func sortUserList(userList []AdminUserListItem, sortBy string) {
 }
 
 // AdminUsersAPIHandler returns JSON list of users with Keycloak info
-// GET /api/admin/users
+// GET /api/admin/users?search=query
 func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
-	_ = r // auth enforced by RequireAdmin middleware
-
 	ctx := r.Context()
+	searchQuery := strings.ToLower(r.URL.Query().Get("search"))
 
 	// Get all users from database
 	dbUsers, err := h.queries.ListUsers(ctx)
@@ -230,74 +229,50 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get service account token for Keycloak API
-	accessToken, err := h.getServiceAccountToken(ctx)
-	if err != nil {
-		h.jsonError(w, fmt.Sprintf("Service account error: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	kcClient := keycloak.NewClient(h.config, accessToken)
-
-	// Fetch all Keycloak users
-	keycloakUsers, err := h.fetchAllKeycloakUsers(ctx, accessToken)
-	if err != nil {
-		h.jsonError(w, fmt.Sprintf("Keycloak error: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Batch-fetch all user balances in one query (avoids N+1)
-	balanceMap, err := h.getUserBalanceMap(ctx)
-	if err != nil {
-		h.jsonError(w, fmt.Sprintf("Balance error: %v", err), http.StatusInternalServerError)
-		return
-	}
-
 	// Build response
 	type UserResponse struct {
 		ID               int64    `json:"id"`
 		Email            string   `json:"email"`
+		Username         string   `json:"username"`
 		Realname         string   `json:"realname"`
 		State            string   `json:"state"`
 		Balance          int64    `json:"balance"`
+		PaymentsID       string   `json:"payments_id"`
 		KeycloakID       string   `json:"keycloak_id"`
 		KeycloakLinked   bool     `json:"keycloak_linked"`
 		KeycloakUsername string   `json:"keycloak_username"`
 		Roles            []string `json:"roles"`
 	}
 
-	response := make([]UserResponse, 0, len(dbUsers))
+	response := make([]UserResponse, 0)
 
 	for _, dbUser := range dbUsers {
+		// Apply search filter
+		if searchQuery != "" {
+			emailMatch := strings.Contains(strings.ToLower(dbUser.Email), searchQuery)
+			nameMatch := dbUser.Realname.Valid && strings.Contains(strings.ToLower(dbUser.Realname.String), searchQuery)
+			usernameMatch := dbUser.Username.Valid && strings.Contains(strings.ToLower(dbUser.Username.String), searchQuery)
+			paymentsIDMatch := dbUser.PaymentsID.Valid && strings.Contains(strings.ToLower(dbUser.PaymentsID.String), searchQuery)
+			if !emailMatch && !nameMatch && !usernameMatch && !paymentsIDMatch {
+				continue
+			}
+		}
+
 		userResp := UserResponse{
 			ID:       dbUser.ID,
 			Email:    dbUser.Email,
+			Username: dbUser.Username.String,
 			Realname: dbUser.Realname.String,
 			State:    dbUser.State,
-			Balance:  balanceMap[dbUser.ID],
+		}
+
+		if dbUser.PaymentsID.Valid {
+			userResp.PaymentsID = dbUser.PaymentsID.String
 		}
 
 		// Keycloak info
 		if dbUser.KeycloakID.Valid && dbUser.KeycloakID.String != "" {
 			userResp.KeycloakID = dbUser.KeycloakID.String
-
-			if kcUser, found := keycloakUsers[dbUser.KeycloakID.String]; found {
-				userResp.KeycloakLinked = true
-				userResp.KeycloakUsername = kcUser.Username
-
-				// Get roles
-				if roles, err := kcClient.GetUserRoles(ctx, dbUser.KeycloakID.String); err == nil {
-					roleNames := make([]string, 0)
-					for _, role := range roles {
-						if !strings.HasPrefix(role.Name, "default-") &&
-							!strings.HasPrefix(role.Name, "uma_") &&
-							role.Name != "offline_access" {
-							roleNames = append(roleNames, role.Name)
-						}
-					}
-					userResp.Roles = roleNames
-				}
-			}
 		}
 
 		response = append(response, userResp)

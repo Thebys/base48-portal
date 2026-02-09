@@ -221,6 +221,12 @@
         .user-item:hover {
             background: #f3f4f6 !important;
         }
+
+        .user-item.selected {
+            background: #dbeafe !important;
+            border-left: 3px solid #2563eb !important;
+            font-weight: 500;
+        }
     </style>
     <div class="container">
         <div style="margin-bottom: 20px;">
@@ -685,15 +691,13 @@
 
             // Highlight selected user
             document.querySelectorAll('.user-item').forEach(item => {
-                item.style.background = 'transparent';
-                item.style.borderLeft = 'none';
+                item.classList.remove('selected');
             });
 
             // Find and highlight the clicked element
             const userItem = element ? element.closest('.user-item') : null;
             if (userItem) {
-                userItem.style.background = '#eff6ff';
-                userItem.style.borderLeft = '3px solid #2196F3';
+                userItem.classList.add('selected');
             }
 
             // Show selected user info
