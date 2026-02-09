@@ -398,21 +398,27 @@ func (h *Handler) handleLevelUpgrade(w http.ResponseWriter, r *http.Request, dbU
 }
 
 // QRPaymentHandler serves a QR payment code as PNG image.
-// GET /api/qr?vs=123&amount=1000
-// Public endpoint — the QR encodes only bank IBAN + VS + amount (same info as in the email text).
+// GET /api/qr?vs=123&amount=1000&msg=PRISPEVEK
+// Public endpoint — the QR encodes only bank IBAN + VS + optional amount.
+// amount is optional — when omitted, the QR code has no pre-filled amount.
 func (h *Handler) QRPaymentHandler(w http.ResponseWriter, r *http.Request) {
 	vs := r.URL.Query().Get("vs")
 	amountStr := r.URL.Query().Get("amount")
+	msg := r.URL.Query().Get("msg")
 
-	if vs == "" || amountStr == "" {
-		http.Error(w, "vs and amount parameters required", http.StatusBadRequest)
+	if vs == "" {
+		http.Error(w, "vs parameter required", http.StatusBadRequest)
 		return
 	}
 
-	amount, err := strconv.ParseFloat(amountStr, 64)
-	if err != nil || amount <= 0 {
-		http.Error(w, "invalid amount", http.StatusBadRequest)
-		return
+	var amount float64
+	if amountStr != "" {
+		var err error
+		amount, err = strconv.ParseFloat(amountStr, 64)
+		if err != nil || amount < 0 {
+			http.Error(w, "invalid amount", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if h.qrpayService == nil || !h.qrpayService.IsConfigured() {
@@ -420,10 +426,14 @@ func (h *Handler) QRPaymentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if msg == "" {
+		msg = "CLENSKY PRISPEVEK BASE48"
+	}
+
 	png, err := h.qrpayService.GeneratePaymentPNG(qrpay.GenerateParams{
 		Amount:         amount,
 		VariableSymbol: vs,
-		Message:        "CLENSKY PRISPEVEK BASE48",
+		Message:        msg,
 		Size:           250,
 	})
 	if err != nil {
