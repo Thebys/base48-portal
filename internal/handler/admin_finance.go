@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"database/sql"
 	"fmt"
 	"net/http"
 	"sort"
@@ -77,6 +76,13 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		previewDebtWarning int
 	)
 
+	// Batch-fetch all user balances in one query (avoids N+1)
+	balanceMap, err := h.getUserBalanceMap(ctx)
+	if err != nil {
+		http.Error(w, "Failed to load balances", http.StatusInternalServerError)
+		return
+	}
+
 	for _, user := range users {
 		feeAmount := user.LevelActualAmount
 		if feeAmount == "0" || feeAmount == "" {
@@ -86,13 +92,7 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		var feeFloat float64
 		fmt.Sscanf(feeAmount, "%f", &feeFloat)
 
-		balance, err := h.queries.GetUserBalance(ctx, db.GetUserBalanceParams{
-			UserID:   sql.NullInt64{Int64: user.ID, Valid: true},
-			UserID_2: user.ID,
-		})
-		if err != nil {
-			continue
-		}
+		balance := balanceMap[user.ID]
 
 		balanceAfterFee := balance - int64(feeFloat)
 		balanceAfterFloat := float64(balanceAfterFee)

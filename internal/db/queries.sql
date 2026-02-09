@@ -203,6 +203,20 @@ SELECT CAST(ROUND(
     COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = ?), 0)
 ) AS INTEGER) as balance;
 
+-- name: ListUserBalances :many
+-- Batch-compute membership fee balance for all users (avoids N+1 per-user queries)
+-- Uses same formula as GetUserBalance: payments matching user's VS minus fees
+SELECT u.id as user_id, CAST(ROUND(
+    COALESCE((
+        SELECT SUM(CAST(p.amount AS REAL))
+        FROM payments p
+        WHERE p.user_id = u.id
+        AND p.identification = u.payments_id
+    ), 0) -
+    COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = u.id), 0)
+) AS INTEGER) as balance
+FROM users u;
+
 -- name: CreateLog :one
 INSERT INTO system_logs (subsystem, level, user_id, message, metadata)
 VALUES (?, ?, ?, ?, ?)

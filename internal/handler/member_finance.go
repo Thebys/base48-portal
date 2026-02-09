@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"sort"
@@ -51,6 +50,12 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 
 	totalMembers = len(users)
 
+	// Batch-fetch all user balances in one query (avoids N+1)
+	balanceMap, err := h.getUserBalanceMap(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load balances: %w", err)
+	}
+
 	for _, user := range users {
 		feeAmount := user.LevelActualAmount
 		if feeAmount == "0" || feeAmount == "" {
@@ -61,13 +66,7 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 		fmt.Sscanf(feeAmount, "%f", &feeFloat)
 		totalMonthlyFees += int64(feeFloat)
 
-		balance, err := h.queries.GetUserBalance(ctx, db.GetUserBalanceParams{
-			UserID:   sql.NullInt64{Int64: user.ID, Valid: true},
-			UserID_2: user.ID,
-		})
-		if err != nil {
-			continue
-		}
+		balance := balanceMap[user.ID]
 
 		if balance < 0 {
 			membersInDebt++

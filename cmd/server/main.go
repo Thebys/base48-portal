@@ -163,7 +163,7 @@ func main() {
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 65 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

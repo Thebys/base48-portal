@@ -1691,6 +1691,49 @@ func (q *Queries) ListUnassignedPayments(ctx context.Context) ([]Payment, error)
 	return items, nil
 }
 
+const listUserBalances = `-- name: ListUserBalances :many
+SELECT u.id as user_id, CAST(ROUND(
+    COALESCE((
+        SELECT SUM(CAST(p.amount AS REAL))
+        FROM payments p
+        WHERE p.user_id = u.id
+        AND p.identification = u.payments_id
+    ), 0) -
+    COALESCE((SELECT SUM(CAST(f.amount AS REAL)) FROM fees f WHERE f.user_id = u.id), 0)
+) AS INTEGER) as balance
+FROM users u
+`
+
+type ListUserBalancesRow struct {
+	UserID  int64 `json:"user_id"`
+	Balance int64 `json:"balance"`
+}
+
+// Batch-compute membership fee balance for all users (avoids N+1 per-user queries)
+// Uses same formula as GetUserBalance: payments matching user's VS minus fees
+func (q *Queries) ListUserBalances(ctx context.Context) ([]ListUserBalancesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUserBalances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserBalancesRow{}
+	for rows.Next() {
+		var i ListUserBalancesRow
+		if err := rows.Scan(&i.UserID, &i.Balance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users ORDER BY realname, email
 `

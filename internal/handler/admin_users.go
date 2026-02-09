@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -77,20 +76,20 @@ func (h *Handler) AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 		keycloakUsers = make(map[string]KeycloakUserInfo)
 	}
 
+	// Batch-fetch all user balances in one query (avoids N+1)
+	balanceMap, err := h.getUserBalanceMap(ctx)
+	if err != nil {
+		fmt.Printf("[AdminUsers] Warning: Failed to batch-fetch balances: %v\n", err)
+		balanceMap = make(map[int64]int64)
+	}
+
 	// Build combined user list with filtering
 	userList := make([]AdminUserListItem, 0, len(dbUsers))
 
 	for _, dbUser := range dbUsers {
 		item := AdminUserListItem{
-			DBUser: dbUser,
-		}
-
-		// Get balance
-		if balance, err := h.queries.GetUserBalance(ctx, db.GetUserBalanceParams{
-			UserID:   sql.NullInt64{Int64: dbUser.ID, Valid: true},
-			UserID_2: dbUser.ID,
-		}); err == nil {
-			item.Balance = balance
+			DBUser:  dbUser,
+			Balance: balanceMap[dbUser.ID],
 		}
 
 		// Match with Keycloak user
@@ -247,6 +246,13 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Batch-fetch all user balances in one query (avoids N+1)
+	balanceMap, err := h.getUserBalanceMap(ctx)
+	if err != nil {
+		h.jsonError(w, fmt.Sprintf("Balance error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	// Build response
 	type UserResponse struct {
 		ID               int64    `json:"id"`
@@ -268,14 +274,7 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 			Email:    dbUser.Email,
 			Realname: dbUser.Realname.String,
 			State:    dbUser.State,
-		}
-
-		// Get balance
-		if balance, err := h.queries.GetUserBalance(ctx, db.GetUserBalanceParams{
-			UserID:   sql.NullInt64{Int64: dbUser.ID, Valid: true},
-			UserID_2: dbUser.ID,
-		}); err == nil {
-			userResp.Balance = balance
+			Balance:  balanceMap[dbUser.ID],
 		}
 
 		// Keycloak info
@@ -312,38 +311,51 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// fetchAllKeycloakUsers fetches all users from Keycloak API and returns them as a map
+// fetchAllKeycloakUsers fetches all users from Keycloak API with pagination and returns them as a map.
+// Keycloak defaults to max=100 per page, so we paginate to avoid silently missing users.
 func (h *Handler) fetchAllKeycloakUsers(ctx context.Context, accessToken string) (map[string]KeycloakUserInfo, error) {
-	url := fmt.Sprintf("%s/admin/realms/%s/users", h.config.KeycloakURL, h.config.KeycloakRealm)
+	baseURL := fmt.Sprintf("%s/admin/realms/%s/users", h.config.KeycloakURL, h.config.KeycloakRealm)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
+	const pageSize = 100
+	userMap := make(map[string]KeycloakUserInfo)
 
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
+	for offset := 0; ; offset += pageSize {
+		reqURL := fmt.Sprintf("%s?first=%d&max=%d", baseURL, offset, pageSize)
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+		req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+		if err != nil {
+			return nil, err
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("keycloak API error: %s - %s", resp.Status, string(body))
-	}
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Content-Type", "application/json")
 
-	var users []KeycloakUserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
-		return nil, err
-	}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
 
-	// Convert to map for fast lookups
-	userMap := make(map[string]KeycloakUserInfo, len(users))
-	for _, user := range users {
-		userMap[user.ID] = user
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("keycloak API error: %s - %s", resp.Status, string(body))
+		}
+
+		var page []KeycloakUserInfo
+		err = json.NewDecoder(resp.Body).Decode(&page)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, user := range page {
+			userMap[user.ID] = user
+		}
+
+		// Last page: fewer results than page size means we've fetched all users
+		if len(page) < pageSize {
+			break
+		}
 	}
 
 	return userMap, nil

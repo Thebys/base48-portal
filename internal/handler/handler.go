@@ -78,6 +78,20 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 	}, nil
 }
 
+// getUserBalanceMap batch-fetches balances for all users in a single query.
+// Returns a map from user ID to balance (avoids N+1 per-user GetUserBalance calls).
+func (h *Handler) getUserBalanceMap(ctx context.Context) (map[int64]int64, error) {
+	rows, err := h.queries.ListUserBalances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	balanceMap := make(map[int64]int64, len(rows))
+	for _, row := range rows {
+		balanceMap[row.UserID] = row.Balance
+	}
+	return balanceMap, nil
+}
+
 // getServiceAccountToken is a helper to get service account token with error handling
 func (h *Handler) getServiceAccountToken(ctx context.Context) (string, error) {
 	if h.serviceAccount == nil {
