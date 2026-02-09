@@ -337,6 +337,21 @@ func (c *Client) SendTemplated(ctx context.Context, params SendParams) error {
 	return c.logEmail(ctx, params, err)
 }
 
+// checkSMTP does a quick TCP connectivity check to the SMTP server.
+// Returns nil if reachable, error otherwise.
+func (c *Client) checkSMTP() error {
+	if c.config.SMTPHost == "" {
+		return fmt.Errorf("SMTP not configured")
+	}
+	addr := fmt.Sprintf("%s:%d", c.config.SMTPHost, c.config.SMTPPort)
+	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("SMTP unreachable (%s): %w", addr, err)
+	}
+	conn.Close()
+	return nil
+}
+
 // RetryEmail retries a failed outbox entry.
 func (c *Client) RetryEmail(ctx context.Context, outboxID int64) error {
 	entry, err := c.queries.GetEmailOutbox(ctx, outboxID)
@@ -345,6 +360,11 @@ func (c *Client) RetryEmail(ctx context.Context, outboxID int64) error {
 	}
 	if entry.Status != "failed" {
 		return fmt.Errorf("can only retry failed emails, current status: %s", entry.Status)
+	}
+
+	// Quick SMTP check before attempting delivery
+	if err := c.checkSMTP(); err != nil {
+		return fmt.Errorf("nelze odeslat: %w", err)
 	}
 
 	// Reset to pending for retry
@@ -364,8 +384,7 @@ func (c *Client) RetryEmail(ctx context.Context, outboxID int64) error {
 		TemplateName: entry.TemplateName,
 	}
 
-	c.attemptDelivery(ctx, entry, params)
-	return nil
+	return c.attemptDelivery(ctx, entry, params)
 }
 
 // SendNow forces immediate delivery of a pending scheduled email.
@@ -376,6 +395,11 @@ func (c *Client) SendNow(ctx context.Context, outboxID int64) error {
 	}
 	if entry.Status != "pending" {
 		return fmt.Errorf("can only send pending emails, current status: %s", entry.Status)
+	}
+
+	// Quick SMTP check before attempting delivery
+	if err := c.checkSMTP(); err != nil {
+		return fmt.Errorf("nelze odeslat: %w", err)
 	}
 
 	// Clear schedule and reset attempts
@@ -395,8 +419,7 @@ func (c *Client) SendNow(ctx context.Context, outboxID int64) error {
 		TemplateName: entry.TemplateName,
 	}
 
-	c.attemptDelivery(ctx, entry, params)
-	return nil
+	return c.attemptDelivery(ctx, entry, params)
 }
 
 // ProcessPendingEmails sends scheduled emails whose delivery time has arrived.
@@ -432,40 +455,49 @@ func (c *Client) ProcessPendingEmails(ctx context.Context) int {
 
 // attemptDelivery tries to send an email with exponential backoff retry.
 // Backoff schedule: attempt 1 = immediate, attempt 2 = 1s, attempt 3 = 5s
-func (c *Client) attemptDelivery(ctx context.Context, entry db.EmailOutbox, params SendParams) {
+// Returns nil on success, error if all attempts fail.
+// Uses context.Background() for DB updates so they survive HTTP context cancellation.
+func (c *Client) attemptDelivery(ctx context.Context, entry db.EmailOutbox, params SendParams) error {
 	backoffDurations := []time.Duration{0, 1 * time.Second, 5 * time.Second}
 
+	// Use a background context for DB updates — the HTTP request context may be
+	// cancelled before delivery finishes, but we must always record the outcome.
+	dbCtx := context.Background()
+
+	var lastErr error
 	for attempt := 0; attempt < int(entry.MaxAttempts); attempt++ {
 		if attempt > 0 && attempt < len(backoffDurations) {
 			time.Sleep(backoffDurations[attempt])
 		}
 
-		err := c.sendSMTP(entry.Recipient, entry.Subject, entry.RenderedHtml.String)
+		lastErr = c.sendSMTP(entry.Recipient, entry.Subject, entry.RenderedHtml.String)
 
-		if err == nil {
+		if lastErr == nil {
 			// Success
 			now := time.Now()
-			c.queries.UpdateEmailOutboxStatus(ctx, db.UpdateEmailOutboxStatusParams{
+			c.queries.UpdateEmailOutboxStatus(dbCtx, db.UpdateEmailOutboxStatusParams{
 				Status:   "sent",
 				Attempts: int64(attempt + 1),
 				SentAt:   sql.NullTime{Time: now, Valid: true},
 				ID:       entry.ID,
 			})
-			c.logEmail(ctx, params, nil)
-			return
+			c.logEmail(dbCtx, params, nil)
+			return nil
 		}
 
-		log.Printf("[Email] Attempt %d/%d failed for %s: %v", attempt+1, entry.MaxAttempts, entry.Recipient, err)
+		log.Printf("[Email] Attempt %d/%d failed for %s: %v", attempt+1, entry.MaxAttempts, entry.Recipient, lastErr)
 	}
 
 	// All attempts exhausted
-	c.queries.UpdateEmailOutboxStatus(ctx, db.UpdateEmailOutboxStatusParams{
+	c.queries.UpdateEmailOutboxStatus(dbCtx, db.UpdateEmailOutboxStatusParams{
 		Status:    "failed",
 		Attempts:  entry.MaxAttempts,
-		LastError: sql.NullString{String: "max attempts exhausted", Valid: true},
+		LastError: sql.NullString{String: lastErr.Error(), Valid: true},
 		ID:        entry.ID,
 	})
-	c.logEmail(ctx, params, fmt.Errorf("failed after %d attempts", entry.MaxAttempts))
+	deliveryErr := fmt.Errorf("failed after %d attempts: %w", entry.MaxAttempts, lastErr)
+	c.logEmail(dbCtx, params, deliveryErr)
+	return deliveryErr
 }
 
 // sendSMTP sends a pre-rendered email via SMTP.

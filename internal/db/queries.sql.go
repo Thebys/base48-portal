@@ -1367,7 +1367,7 @@ SELECT substr(period_start, 1, 7) as period,
     COUNT(*) as fee_count,
     CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as fee_total
 FROM fees
-WHERE period_start >= date('now', '-13 months')
+WHERE period_start >= date('now', 'start of month', '-13 months')
 GROUP BY 1
 `
 
@@ -1408,7 +1408,7 @@ SELECT substr(date, 1, 7) as period,
 FROM payments
 WHERE CAST(amount AS REAL) >= 5
     AND user_id IS NOT NULL
-    AND date >= date('now', '-13 months')
+    AND date >= date('now', 'start of month', '-13 months')
 GROUP BY 1
 `
 

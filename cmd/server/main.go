@@ -96,11 +96,20 @@ func main() {
 		r.Get("/logout", authenticator.LogoutHandler)
 	})
 
-	// Protected routes
+	// Protected routes (all authenticated members)
 	r.Group(func(r chi.Router) {
 		r.Use(authenticator.RequireAuth)
 		r.Get("/profile", h.ProfileHandler)
 		r.Post("/profile", h.ProfileHandler)
+		r.Get("/finance", h.MemberFinanceHandler)
+		r.Get("/projects", h.MemberProjectsHandler)
+	})
+
+	// Member API routes (read-only, requires auth)
+	r.Route("/api/member", func(r chi.Router) {
+		r.Use(authenticator.RequireAuth)
+		r.Get("/projects", h.MemberProjectsAPIHandler)
+		r.Get("/projects/payments", h.MemberProjectPaymentsHandler)
 	})
 
 	// Admin routes (requires memberportal_admin role)

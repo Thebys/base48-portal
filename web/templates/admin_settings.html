@@ -106,10 +106,10 @@
                                 <td class="px-4 py-2 whitespace-nowrap text-sm">
                                     <div class="flex items-center gap-1">
                                     {{if eq .Status "pending"}}
-                                    <button onclick="sendNowEmail({{.ID}})" class="btn btn-sm btn-primary">Odeslat</button>
+                                    <button onclick="sendNowEmail({{.ID}})" class="btn btn-sm btn-primary" {{if not $.SMTPReachable}}disabled title="SMTP nedostupné"{{end}}>Odeslat</button>
                                     <button onclick="cancelEmail({{.ID}})" class="btn btn-sm btn-danger">Zrušit</button>
                                     {{else if eq .Status "failed"}}
-                                    <button onclick="retryEmail({{.ID}})" class="btn btn-sm btn-primary">Znovu</button>
+                                    <button onclick="retryEmail({{.ID}})" class="btn btn-sm btn-primary" {{if not $.SMTPReachable}}disabled title="SMTP nedostupné"{{end}}>Znovu</button>
                                     {{end}}
                                     </div>
                                 </td>
@@ -430,6 +430,10 @@ function previewTemplate() {
 function retryEmail(id) {
     if (!confirm('Znovu odeslat tento e-mail?')) return;
 
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Odesílám…';
+
     fetch('/api/admin/email/retry', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -441,9 +445,13 @@ function retryEmail(id) {
             location.reload();
         } else {
             alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+            location.reload();
         }
     })
-    .catch(err => alert('Chyba: ' + err.message));
+    .catch(err => {
+        alert('Chyba: ' + err.message);
+        location.reload();
+    });
 }
 
 function cancelEmail(id) {
@@ -468,6 +476,10 @@ function cancelEmail(id) {
 function sendNowEmail(id) {
     if (!confirm('Odeslat tento e-mail ihned?')) return;
 
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Odesílám…';
+
     fetch('/api/admin/email/send-now', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -479,9 +491,13 @@ function sendNowEmail(id) {
             location.reload();
         } else {
             alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+            location.reload();
         }
     })
-    .catch(err => alert('Chyba: ' + err.message));
+    .catch(err => {
+        alert('Chyba: ' + err.message);
+        location.reload();
+    });
 }
 
 function sendTestEmail(type) {
