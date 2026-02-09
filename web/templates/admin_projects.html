@@ -142,13 +142,16 @@
 
     .project-header {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
         align-items: center;
+        gap: 10px;
         width: 100%;
     }
 
     .project-info {
         flex: 1;
+        min-width: 0;
     }
 
     .project-title {
@@ -168,6 +171,7 @@
         font-weight: 700;
         color: #059669;
         margin-right: 20px;
+        white-space: nowrap;
     }
 
     .payments-table {
@@ -230,7 +234,7 @@
 
 <div class="container">
     <div class="header">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
             <div>
                 <h1>🏗️ Správa projektů a fundraising</h1>
                 <p class="subtitle">Projekty se speciálním VS pro sběr příspěvků</p>

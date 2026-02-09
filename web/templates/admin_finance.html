@@ -12,35 +12,35 @@
             <div class="text-xs text-blue-600">Aktivních členů</div>
         </div>
         <div class="bg-green-50 px-4 py-3 rounded-md text-center">
-            <div class="text-2xl font-bold text-green-900">{{.TotalMonthlyFees}} Kč</div>
+            <div class="text-2xl font-bold text-green-900">{{fmtNum .TotalMonthlyFees}} Kč</div>
             <div class="text-xs text-green-600">Měsíční předpis (fees)</div>
         </div>
         <div class="bg-purple-50 px-4 py-3 rounded-md text-center">
-            <div class="text-2xl font-bold text-purple-900">{{.ReceivedThisMonth}} Kč</div>
+            <div class="text-2xl font-bold text-purple-900">{{fmtNum .ReceivedThisMonth}} Kč</div>
             <div class="text-xs text-purple-600">Přijato tento měsíc ({{.ReceivedThisMonthCount}} plateb)</div>
         </div>
         <div class="{{ if .RentPaid }}bg-green-50{{ else }}bg-red-50{{ end }} px-4 py-3 rounded-md text-center">
-            <div class="text-2xl font-bold {{ if .RentPaid }}text-green-900{{ else }}text-red-900{{ end }}">{{.RentAmount}} Kč</div>
+            <div class="text-2xl font-bold {{ if .RentPaid }}text-green-900{{ else }}text-red-900{{ end }}">{{fmtNum .RentAmount}} Kč</div>
             <div class="text-xs {{ if .RentPaid }}text-green-600{{ else }}text-red-600{{ end }}">Nájem {{ if .RentPaid }}zaplacen{{ if .RentDate }} ({{.RentDate}}){{ end }}{{ else }}nezaplacen · zbývá {{.DaysRemaining}} dní{{ end }}</div>
         </div>
         <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
-            <div class="text-2xl font-bold text-blue-900">{{.BankBalance}} Kč</div>
+            <div class="text-2xl font-bold text-blue-900">{{fmtNum .BankBalance}} Kč</div>
             <div class="text-xs text-blue-600">Zůstatek na účtu{{ if .BankBalanceDate }} ({{.BankBalanceDate}}){{ end }}</div>
         </div>
         <div class="{{ if eq .MembersInDebt 0 }}bg-green-50{{ else }}bg-red-50{{ end }} px-4 py-3 rounded-md text-center">
-            <div class="text-2xl font-bold {{ if eq .MembersInDebt 0 }}text-green-900{{ else }}text-red-900{{ end }}">{{.TotalDebt}} Kč</div>
-            <div class="text-xs {{ if eq .MembersInDebt 0 }}text-green-600{{ else }}text-red-600{{ end }}">Dluh členů · {{.MembersInDebt}} členů{{ if gt .DeepDebt 0 }} ({{.DeepDebt}} Kč &gt;1 měs.){{ end }}</div>
+            <div class="text-2xl font-bold {{ if eq .MembersInDebt 0 }}text-green-900{{ else }}text-red-900{{ end }}">{{fmtNum .TotalDebt}} Kč</div>
+            <div class="text-xs {{ if eq .MembersInDebt 0 }}text-green-600{{ else }}text-red-600{{ end }}">Dluh členů · {{.MembersInDebt}} členů{{ if gt .DeepDebt 0 }} ({{fmtNum .DeepDebt}} Kč &gt;1 měs.){{ end }}</div>
         </div>
     </div>
 
     <!-- Fee preview -->
     <details open class="bg-white shadow rounded-lg mb-8">
-        <summary class="px-6 py-4 cursor-pointer flex items-center justify-between">
+        <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">
             <div>
                 <h2 class="text-lg font-semibold text-gray-900 inline">Simulace fee runu — {{.PreviewPeriod}}</h2>
                 <span class="ml-2 text-sm text-gray-500">({{len .FeePreview}} fees, celkem {{.PreviewTotalFees}} Kč)</span>
             </div>
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2">
                 {{ if gt .PreviewDebtWarning 0 }}
                 <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 whitespace-nowrap">{{.PreviewDebtWarning}} debt warning</span>
                 {{ end }}
@@ -145,12 +145,12 @@
 
     <!-- Unmatched payments -->
     <details {{ if gt .UnmatchedCount 0 }}open{{ end }} class="bg-white shadow rounded-lg mb-8">
-        <summary class="px-6 py-4 cursor-pointer flex items-center justify-between">
+        <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">
             <div>
                 <h2 class="text-lg font-semibold text-gray-900 inline">Nespárované platby</h2>
                 <span class="ml-2 text-sm text-gray-500">({{.UnmatchedCount}})</span>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex flex-wrap items-center gap-3">
                 {{ if gt .UnmatchedCount 0 }}
                 <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800 whitespace-nowrap">{{.UnmatchedCount}} k přiřazení</span>
                 {{ end }}

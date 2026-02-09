@@ -2,13 +2,8 @@
 
 {{define "content"}}
 <div class="px-4 py-6 sm:px-0">
-    <div class="flex justify-between items-center mb-6">
+    <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Můj profil</h1>
-        {{if .User.IsAdmin}}
-        <a href="/admin/users" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-            Admin: Manage Users
-        </a>
-        {{end}}
     </div>
 
     {{if .Success}}
@@ -101,7 +96,7 @@
             <div class="bg-blue-50 px-4 py-3 rounded-md">
                 <dt class="text-sm font-medium text-blue-700">Zaplaceno celkem</dt>
                 <dd class="mt-1 text-lg font-bold text-blue-900">
-                    {{.TotalPaid}} Kč
+                    {{fmtNum .TotalPaid}} Kč
                 </dd>
                 <dd class="text-xs text-blue-600">
                     {{len .Payments}} plateb
@@ -111,7 +106,7 @@
             <div class="px-4 py-3 rounded-md {{if ge .Balance 0.0}}bg-green-50{{else}}bg-red-50{{end}}">
                 <dt class="text-sm font-medium {{if ge .Balance 0.0}}text-green-700{{else}}text-red-700{{end}}">Bilance členství</dt>
                 <dd class="mt-1 text-lg font-bold {{if ge .Balance 0.0}}text-green-900{{else}}text-red-900{{end}}">
-                    {{printf "%.0f" .Balance}} Kč
+                    {{fmtNum .Balance}} Kč
                 </dd>
                 <dd class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">
                     {{if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}

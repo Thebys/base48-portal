@@ -13,12 +13,12 @@
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group" open>
             <summary class="cursor-pointer list-none">
-                <div class="flex justify-between items-center p-6 hover:bg-gray-50 transition-colors">
+                <div class="flex flex-wrap justify-between items-center gap-2 p-6 hover:bg-gray-50 transition-colors">
                     <div>
                         <h2 class="text-lg font-medium text-gray-900">Odeslané e-maily</h2>
                         <p class="mt-1 text-sm text-gray-500">Přehled odeslaných a čekajících e-mailů</p>
                     </div>
-                    <div class="flex items-center gap-3">
+                    <div class="flex flex-wrap items-center gap-2">
                         {{if .EmailEnabled}}
                         <span class="badge badge-success">Email zapnut</span>
                         {{else}}
@@ -51,14 +51,14 @@
                 {{end}}
 
                 <!-- Summary counts -->
-                <div class="grid grid-cols-5 gap-4 mb-4">
-                    <div class="bg-green-50 px-4 py-3 rounded-md text-center">
-                        <div class="text-lg font-bold text-green-900">{{.SentToday}}</div>
-                        <div class="text-xs text-green-600">Odesláno dnes</div>
-                    </div>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
                     <div class="bg-yellow-50 px-4 py-3 rounded-md text-center">
                         <div class="text-lg font-bold text-yellow-900">{{index .OutboxCounts "pending"}}</div>
                         <div class="text-xs text-yellow-600">Čekající</div>
+                    </div>
+                    <div class="bg-green-50 px-4 py-3 rounded-md text-center">
+                        <div class="text-lg font-bold text-green-900">{{.SentToday}}</div>
+                        <div class="text-xs text-green-600">Odesláno dnes</div>
                     </div>
                     <div class="bg-red-50 px-4 py-3 rounded-md text-center">
                         <div class="text-lg font-bold text-red-900">{{index .OutboxCounts "failed"}}</div>

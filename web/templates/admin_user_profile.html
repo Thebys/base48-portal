@@ -107,7 +107,7 @@
             <div class="bg-blue-50 px-4 py-3 rounded-md">
                 <dt class="text-sm font-medium text-blue-700">Zaplaceno celkem</dt>
                 <dd class="mt-1 text-lg font-bold text-blue-900">
-                    {{.TotalPaid}} Kč
+                    {{fmtNum .TotalPaid}} Kč
                 </dd>
                 <dd class="text-xs text-blue-600">
                     {{len .Payments}} plateb
@@ -117,7 +117,7 @@
             <div class="px-4 py-3 rounded-md {{if ge .Balance 0.0}}bg-green-50{{else}}bg-red-50{{end}}">
                 <dt class="text-sm font-medium {{if ge .Balance 0.0}}text-green-700{{else}}text-red-700{{end}}">Bilance členství</dt>
                 <dd class="mt-1 text-lg font-bold {{if ge .Balance 0.0}}text-green-900{{else}}text-red-900{{end}}">
-                    {{printf "%.0f" .Balance}} Kč
+                    {{fmtNum .Balance}} Kč
                 </dd>
                 <dd class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">
                     {{if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}

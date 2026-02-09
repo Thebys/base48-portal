@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/base48/member-portal/internal/auth"
@@ -435,6 +436,41 @@ func (h *Handler) QRPaymentHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(png)
 }
 
+// formatNumber formats an integer with non-breaking space as thousands separator (e.g. 50186 → "50\u00a0186").
+func formatNumber(v interface{}) string {
+	var n int64
+	switch val := v.(type) {
+	case int:
+		n = int64(val)
+	case int64:
+		n = val
+	case float64:
+		n = int64(val)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+
+	negative := n < 0
+	if negative {
+		n = -n
+	}
+
+	s := strconv.FormatInt(n, 10)
+	// Insert non-breaking spaces from the right
+	var result strings.Builder
+	for i, c := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			result.WriteRune('\u00a0')
+		}
+		result.WriteRune(c)
+	}
+
+	if negative {
+		return "-" + result.String()
+	}
+	return result.String()
+}
+
 // render is a helper to render templates
 func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -447,7 +483,10 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 	}
 
 	// Parse templates fresh each time to avoid name conflicts
-	tmpl, err := template.ParseFiles(
+	funcMap := template.FuncMap{
+		"fmtNum": formatNumber,
+	}
+	tmpl, err := template.New("").Funcs(funcMap).ParseFiles(
 		filepath.Join(h.webRoot, "templates", "layout.html"),
 		filepath.Join(h.webRoot, "templates", name),
 	)
