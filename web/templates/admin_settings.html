@@ -9,6 +9,53 @@
         </div>
     </div>
 
+    <!-- Emergency Banner Section -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group" open>
+            <summary class="cursor-pointer list-none">
+                <div class="flex flex-wrap justify-between items-center gap-2 p-6 hover:bg-gray-50 transition-colors">
+                    <div>
+                        <h2 class="text-lg font-medium text-gray-900">Emergency banner</h2>
+                        <p class="mt-1 text-sm text-gray-500">Zobrazí upozornění pod navigací na všech stránkách</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{if .CurrentBannerEnabled}}
+                        <span class="badge badge-danger">Aktivní</span>
+                        {{else}}
+                        <span class="badge badge-gray">Neaktivní</span>
+                        {{end}}
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                <div class="space-y-4">
+                    <div>
+                        <label for="banner-text" class="block text-sm font-medium text-gray-700 mb-1">Text zprávy</label>
+                        <input type="text" id="banner-text" maxlength="300"
+                               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                               placeholder="např. Portál bude 1.1. nedostupný z důvodu údržby"
+                               value="{{.CurrentBannerText}}">
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="banner-enabled" class="sr-only peer" {{if .CurrentBannerEnabled}}checked{{end}}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                        </label>
+                        <span class="text-sm text-gray-700">Banner aktivní</span>
+                    </div>
+                    <div id="banner-preview" class="hidden rounded-md overflow-hidden">
+                        <div id="banner-preview-content" class="bg-red-600 text-white text-center text-sm font-semibold py-2 px-4"></div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="saveBanner()" class="btn btn-sm btn-primary">Uložit</button>
+                        <span id="banner-status" class="text-sm hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </details>
+    </div>
+
     <!-- Email Outbox Section (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group" open>
@@ -566,6 +613,51 @@ function showTemplateStatus(type, message) {
     const c = colors[type] || colors.success;
     statusDiv.innerHTML = `<div class="rounded-md ${c.bg} p-3"><p class="text-sm font-medium ${c.text}">${message}</p></div>`;
     if (type === 'success') setTimeout(() => statusDiv.classList.add('hidden'), 3000);
+}
+
+// Banner management
+function updateBannerPreview() {
+    const text = document.getElementById('banner-text').value.trim();
+    const preview = document.getElementById('banner-preview');
+    const content = document.getElementById('banner-preview-content');
+    if (text) {
+        content.textContent = text;
+        preview.classList.remove('hidden');
+    } else {
+        preview.classList.add('hidden');
+    }
+}
+
+document.getElementById('banner-text')?.addEventListener('input', updateBannerPreview);
+updateBannerPreview();
+
+function saveBanner() {
+    const text = document.getElementById('banner-text').value.trim();
+    const enabled = document.getElementById('banner-enabled').checked;
+    const statusEl = document.getElementById('banner-status');
+
+    fetch('/api/admin/banner', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: text, enabled: enabled})
+    })
+    .then(r => r.json())
+    .then(data => {
+        statusEl.classList.remove('hidden');
+        if (data.success) {
+            statusEl.className = 'text-sm text-green-600';
+            statusEl.textContent = data.message || 'Uloženo';
+            setTimeout(() => statusEl.classList.add('hidden'), 3000);
+        } else {
+            statusEl.className = 'text-sm text-red-600';
+            statusEl.textContent = data.error || 'Chyba';
+        }
+    })
+    .catch(err => {
+        statusEl.classList.remove('hidden');
+        statusEl.className = 'text-sm text-red-600';
+        statusEl.textContent = 'Chyba: ' + err.message;
+    });
 }
 </script>
 {{end}}

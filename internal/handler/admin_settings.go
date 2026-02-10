@@ -83,6 +83,16 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		emailViews = append(emailViews, view)
 	}
 
+	// Load emergency banner settings
+	bannerText := ""
+	bannerEnabled := false
+	if b, err := h.queries.GetSetting(ctx, "banner_text"); err == nil {
+		bannerText = b.Value
+	}
+	if b, err := h.queries.GetSetting(ctx, "banner_enabled"); err == nil && b.Value == "true" {
+		bannerEnabled = true
+	}
+
 	data := map[string]interface{}{
 		"Title":          "Nastavení",
 		"User":           user,
@@ -95,6 +105,8 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"RecentEmails":   emailViews,
 		"OutboxCounts":   countsMap,
 		"SentToday":      sentToday,
+		"CurrentBannerText":    bannerText,
+		"CurrentBannerEnabled": bannerEnabled,
 	}
 
 	h.render(w, "admin_settings.html", data)
@@ -467,4 +479,35 @@ func (h *Handler) AdminPreviewEmailHandler(w http.ResponseWriter, r *http.Reques
 		"success": true,
 		"html":    rendered,
 	})
+}
+
+// AdminSaveBannerHandler saves the emergency banner settings.
+// POST /api/admin/banner
+func (h *Handler) AdminSaveBannerHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		Text    string `json:"text"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	enabledStr := "false"
+	if req.Enabled {
+		enabledStr = "true"
+	}
+
+	if _, err := h.queries.UpsertSetting(ctx, db.UpsertSettingParams{Key: "banner_text", Value: req.Text}); err != nil {
+		h.jsonError(w, "Failed to save banner text: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.queries.UpsertSetting(ctx, db.UpsertSettingParams{Key: "banner_enabled", Value: enabledStr}); err != nil {
+		h.jsonError(w, "Failed to save banner state: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonSuccess(w, "Banner uložen")
 }

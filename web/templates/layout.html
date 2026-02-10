@@ -153,6 +153,10 @@
         });
     </script>
 
+    {{if and .BannerEnabled .BannerText}}
+    <div class="bg-red-600 text-white text-center text-sm font-semibold py-2 px-4">{{.BannerText}}</div>
+    {{end}}
+
     {{if .DevMode}}
     <div class="bg-green-500 text-white text-center text-sm font-semibold py-1">LOCAL DEVELOPMENT ENVIRONMENT</div>
     {{end}}

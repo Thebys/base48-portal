@@ -490,6 +490,14 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 		dataMap["BaseURL"] = h.config.BaseURL
 		dataMap["BuildDate"] = h.buildDate
 		dataMap["DevMode"] = h.buildDate == "dev"
+
+		// Emergency banner
+		if banner, err := h.queries.GetSetting(context.Background(), "banner_text"); err == nil {
+			dataMap["BannerText"] = banner.Value
+		}
+		if enabled, err := h.queries.GetSetting(context.Background(), "banner_enabled"); err == nil && enabled.Value == "true" {
+			dataMap["BannerEnabled"] = true
+		}
 	}
 
 	// Parse templates fresh each time to avoid name conflicts

@@ -146,6 +146,7 @@ func main() {
 		r.Post("/email/cancel", h.RequireAdmin(h.AdminCancelEmailHandler))
 		r.Post("/email/send-now", h.RequireAdmin(h.AdminSendNowEmailHandler))
 		r.Post("/email/preview", h.RequireAdmin(h.AdminPreviewEmailHandler))
+		r.Post("/banner", h.RequireAdmin(h.AdminSaveBannerHandler))
 		r.Post("/payments/assign", h.RequireAdmin(h.AdminAssignPaymentHandler))
 		r.Post("/payments/update", h.RequireAdmin(h.AdminUpdatePaymentHandler))
 		r.Post("/payments/dismiss", h.RequireAdmin(h.AdminDismissPaymentHandler))
