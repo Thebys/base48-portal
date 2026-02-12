@@ -894,7 +894,7 @@ func (q *Queries) GetUserBalance(ctx context.Context, arg GetUserBalanceParams) 
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users WHERE email = ? LIMIT 1
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -1021,7 +1021,7 @@ const linkKeycloakID = `-- name: LinkKeycloakID :one
 UPDATE users SET
     keycloak_id = ?,
     updated_at = CURRENT_TIMESTAMP
-WHERE email = ? AND keycloak_id IS NULL
+WHERE LOWER(email) = LOWER(?2) AND keycloak_id IS NULL
 RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
 `
 

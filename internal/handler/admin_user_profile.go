@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/db"
@@ -691,6 +692,7 @@ func (h *Handler) AdminUpdateUserEmailHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	if req.Email == "" {
 		h.jsonError(w, "Email je povinný", http.StatusBadRequest)
 		return

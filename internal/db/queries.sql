@@ -5,7 +5,7 @@ SELECT * FROM users WHERE keycloak_id = ? LIMIT 1;
 SELECT * FROM users WHERE id = ? LIMIT 1;
 
 -- name: GetUserByEmail :one
-SELECT * FROM users WHERE email = ? LIMIT 1;
+SELECT * FROM users WHERE LOWER(email) = LOWER(sqlc.arg(email)) LIMIT 1;
 
 -- name: GetUserByPaymentsID :one
 SELECT * FROM users WHERE payments_id = ? LIMIT 1;
@@ -14,7 +14,7 @@ SELECT * FROM users WHERE payments_id = ? LIMIT 1;
 UPDATE users SET
     keycloak_id = ?,
     updated_at = CURRENT_TIMESTAMP
-WHERE email = ? AND keycloak_id IS NULL
+WHERE LOWER(email) = LOWER(sqlc.arg(email)) AND keycloak_id IS NULL
 RETURNING *;
 
 -- name: ListUsers :many

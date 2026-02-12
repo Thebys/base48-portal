@@ -204,7 +204,7 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	// User doesn't exist - create new one
 	newUser, err := h.queries.CreateUser(ctx, db.CreateUserParams{
 		KeycloakID:        sql.NullString{String: kcUser.ID, Valid: true},
-		Email:             kcUser.Email,
+		Email:             strings.ToLower(kcUser.Email),
 		Username:          sql.NullString{String: kcUser.PreferredName, Valid: kcUser.PreferredName != ""},
 		Realname:          sql.NullString{String: kcUser.Name, Valid: kcUser.Name != ""},
 		Phone:             sql.NullString{},
