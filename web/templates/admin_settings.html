@@ -37,15 +37,21 @@
                                placeholder="např. Portál bude 1.1. nedostupný z důvodu údržby"
                                value="{{.CurrentBannerText}}">
                     </div>
-                    <div class="flex items-center gap-3">
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="banner-enabled" class="sr-only peer" {{if .CurrentBannerEnabled}}checked{{end}}>
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-                        </label>
-                        <span class="text-sm text-gray-700">Banner aktivní</span>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-3">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="banner-enabled" class="sr-only peer" {{if .CurrentBannerEnabled}}checked{{end}}>
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                            </label>
+                            <span class="text-sm text-gray-700">Banner aktivní</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="color" id="banner-color" value="{{.CurrentBannerColor}}" class="w-8 h-8 rounded cursor-pointer border border-gray-300 p-0.5">
+                            <span class="text-sm text-gray-700">Barva</span>
+                        </div>
                     </div>
                     <div id="banner-preview" class="hidden rounded-md overflow-hidden">
-                        <div id="banner-preview-content" class="bg-red-600 text-white text-center text-sm font-semibold py-2 px-4"></div>
+                        <div id="banner-preview-content" class="text-white text-center text-sm font-semibold py-2 px-4" style="background-color: {{.CurrentBannerColor}}"></div>
                     </div>
                     <div class="flex items-center gap-3">
                         <button onclick="saveBanner()" class="btn btn-sm btn-primary">Uložit</button>
@@ -618,10 +624,12 @@ function showTemplateStatus(type, message) {
 // Banner management
 function updateBannerPreview() {
     const text = document.getElementById('banner-text').value.trim();
+    const color = document.getElementById('banner-color').value;
     const preview = document.getElementById('banner-preview');
     const content = document.getElementById('banner-preview-content');
     if (text) {
         content.textContent = text;
+        content.style.backgroundColor = color;
         preview.classList.remove('hidden');
     } else {
         preview.classList.add('hidden');
@@ -629,17 +637,19 @@ function updateBannerPreview() {
 }
 
 document.getElementById('banner-text')?.addEventListener('input', updateBannerPreview);
+document.getElementById('banner-color')?.addEventListener('input', updateBannerPreview);
 updateBannerPreview();
 
 function saveBanner() {
     const text = document.getElementById('banner-text').value.trim();
     const enabled = document.getElementById('banner-enabled').checked;
+    const color = document.getElementById('banner-color').value;
     const statusEl = document.getElementById('banner-status');
 
     fetch('/api/admin/banner', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({text: text, enabled: enabled})
+        body: JSON.stringify({text: text, enabled: enabled, color: color})
     })
     .then(r => r.json())
     .then(data => {

@@ -86,11 +86,15 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	// Load emergency banner settings
 	bannerText := ""
 	bannerEnabled := false
+	bannerColor := "#dc2626"
 	if b, err := h.queries.GetSetting(ctx, "banner_text"); err == nil {
 		bannerText = b.Value
 	}
 	if b, err := h.queries.GetSetting(ctx, "banner_enabled"); err == nil && b.Value == "true" {
 		bannerEnabled = true
+	}
+	if b, err := h.queries.GetSetting(ctx, "banner_color"); err == nil && b.Value != "" {
+		bannerColor = b.Value
 	}
 
 	data := map[string]interface{}{
@@ -107,6 +111,7 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"SentToday":      sentToday,
 		"CurrentBannerText":    bannerText,
 		"CurrentBannerEnabled": bannerEnabled,
+		"CurrentBannerColor":   bannerColor,
 	}
 
 	h.render(w, "admin_settings.html", data)
@@ -489,6 +494,7 @@ func (h *Handler) AdminSaveBannerHandler(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Text    string `json:"text"`
 		Enabled bool   `json:"enabled"`
+		Color   string `json:"color"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
@@ -507,6 +513,12 @@ func (h *Handler) AdminSaveBannerHandler(w http.ResponseWriter, r *http.Request)
 	if _, err := h.queries.UpsertSetting(ctx, db.UpsertSettingParams{Key: "banner_enabled", Value: enabledStr}); err != nil {
 		h.jsonError(w, "Failed to save banner state: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if req.Color != "" {
+		if _, err := h.queries.UpsertSetting(ctx, db.UpsertSettingParams{Key: "banner_color", Value: req.Color}); err != nil {
+			h.jsonError(w, "Failed to save banner color: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	h.jsonSuccess(w, "Banner uložen")

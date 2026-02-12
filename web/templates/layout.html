@@ -154,7 +154,11 @@
     </script>
 
     {{if and .BannerEnabled .BannerText}}
-    <div class="bg-red-600 text-white text-center text-sm font-semibold py-2 px-4">{{.BannerText}}</div>
+    <div id="emergency-banner" class="text-white text-center text-sm font-semibold py-2 px-4 relative" style="background-color: {{.BannerColor}}">
+        {{.BannerText}}
+        <button onclick="this.parentElement.remove();sessionStorage.setItem('banner_dismissed','{{.BannerText}}')" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-lg leading-none">&times;</button>
+    </div>
+    <script>if(sessionStorage.getItem('banner_dismissed')==='{{.BannerText}}'){document.getElementById('emergency-banner')?.remove()}</script>
     {{end}}
 
     {{if .DevMode}}

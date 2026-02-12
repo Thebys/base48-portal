@@ -498,6 +498,11 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 		if enabled, err := h.queries.GetSetting(context.Background(), "banner_enabled"); err == nil && enabled.Value == "true" {
 			dataMap["BannerEnabled"] = true
 		}
+		if color, err := h.queries.GetSetting(context.Background(), "banner_color"); err == nil && color.Value != "" {
+			dataMap["BannerColor"] = color.Value
+		} else {
+			dataMap["BannerColor"] = "#dc2626"
+		}
 	}
 
 	// Parse templates fresh each time to avoid name conflicts
