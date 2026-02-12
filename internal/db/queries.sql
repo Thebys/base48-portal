@@ -396,6 +396,14 @@ UPDATE users SET
 WHERE id = ?
 RETURNING *;
 
+-- name: UpdateUserEmail :one
+-- Admin-only: change email for users not linked to Keycloak (legacy migration)
+UPDATE users SET
+    email = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ? AND (keycloak_id IS NULL OR keycloak_id = '')
+RETURNING *;
+
 -- ============================================================================
 -- USER VARIABLE SYMBOL (payments_id) ALLOCATION
 -- ============================================================================

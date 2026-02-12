@@ -190,6 +190,17 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		return nil, err
 	}
 
+	// Auto-allocate variable symbol for the new user
+	var paymentsID sql.NullString
+	maxVS, err := h.queries.GetMaxNumericPaymentsID(ctx)
+	if err != nil {
+		log.Printf("[VS] Warning: failed to get max VS for auto-allocation: %v", err)
+	} else {
+		newVS := fmt.Sprintf("%d", maxVS+1)
+		paymentsID = sql.NullString{String: newVS, Valid: true}
+		log.Printf("[VS] Auto-allocated VS '%s' for new user %s", newVS, kcUser.Email)
+	}
+
 	// User doesn't exist - create new one
 	newUser, err := h.queries.CreateUser(ctx, db.CreateUserParams{
 		KeycloakID:        sql.NullString{String: kcUser.ID, Valid: true},
@@ -200,7 +211,7 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		AltContact:        sql.NullString{},
 		LevelID:           1, // Awaiting level
 		LevelActualAmount: "0",
-		PaymentsID:        sql.NullString{},
+		PaymentsID:        paymentsID,
 		State:             "awaiting",
 		IsCouncil:         false,
 		IsStaff:           false,
@@ -215,8 +226,8 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		Subsystem: "auth",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: newUser.ID, Valid: true},
-		Message:  fmt.Sprintf("New user registered: %s", kcUser.Email),
-		Metadata: logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email}),
+		Message:  fmt.Sprintf("New user registered: %s (VS: %s)", kcUser.Email, paymentsID.String),
+		Metadata: logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email, "payments_id": paymentsID.String}),
 	})
 
 	// Send registration confirmation email (non-blocking, 30s timeout)

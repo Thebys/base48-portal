@@ -668,3 +668,82 @@ func (h *Handler) AdminAllocateUserVSHandler(w http.ResponseWriter, r *http.Requ
 
 	h.jsonSuccess(w, fmt.Sprintf("VS '%s' přiřazen", vs))
 }
+
+// AdminUpdateUserEmailHandler changes a user's email address.
+// Only allowed for users NOT linked to Keycloak (legacy migration use case).
+// POST /api/admin/users/{id}/email
+func (h *Handler) AdminUpdateUserEmailHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+	ctx := r.Context()
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Email == "" {
+		h.jsonError(w, "Email je povinný", http.StatusBadRequest)
+		return
+	}
+
+	// Get target user to verify and log
+	targetUser, err := h.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		h.jsonError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Enforce: only for users not linked to Keycloak
+	if targetUser.KeycloakID.Valid && targetUser.KeycloakID.String != "" {
+		h.jsonError(w, "Nelze měnit email uživateli propojenému s Keycloakem. Změňte email v Keycloaku.", http.StatusForbidden)
+		return
+	}
+
+	// Check email uniqueness
+	existingUser, err := h.queries.GetUserByEmail(ctx, req.Email)
+	if err == nil && existingUser.ID != userID {
+		h.jsonError(w, fmt.Sprintf("Email '%s' je již používán jiným uživatelem (ID %d)", req.Email, existingUser.ID), http.StatusConflict)
+		return
+	}
+
+	previousEmail := targetUser.Email
+
+	updatedUser, err := h.queries.UpdateUserEmail(ctx, db.UpdateUserEmailParams{
+		Email: req.Email,
+		ID:    userID,
+	})
+	if err != nil {
+		h.jsonError(w, "Nepodařilo se změnit email: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = updatedUser
+
+	// Log the change
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+		String: user.ID, Valid: true,
+	})
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "admin",
+		Level:     "warning",
+		UserID:    sql.NullInt64{Int64: userID, Valid: true},
+		Message: fmt.Sprintf("Email changed: '%s' -> '%s' (legacy migration, by admin %s)",
+			previousEmail, req.Email, adminDBUser.Email),
+		Metadata: logMetadata(map[string]interface{}{
+			"previous_email": previousEmail,
+			"new_email":      req.Email,
+			"admin_email":    adminDBUser.Email,
+		}),
+	})
+
+	h.jsonSuccess(w, fmt.Sprintf("Email změněn na %s", req.Email))
+}

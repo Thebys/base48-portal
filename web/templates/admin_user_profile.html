@@ -41,10 +41,19 @@
         <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
             <div>
                 <dt class="text-sm font-medium text-gray-500">Email</dt>
+                {{if and .TargetDBUser.KeycloakID.Valid (ne .TargetDBUser.KeycloakID.String "")}}
                 <dd class="mt-1">
                     <input type="email" value="{{.TargetDBUser.Email}}" disabled
                         class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-500 cursor-not-allowed sm:text-sm">
                 </dd>
+                {{else}}
+                <dd class="mt-1 flex items-center gap-3">
+                    <input id="email-input" type="email" value="{{.TargetDBUser.Email}}"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                    <button onclick="changeUserEmail()" class="btn btn-sm btn-primary whitespace-nowrap">Uložit email</button>
+                </dd>
+                <dd class="mt-1 text-xs text-gray-500">Legacy účet (bez Keycloaku) — email lze změnit ručně</dd>
+                {{end}}
             </div>
 
             <div>
@@ -149,17 +158,17 @@
         <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 mt-4 pt-4 border-t border-gray-200">
             <div>
                 <dt class="text-sm font-medium text-gray-500">Variabilní symbol pro platbu členského příspěvku</dt>
+                {{if .TargetDBUser.PaymentsID.Valid}}
+                <dd class="mt-1 text-sm text-gray-900 font-mono font-bold">{{.TargetDBUser.PaymentsID.String}}</dd>
+                {{else}}
                 <dd class="mt-1 flex items-center gap-3">
-                    {{if .TargetDBUser.PaymentsID.Valid}}
-                    <span class="text-sm text-gray-900 font-mono font-bold">{{.TargetDBUser.PaymentsID.String}}</span>
-                    {{end}}
                     <input id="vs-input" type="text" pattern="[0-9]*" inputmode="numeric"
-                        value="{{if .TargetDBUser.PaymentsID.Valid}}{{.TargetDBUser.PaymentsID.String}}{{end}}"
                         placeholder="Zadejte VS"
                         class="text-sm border-gray-300 rounded-md py-1 px-2 w-28 font-mono">
                     <button onclick="allocateVS(false)" class="btn btn-sm btn-primary">Uložit</button>
                     <button onclick="allocateVS(true)" class="btn btn-sm btn-primary" style="background-color: #059669;">Alokovat auto</button>
                 </dd>
+                {{end}}
             </div>
 
             <div>
@@ -330,6 +339,31 @@
 </div>
 
 <script>
+function changeUserEmail() {
+    const input = document.getElementById('email-input');
+    const newEmail = input.value.trim();
+    if (!newEmail) {
+        alert('Zadejte email.');
+        return;
+    }
+    if (!confirm('Změnit email na: ' + newEmail + '?\n\nToto je nevratná operace pro legacy účty.')) return;
+
+    fetch('/api/admin/users/{{.TargetDBUser.ID}}/email', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: newEmail})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
 function changeUserLocale() {
     const select = document.getElementById('locale-select');
     const newLocale = select.value;
