@@ -34,7 +34,7 @@
     </div>
 
     <!-- Fee preview -->
-    <details open class="bg-white shadow rounded-lg mb-8">
+    <details class="bg-white shadow rounded-lg mb-8">
         <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">
             <div>
                 <h2 class="text-lg font-semibold text-gray-900 inline">Simulace fee runu — {{.PreviewPeriod}}</h2>
@@ -94,7 +94,7 @@
     </details>
 
     <!-- Monthly overview -->
-    <details open class="bg-white shadow rounded-lg mb-8">
+    <details class="bg-white shadow rounded-lg mb-8">
         <summary class="px-6 py-4 cursor-pointer">
             <h2 class="text-lg font-semibold text-gray-900 inline">Měsíční přehled</h2>
         </summary>
@@ -144,7 +144,7 @@
     </details>
 
     <!-- Unmatched payments -->
-    <details {{ if gt .UnmatchedCount 0 }}open{{ end }} class="bg-white shadow rounded-lg mb-8">
+    <details class="bg-white shadow rounded-lg mb-8">
         <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">
             <div>
                 <h2 class="text-lg font-semibold text-gray-900 inline">Nespárované platby</h2>
@@ -186,6 +186,20 @@
                 </table>
             </div>
             {{ end }}
+        </div>
+    </details>
+
+    <!-- Payment statement link -->
+    <details class="bg-white shadow rounded-lg mb-8">
+        <summary class="px-6 py-4 cursor-pointer">
+            <h2 class="text-lg font-semibold text-gray-900 inline">Výpis plateb</h2>
+            <span class="ml-2 text-sm text-gray-500">(náhrada za bankovnictví)</span>
+        </summary>
+        <div class="border-t border-gray-200 px-6 py-4">
+            <p class="text-sm text-gray-600 mb-4">Kompletní výpis všech plateb za aktuální a minulý měsíc včetně protiúčtů, raw JSON dat a komentářů.</p>
+            <a href="/admin/payments/recent" class="btn btn-primary">
+                Zobrazit kompletní výpis &rarr;
+            </a>
         </div>
     </details>
 </div>

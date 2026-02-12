@@ -1,0 +1,52 @@
+{{ define "content" }}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Poslední platby</h1>
+                <p class="mt-1 text-sm text-gray-500">Platby za aktuální a minulý měsíc</p>
+            </div>
+            <a href="/finance" class="text-sm text-blue-600 hover:text-blue-800">&larr; Zpět na přehled</a>
+        </div>
+    </div>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        {{ if .Payments }}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Datum</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Částka</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VS</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {{ range .Payments }}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{.Date.Format "02.01.2006"}}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-600">
+                            +{{.Amount}} Kč
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            {{ if .Identification }}
+                            <span class="font-mono bg-gray-100 px-2 py-1 rounded text-xs">{{.Identification}}</span>
+                            {{ else }}
+                            <span class="text-gray-400">—</span>
+                            {{ end }}
+                        </td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+        {{ else }}
+        <div class="px-6 py-12 text-center text-sm text-gray-500">
+            Za poslední dva měsíce nebyly zaznamenány žádné platby.
+        </div>
+        {{ end }}
+    </div>
+</div>
+{{ end }}

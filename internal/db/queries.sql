@@ -444,3 +444,9 @@ SELECT substr(period_start, 1, 7) as period,
 FROM fees
 WHERE period_start >= date('now', 'start of month', '-13 months')
 GROUP BY 1;
+
+-- name: ListRecentPayments :many
+-- List all payments from the current and previous month (for bank statement view)
+SELECT * FROM payments
+WHERE date >= date('now', 'start of month', '-1 month')
+ORDER BY date DESC;

@@ -1,0 +1,99 @@
+{{ define "content" }}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Výpis plateb</h1>
+                <p class="mt-1 text-sm text-gray-500">Kompletní bankovní výpis za aktuální a minulý měsíc</p>
+            </div>
+            <a href="/admin/finance" class="text-sm text-blue-600 hover:text-blue-800">&larr; Zpět na finanční přehled</a>
+        </div>
+    </div>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        {{ if .Payments }}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Datum</th>
+                        <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Částka</th>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VS</th>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Typ</th>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Náš účet</th>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Protiúčet</th>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Přiřazeno</th>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Komentář</th>
+                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raw data</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {{ range .Payments }}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {{.ID}}
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                            {{.Date.Format "02.01.2006"}}
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm text-right font-medium {{ if .IsNegative }}text-red-600{{ else }}text-green-600{{ end }}">
+                            {{.Amount}} Kč
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm">
+                            {{ if .Identification }}
+                            <span class="font-mono bg-gray-100 px-2 py-1 rounded text-xs">{{.Identification}}</span>
+                            {{ else }}
+                            <span class="text-gray-400">—</span>
+                            {{ end }}
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm">
+                            {{ if eq .Kind "fio" }}
+                            <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">fio</span>
+                            {{ else if eq .Kind "manual" }}
+                            <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">manual</span>
+                            {{ else }}
+                            <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">{{.Kind}}</span>
+                            {{ end }}
+                        </td>
+                        <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{.LocalAccount}}">
+                            {{ if .LocalAccount }}{{.LocalAccount}}{{ else }}<span class="text-gray-400">—</span>{{ end }}
+                        </td>
+                        <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{.RemoteAccount}}">
+                            {{ if .RemoteAccount }}{{.RemoteAccount}}{{ else }}<span class="text-gray-400">—</span>{{ end }}
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-sm">
+                            {{ if .UserName }}
+                            <a href="/admin/users/{{.UserID.Int64}}" class="text-blue-600 hover:text-blue-800">{{.UserName}}</a>
+                            {{ else if .ProjectName }}
+                            <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">{{.ProjectName}}</span>
+                            {{ else }}
+                            <span class="text-gray-400">—</span>
+                            {{ end }}
+                        </td>
+                        <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{ if .StaffComment.Valid }}{{.StaffComment.String}}{{ end }}">
+                            {{ if .StaffComment.Valid }}{{.StaffComment.String}}{{ else }}<span class="text-gray-400">—</span>{{ end }}
+                        </td>
+                        <td class="px-3 py-3 text-sm">
+                            {{ if .RawData.Valid }}
+                            <details class="cursor-pointer">
+                                <summary class="text-blue-600 hover:text-blue-800 text-xs">JSON</summary>
+                                <pre class="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto max-w-[300px] max-h-[200px]">{{.RawData.String}}</pre>
+                            </details>
+                            {{ else }}
+                            <span class="text-gray-400">—</span>
+                            {{ end }}
+                        </td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+        {{ else }}
+        <div class="px-6 py-12 text-center text-sm text-gray-500">
+            Za poslední dva měsíce nebyly zaznamenány žádné platby.
+        </div>
+        {{ end }}
+    </div>
+</div>
+{{ end }}

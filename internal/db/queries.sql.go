@@ -1663,6 +1663,53 @@ func (q *Queries) ListRecentEmailOutbox(ctx context.Context, limit int64) ([]Ema
 	return items, nil
 }
 
+const listRecentPayments = `-- name: ListRecentPayments :many
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments
+WHERE date >= date('now', 'start of month', '-1 month')
+ORDER BY date DESC
+`
+
+// List all payments from the current and previous month (for bank statement view)
+func (q *Queries) ListRecentPayments(ctx context.Context) ([]Payment, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentPayments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payment{}
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Date,
+			&i.Amount,
+			&i.Kind,
+			&i.KindID,
+			&i.LocalAccount,
+			&i.RemoteAccount,
+			&i.Identification,
+			&i.RawData,
+			&i.StaffComment,
+			&i.CreatedAt,
+			&i.ProjectID,
+			&i.DismissedAt,
+			&i.DismissedBy,
+			&i.DismissedReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUnassignedPayments = `-- name: ListUnassignedPayments :many
 SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE user_id IS NULL AND project_id IS NULL AND dismissed_at IS NULL ORDER BY date DESC
 `

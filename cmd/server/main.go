@@ -102,6 +102,7 @@ func main() {
 		r.Get("/profile", h.ProfileHandler)
 		r.Post("/profile", h.ProfileHandler)
 		r.Get("/finance", h.MemberFinanceHandler)
+		r.Get("/payments/recent", h.MemberRecentPaymentsHandler)
 		r.Get("/projects", h.MemberProjectsHandler)
 	})
 
@@ -119,6 +120,7 @@ func main() {
 		r.Get("/users/{id}", h.RequireAdmin(h.AdminUserProfileHandler))
 		r.Get("/finance", h.RequireAdmin(h.AdminFinanceHandler))
 		r.Get("/payments/unmatched", h.RequireAdmin(h.AdminUnmatchedPaymentsHandler))
+		r.Get("/payments/recent", h.RequireAdmin(h.AdminRecentPaymentsHandler))
 		r.Get("/projects", h.RequireAdmin(h.AdminProjectsHandler))
 		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))
 		r.Get("/levels", h.RequireAdmin(h.AdminLevelsHandler))
