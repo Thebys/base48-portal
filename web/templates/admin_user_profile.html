@@ -148,8 +148,18 @@
         <!-- Additional membership details -->
         <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 mt-4 pt-4 border-t border-gray-200">
             <div>
-                <dt class="text-sm font-medium text-gray-500">Variabilní symbol pro plabu členského příspěvku</dt>
-                <dd class="mt-1 text-sm text-gray-900 font-mono">{{if .TargetDBUser.PaymentsID.Valid}}{{.TargetDBUser.PaymentsID.String}}{{else}}<span class="text-gray-400">Nepřiřazen</span>{{end}}</dd>
+                <dt class="text-sm font-medium text-gray-500">Variabilní symbol pro platbu členského příspěvku</dt>
+                <dd class="mt-1 flex items-center gap-3">
+                    {{if .TargetDBUser.PaymentsID.Valid}}
+                    <span class="text-sm text-gray-900 font-mono font-bold">{{.TargetDBUser.PaymentsID.String}}</span>
+                    {{end}}
+                    <input id="vs-input" type="text" pattern="[0-9]*" inputmode="numeric"
+                        value="{{if .TargetDBUser.PaymentsID.Valid}}{{.TargetDBUser.PaymentsID.String}}{{end}}"
+                        placeholder="Zadejte VS"
+                        class="text-sm border-gray-300 rounded-md py-1 px-2 w-28 font-mono">
+                    <button onclick="allocateVS(false)" class="btn btn-sm btn-primary">Uložit</button>
+                    <button onclick="allocateVS(true)" class="btn btn-sm btn-primary" style="background-color: #059669;">Alokovat auto</button>
+                </dd>
             </div>
 
             <div>
@@ -374,6 +384,37 @@ function changeUserState() {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({state: newState})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+        }
+    })
+    .catch(err => alert('Chyba: ' + err.message));
+}
+
+function allocateVS(auto) {
+    const input = document.getElementById('vs-input');
+    const vs = input.value.trim();
+
+    if (!auto && !vs) {
+        alert('Zadejte variabilní symbol nebo použijte automatickou alokaci.');
+        return;
+    }
+
+    const body = auto ? {auto: true} : {vs: vs};
+    const confirmMsg = auto
+        ? 'Automaticky alokovat nový variabilní symbol?'
+        : 'Nastavit variabilní symbol na: ' + vs + '?';
+    if (!confirm(confirmMsg)) return;
+
+    fetch('/api/admin/users/{{.TargetDBUser.ID}}/vs', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
     })
     .then(r => r.json())
     .then(data => {

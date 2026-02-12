@@ -655,6 +655,22 @@ func (q *Queries) GetLevel(ctx context.Context, id int64) (Level, error) {
 	return i, err
 }
 
+const getMaxNumericPaymentsID = `-- name: GetMaxNumericPaymentsID :one
+SELECT CAST(COALESCE(MAX(CAST(payments_id AS INTEGER)), 0) AS INTEGER) as max_vs
+FROM users
+WHERE payments_id IS NOT NULL
+AND payments_id GLOB '[0-9]*'
+AND LENGTH(payments_id) <= 10
+`
+
+// Find the highest numeric payments_id among users (for auto-allocation)
+func (q *Queries) GetMaxNumericPaymentsID(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getMaxNumericPaymentsID)
+	var max_vs int64
+	err := row.Scan(&max_vs)
+	return max_vs, err
+}
+
 const getPayment = `-- name: GetPayment :one
 SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE id = ? LIMIT 1
 `
@@ -2139,6 +2155,50 @@ type UpdateUserLocaleParams struct {
 
 func (q *Queries) UpdateUserLocale(ctx context.Context, arg UpdateUserLocaleParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, updateUserLocale, arg.Locale, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Locale,
+	)
+	return i, err
+}
+
+const updateUserPaymentsID = `-- name: UpdateUserPaymentsID :one
+
+UPDATE users SET
+    payments_id = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
+`
+
+type UpdateUserPaymentsIDParams struct {
+	PaymentsID sql.NullString `json:"payments_id"`
+	ID         int64          `json:"id"`
+}
+
+// ============================================================================
+// USER VARIABLE SYMBOL (payments_id) ALLOCATION
+// ============================================================================
+func (q *Queries) UpdateUserPaymentsID(ctx context.Context, arg UpdateUserPaymentsIDParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserPaymentsID, arg.PaymentsID, arg.ID)
 	var i User
 	err := row.Scan(
 		&i.ID,

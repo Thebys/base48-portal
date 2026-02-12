@@ -136,6 +136,7 @@ func main() {
 		r.Post("/users/{id}/state", h.RequireAdmin(h.AdminUpdateUserStateHandler))
 		r.Post("/users/{id}/locale", h.RequireAdmin(h.AdminUpdateUserLocaleHandler))
 		r.Post("/users/{id}/level", h.RequireAdmin(h.AdminUpdateUserLevelHandler))
+		r.Post("/users/{id}/vs", h.RequireAdmin(h.AdminAllocateUserVSHandler))
 		r.Post("/levels", h.RequireAdmin(h.AdminCreateLevelHandler))
 		r.Post("/levels/update", h.RequireAdmin(h.AdminUpdateLevelHandler))
 		r.Post("/levels/toggle", h.RequireAdmin(h.AdminToggleLevelActiveHandler))

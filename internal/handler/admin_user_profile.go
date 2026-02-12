@@ -555,3 +555,116 @@ func (h *Handler) AdminUpdateUserLevelHandler(w http.ResponseWriter, r *http.Req
 
 	h.jsonSuccess(w, fmt.Sprintf("Úroveň změněna na %s", newLevel.Name))
 }
+
+// AdminAllocateUserVSHandler allocates or sets a variable symbol for a user's membership payments.
+// POST /api/admin/users/{id}/vs
+// Body: {"vs": "751"} for manual, {"auto": true} for auto-allocation
+func (h *Handler) AdminAllocateUserVSHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+	ctx := r.Context()
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		VS   string `json:"vs"`
+		Auto bool   `json:"auto"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Get target user
+	targetUser, err := h.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		h.jsonError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	vs := req.VS
+
+	// Auto-allocate: find max numeric VS and increment
+	if req.Auto || vs == "" {
+		maxVS, err := h.queries.GetMaxNumericPaymentsID(ctx)
+		if err != nil {
+			log.Printf("[VS] ERROR: Failed to get max numeric VS: %v", err)
+			h.jsonError(w, "Nepodařilo se zjistit další volný VS", http.StatusInternalServerError)
+			return
+		}
+		vs = fmt.Sprintf("%d", maxVS+1)
+	}
+
+	// Validate: check for duplicate with another user
+	existingUser, err := h.queries.GetUserByPaymentsID(ctx, sql.NullString{String: vs, Valid: true})
+	if err == nil && existingUser.ID != userID {
+		msg := fmt.Sprintf("VS '%s' je již přiřazen uživateli %s (ID %d)", vs, existingUser.Email, existingUser.ID)
+		log.Printf("[VS] CONFLICT: %s — attempted by admin for user ID %d", msg, userID)
+		h.queries.CreateLog(ctx, db.CreateLogParams{
+			Subsystem: "admin",
+			Level:     "error",
+			UserID:    sql.NullInt64{Int64: userID, Valid: true},
+			Message:   fmt.Sprintf("VS allocation CONFLICT: %s", msg),
+		})
+		h.jsonError(w, msg, http.StatusConflict)
+		return
+	}
+
+	// Validate: check for duplicate with a project VS
+	existingProjectVS, err := h.queries.GetProjectVSByVS(ctx, vs)
+	if err == nil {
+		msg := fmt.Sprintf("VS '%s' je již použit projektem (project_id %d)", vs, existingProjectVS.ProjectID)
+		log.Printf("[VS] CONFLICT: %s — attempted by admin for user ID %d", msg, userID)
+		h.queries.CreateLog(ctx, db.CreateLogParams{
+			Subsystem: "admin",
+			Level:     "error",
+			UserID:    sql.NullInt64{Int64: userID, Valid: true},
+			Message:   fmt.Sprintf("VS allocation CONFLICT: %s", msg),
+		})
+		h.jsonError(w, msg, http.StatusConflict)
+		return
+	}
+
+	// Save the VS
+	previousVS := ""
+	if targetUser.PaymentsID.Valid {
+		previousVS = targetUser.PaymentsID.String
+	}
+
+	_, err = h.queries.UpdateUserPaymentsID(ctx, db.UpdateUserPaymentsIDParams{
+		PaymentsID: sql.NullString{String: vs, Valid: true},
+		ID:         userID,
+	})
+	if err != nil {
+		log.Printf("[VS] ERROR: Failed to update VS for user %d: %v", userID, err)
+		h.jsonError(w, "Nepodařilo se uložit VS: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Log success
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+		String: user.ID, Valid: true,
+	})
+	logMsg := fmt.Sprintf("VS allocated: '%s' for user %s (by admin %s)", vs, targetUser.Email, adminDBUser.Email)
+	if previousVS != "" {
+		logMsg = fmt.Sprintf("VS changed: '%s' -> '%s' for user %s (by admin %s)", previousVS, vs, targetUser.Email, adminDBUser.Email)
+	}
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "admin",
+		Level:     "success",
+		UserID:    sql.NullInt64{Int64: userID, Valid: true},
+		Message:   logMsg,
+		Metadata: logMetadata(map[string]interface{}{
+			"previous_vs": previousVS,
+			"new_vs":      vs,
+			"auto":        req.Auto || req.VS == "",
+			"admin_email": adminDBUser.Email,
+		}),
+	})
+
+	h.jsonSuccess(w, fmt.Sprintf("VS '%s' přiřazen", vs))
+}

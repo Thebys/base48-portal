@@ -397,6 +397,25 @@ WHERE id = ?
 RETURNING *;
 
 -- ============================================================================
+-- USER VARIABLE SYMBOL (payments_id) ALLOCATION
+-- ============================================================================
+
+-- name: UpdateUserPaymentsID :one
+UPDATE users SET
+    payments_id = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: GetMaxNumericPaymentsID :one
+-- Find the highest numeric payments_id among users (for auto-allocation)
+SELECT CAST(COALESCE(MAX(CAST(payments_id AS INTEGER)), 0) AS INTEGER) as max_vs
+FROM users
+WHERE payments_id IS NOT NULL
+AND payments_id GLOB '[0-9]*'
+AND LENGTH(payments_id) <= 10;
+
+-- ============================================================================
 -- FINANCIAL OVERVIEW
 -- ============================================================================
 
