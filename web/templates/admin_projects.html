@@ -244,6 +244,10 @@
         border: 1px solid #e5e7eb;
     }
 
+    .qr-section a {
+        flex-shrink: 0;
+    }
+
     .qr-info {
         font-size: 13px;
         color: #6b7280;
@@ -258,6 +262,7 @@
         align-items: center;
         gap: 8px;
         margin-top: 8px;
+        flex-wrap: wrap;
     }
 
     .qr-amount-row input {
@@ -271,6 +276,24 @@
     .qr-amount-row button {
         padding: 4px 10px;
         font-size: 12px;
+    }
+
+    @media (max-width: 640px) {
+        .qr-section {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        .project-balance {
+            font-size: 18px;
+            margin-right: 0;
+        }
+        summary {
+            padding: 15px;
+        }
+        .payments-table {
+            margin: 10px;
+        }
     }
 </style>
 
@@ -355,7 +378,9 @@ async function loadProjects() {
                 const primaryVS = project.vs_list && project.vs_list.length > 0 ? project.vs_list[0].vs : '';
                 const qrHtml = primaryVS ? `
                     <div class="qr-section">
-                        <img id="qr-img-${project.id}" src="/api/qr?vs=${primaryVS}&msg=${encodeURIComponent(project.name)}" alt="QR platba" width="150" height="150">
+                        <a id="qr-link-${project.id}" href="/api/qr?vs=${primaryVS}&msg=${encodeURIComponent(project.name)}" target="_blank" title="Klikni pro otevření v bankovní aplikaci">
+                            <img id="qr-img-${project.id}" src="/api/qr?vs=${primaryVS}&msg=${encodeURIComponent(project.name)}" alt="QR platba" width="150" height="150" style="cursor:pointer;">
+                        </a>
                         <div class="qr-info">
                             <p><strong>QR platba</strong></p>
                             <p>VS: <strong>${primaryVS}</strong></p>
@@ -634,16 +659,21 @@ function setQRAmount(projectId, vs, encodedName) {
         alert('Zadejte platnou částku.');
         return;
     }
+    const newSrc = `/api/qr?vs=${vs}&amount=${amount}&msg=${encodedName}`;
     const img = document.getElementById(`qr-img-${projectId}`);
-    img.src = `/api/qr?vs=${vs}&amount=${amount}&msg=${encodedName}`;
-    // Update info text
+    img.src = newSrc;
+    const link = document.getElementById(`qr-link-${projectId}`);
+    if (link) link.href = newSrc;
     img.closest('.qr-section').querySelector('.qr-info p:nth-child(3)').innerHTML =
         `Částka: <strong>${amount.toLocaleString('cs-CZ')} Kč</strong>`;
 }
 
 function resetQR(projectId, vs, encodedName) {
+    const newSrc = `/api/qr?vs=${vs}&msg=${encodedName}`;
     const img = document.getElementById(`qr-img-${projectId}`);
-    img.src = `/api/qr?vs=${vs}&msg=${encodedName}`;
+    img.src = newSrc;
+    const link = document.getElementById(`qr-link-${projectId}`);
+    if (link) link.href = newSrc;
     document.getElementById(`qr-amount-${projectId}`).value = '';
     img.closest('.qr-section').querySelector('.qr-info p:nth-child(3)').textContent =
         'Bez předvyplněné částky.';
