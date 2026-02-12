@@ -59,7 +59,9 @@
                                     {{index .Labels "payment_message_label"}} <em>{{index .Labels "debt_payment_ref"}}</em>
                                     {{if .PaymentQRCode}}
                                     <div style="margin-top:15px;text-align:center;">
-                                        <img src="{{.PaymentQRCode}}" alt="QR" width="180" height="180" style="border:1px solid #e5e7eb;border-radius:8px;">
+                                        <a href="{{.PaymentQRCode}}" target="_blank" style="display:inline-block;">
+                                            <img src="{{.PaymentQRCode}}" alt="QR" width="180" height="180" style="border:1px solid #e5e7eb;border-radius:8px;">
+                                        </a>
                                         <p style="margin:10px 0 0;font-size:13px;color:#6b7280;">{{index .Labels "qr_instruction"}}</p>
                                     </div>
                                     {{end}}
