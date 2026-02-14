@@ -153,7 +153,7 @@
         });
     </script>
 
-    {{if and .BannerEnabled .BannerText}}
+    {{if and .User .BannerEnabled .BannerText}}
     <div id="emergency-banner" class="text-white text-center text-sm font-semibold py-2 px-4 relative" style="background-color: {{.BannerColor}}">
         {{.BannerText}}
         <button onclick="this.parentElement.remove();sessionStorage.setItem('banner_dismissed','{{.BannerText}}')" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-lg leading-none">&times;</button>
