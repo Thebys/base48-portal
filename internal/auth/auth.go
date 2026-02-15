@@ -80,10 +80,10 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 		store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
 		store.Options = &sessions.Options{
 			Path:     "/",
-			MaxAge:   86400 * 7,
+			MaxAge:   86400, // 24 hours
 			HttpOnly: true,
 			Secure:   false,
-			SameSite: http.SameSiteLaxMode,
+			SameSite: http.SameSiteStrictMode,
 		}
 
 		return &Authenticator{
@@ -109,10 +109,10 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
 	store.Options = &sessions.Options{
 		Path:     "/",
-		MaxAge:   86400 * 7, // 7 days
+		MaxAge:   86400, // 24 hours
 		HttpOnly: true,
 		Secure:   len(cfg.BaseURL) >= 5 && cfg.BaseURL[:5] == "https",
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 	}
 
 	fmt.Println("✓ Keycloak connection established")
