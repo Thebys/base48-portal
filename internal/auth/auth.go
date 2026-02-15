@@ -80,7 +80,7 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 		store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
 		store.Options = &sessions.Options{
 			Path:     "/",
-			MaxAge:   86400, // 24 hours
+			MaxAge:   3600, // 60 minutes — forces re-login to refresh Keycloak roles
 			HttpOnly: true,
 			Secure:   false,
 			SameSite: http.SameSiteStrictMode,
@@ -109,7 +109,7 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
 	store.Options = &sessions.Options{
 		Path:     "/",
-		MaxAge:   86400, // 24 hours
+		MaxAge:   3600, // 60 minutes — forces re-login to refresh Keycloak roles
 		HttpOnly: true,
 		Secure:   len(cfg.BaseURL) >= 5 && cfg.BaseURL[:5] == "https",
 		SameSite: http.SameSiteStrictMode,
