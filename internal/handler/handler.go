@@ -16,6 +16,7 @@ import (
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
+	"github.com/base48/member-portal/internal/keycloak"
 	"github.com/base48/member-portal/internal/qrpay"
 )
 
@@ -170,6 +171,26 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 			Message:  fmt.Sprintf("Keycloak ID associated: %s", kcUser.Email),
 			Metadata: logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email}),
 		})
+
+		// If claimed user is already accepted, sync active_member role
+		if linkedUser.State == "accepted" {
+			if token, err := h.getServiceAccountToken(ctx); err != nil {
+				log.Printf("[Keycloak] Warning: cannot sync active_member after profile claim for %s: %v", linkedUser.Email, err)
+			} else {
+				kcClient := keycloak.NewClient(h.config, token)
+				if err := kcClient.AssignRoleToUser(ctx, kcUser.ID, "active_member"); err != nil {
+					log.Printf("[Keycloak] Warning: failed to assign active_member after profile claim for %s: %v", linkedUser.Email, err)
+				} else {
+					log.Printf("[Keycloak] Assigned active_member to %s (profile claimed)", linkedUser.Email)
+					h.queries.CreateLog(ctx, db.CreateLogParams{
+						Subsystem: "keycloak",
+						Level:     "success",
+						UserID:    sql.NullInt64{Int64: linkedUser.ID, Valid: true},
+						Message:   fmt.Sprintf("Assigned active_member role (profile claimed, was already accepted)"),
+					})
+				}
+			}
+		}
 
 		// Sync username + locale from Keycloak
 		newUsername := linkedUser.Username

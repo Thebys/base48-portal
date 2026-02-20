@@ -41,8 +41,9 @@ make help       # Všechny příkazy
 ## Cron úlohy
 
 ```bash
-./sync_fio_payments    # Synchronizace plateb z FIO
-./update_debt_status   # Aktualizace dluhů
+portal-cron sync     # Synchronizace plateb + role sync (každé 2 min)
+portal-cron fees     # Měsíční poplatky (1. den v měsíci)
+portal-cron report   # Report nespárovaných plateb (ad-hoc)
 ```
 
 ## Dokumentace

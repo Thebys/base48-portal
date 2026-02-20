@@ -5,14 +5,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o server ./cmd/server
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o sync-fio ./cmd/cron/sync_fio_payments.go
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o portal-cron ./cmd/cron
 
 # Runtime stage
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /app/server .
-COPY --from=builder /app/sync-fio .
+COPY --from=builder /app/portal-cron .
 COPY --from=builder /app/web/templates ./web/templates
 COPY --from=builder /app/web/static ./web/static
 COPY --from=builder /app/migrations ./migrations

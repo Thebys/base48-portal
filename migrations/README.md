@@ -58,16 +58,16 @@ Po importu dat je potřeba spravovat měsíční poplatky nových období.
 **Použití:**
 ```bash
 # Jednoráz spuštění
-go run cmd/cron/create_monthly_fees.go
+go run ./cmd/cron fees
 
 # Nebo zkompilovaný binary
-go build -o create_monthly_fees ./cmd/cron/create_monthly_fees.go
-./create_monthly_fees
+go build -o portal-cron ./cmd/cron
+./portal-cron fees
 ```
 
 **Crontab nastavení** (1. den v měsíci):
 ```bash
-0 0 1 * * cd /path/to/portal && ./create_monthly_fees >> logs/fees.log 2>&1
+0 0 1 * * cd /path/to/portal && ./portal-cron fees >> logs/fees.log 2>&1
 ```
 
 **Logika:**

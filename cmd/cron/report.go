@@ -7,46 +7,23 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/joho/godotenv"
-	_ "modernc.org/sqlite"
-
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 )
 
-// Report payments that have a variable symbol but are not matched to any user
+// runReport prints a detailed report of unmatched payments to stdout.
 //
 // Usage:
-//   go run cmd/cron/report_unmatched_payments.go
-
+//
+//	portal-cron report
 type UnmatchedPayment struct {
-	Payment       db.Payment
-	VSAsUserID    int64
-	UserExists    bool
-	Reason        string
+	Payment    db.Payment
+	VSAsUserID int64
+	UserExists bool
+	Reason     string
 }
 
-func main() {
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	// Connect to database
-	database, err := sql.Open("sqlite", cfg.DatabaseURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer database.Close()
-
-	queries := db.New(database)
-	ctx := context.Background()
-
+func runReport(ctx context.Context, _ *config.Config, queries *db.Queries) int {
 	// Get all unassigned payments
 	unassignedPayments, err := queries.ListUnassignedPayments(ctx)
 	if err != nil {
@@ -62,8 +39,8 @@ func main() {
 		// Skip if no identification (VS)
 		if payment.Identification == "" {
 			problematic = append(problematic, UnmatchedPayment{
-				Payment:    payment,
-				Reason:     "Empty variable symbol",
+				Payment: payment,
+				Reason:  "Empty variable symbol",
 			})
 
 			// Parse amount
@@ -77,8 +54,8 @@ func main() {
 		vsAsID, err := strconv.ParseInt(payment.Identification, 10, 64)
 		if err != nil {
 			problematic = append(problematic, UnmatchedPayment{
-				Payment:    payment,
-				Reason:     fmt.Sprintf("VS '%s' is not a valid user ID", payment.Identification),
+				Payment: payment,
+				Reason:  fmt.Sprintf("VS '%s' is not a valid user ID", payment.Identification),
 			})
 
 			if amount, err := strconv.ParseFloat(payment.Amount, 64); err == nil {
@@ -129,7 +106,7 @@ func main() {
 
 	if len(problematic) == 0 {
 		fmt.Println("✓ No problematic payments found!")
-		return
+		return 0
 	}
 
 	// Group by reason
@@ -182,6 +159,8 @@ func main() {
 	fmt.Println("  2. For payments with empty/invalid VS: Manually assign via admin interface")
 	fmt.Println("  3. For sync bugs: Re-run FIO sync or investigate the matching logic")
 	fmt.Println()
+
+	return 0
 }
 
 func printPaymentTable(payments []UnmatchedPayment) {
@@ -211,12 +190,4 @@ func printPaymentTable(payments []UnmatchedPayment) {
 			reason,
 		)
 	}
-}
-
-func repeat(s string, count int) string {
-	result := ""
-	for i := 0; i < count; i++ {
-		result += s
-	}
-	return result
 }

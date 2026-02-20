@@ -9,9 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
-	_ "modernc.org/sqlite"
-
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
@@ -20,45 +17,32 @@ import (
 	"github.com/base48/member-portal/internal/keycloak"
 )
 
-// Sync payments from FIO Bank API and update debt status in Keycloak
+// runSync synchronizes FIO payments, updates debt/role status in Keycloak,
+// and processes pending scheduled emails.
 //
 // Usage:
-//   go run cmd/cron/sync_fio_payments.go
+//
+//	portal-cron sync
 //
 // Crontab (every 2 minutes):
-//   */2 * * * * cd /path/to/portal && ./sync_fio_payments >> logs/fio-sync.log 2>&1
-
-func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
+//
+//	*/2 * * * * cd /path/to/portal && ./portal-cron sync >> logs/fio-sync.log 2>&1
+func runSync(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	if cfg.BankFIOToken == "" {
-		log.Fatal("BANK_FIO_TOKEN is required")
+		log.Println("BANK_FIO_TOKEN is required")
+		return 1
 	}
-
-	database, err := sql.Open("sqlite", cfg.DatabaseURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer database.Close()
-
-	queries := db.New(database)
-	ctx := context.Background()
 
 	fioErrors := syncFIO(ctx, cfg, queries)
 	debtErrors := updateDebtStatus(ctx, cfg, queries)
 	processScheduledEmails(ctx, cfg, queries)
 
 	if fioErrors+debtErrors > 0 {
-		log.Fatal("Job completed with errors")
+		log.Println("Job completed with errors")
+		return 1
 	}
 	log.Println("✓ Job completed successfully")
+	return 0
 }
 
 func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
@@ -248,6 +232,17 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 			errors++
 		} else {
 			// Payment exists - check if it needs update
+
+			// Protect manually reassigned payments: if identification in DB
+			// differs from the FIO variable symbol, an admin changed it via GUI.
+			// Don't overwrite the manual assignment.
+			if existingPayment.Identification != variableSymbol {
+				log.Printf("  🔒 Skipping FIO ID %d: manually reassigned (FIO VS: '%s', DB VS: '%s')",
+					tx.ID, variableSymbol, existingPayment.Identification)
+				skipped++
+				continue
+			}
+
 			needsUpdate := false
 
 			// Check if user_id changed (manual assignment)
@@ -332,7 +327,7 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 			log.Println("        Check if users need to be imported or VS is incorrect.")
 		}
 
-		log.Printf("\n💡 Run 'go run cmd/cron/report_unmatched_payments.go' for detailed report")
+		log.Printf("\n💡 Run 'portal-cron report' for detailed report")
 	}
 
 	log.Println("\n" + repeat("=", 80))
@@ -490,12 +485,4 @@ func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queri
 func processScheduledEmails(ctx context.Context, cfg *config.Config, queries *db.Queries) {
 	emailClient := email.New(cfg, queries, nil)
 	emailClient.ProcessPendingEmails(ctx)
-}
-
-func repeat(s string, count int) string {
-	result := ""
-	for i := 0; i < count; i++ {
-		result += s
-	}
-	return result
 }

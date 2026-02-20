@@ -6,11 +6,7 @@
 *.dylib
 portal
 server
-sync_fio
-sync_fio_payments
-create_monthly_fees
-report_unmatched_payments
-update_debt_status
+portal-cron
 main
 
 # Test binary

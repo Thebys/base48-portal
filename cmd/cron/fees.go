@@ -7,44 +7,26 @@ import (
 	"log"
 	"time"
 
-	"github.com/joho/godotenv"
-	_ "modernc.org/sqlite"
-
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
 	"github.com/base48/member-portal/internal/qrpay"
 )
 
-// Automatické vytváření měsíčních poplatků pro všechny aktivní členy
+// runFees creates monthly membership fee records for all accepted members
+// and sends debt warning emails where appropriate.
 //
-// Použití:
-//   go run cmd/cron/create_monthly_fees.go
+// Usage:
 //
-// Nebo v crontab (běží první den v měsíci):
-//   0 0 1 * * cd /path/to/portal && ./create_monthly_fees >> logs/fees.log 2>&1
-
-func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	database, err := sql.Open("sqlite", cfg.DatabaseURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer database.Close()
-
-	queries := db.New(database)
+//	portal-cron fees
+//
+// Crontab (first day of month):
+//
+//	0 0 1 * * cd /path/to/portal && ./portal-cron fees >> logs/fees.log 2>&1
+func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	qrService := qrpay.NewService(cfg.BankIBAN, cfg.BankBIC)
 	emailClient := email.New(cfg, queries, qrService)
 	emailClient.DefaultDelay = 72 * time.Hour // Delay debt emails so admin can review/cancel
-	ctx := context.Background()
 
 	// Získáme první den aktuálního měsíce
 	now := time.Now()
@@ -166,8 +148,10 @@ func main() {
 	})
 
 	if errors > 0 {
-		log.Fatal("Job completed with errors")
+		log.Println("Job completed with errors")
+		return 1
 	}
 
 	log.Println("✓ Job completed successfully")
+	return 0
 }

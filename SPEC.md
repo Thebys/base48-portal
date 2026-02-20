@@ -59,7 +59,7 @@ system_logs     - Audit log
 ```
 cmd/
 ├── server/     # Hlavní aplikace
-├── cron/       # sync_fio_payments, update_debt_status, create_monthly_fees
+├── cron/       # portal-cron: sync, fees, report
 ├── import/     # Import ze staré databáze
 └── test/       # Test skripty
 
@@ -108,10 +108,11 @@ migrations/     # SQL schema
 
 ## Cron úlohy
 
-- `sync_fio_payments` - Synchronizace plateb z FIO (denně)
-- `update_debt_status` - Aktualizace in_debt role
-- `create_monthly_fees` - Generování měsíčních poplatků
-- `report_unmatched_payments` - Report nespárovaných plateb
+Unified binary `portal-cron` se subcommandama:
+
+- `portal-cron sync` - Synchronizace plateb z FIO + debt/role sync + pending emaily (každé 2 min)
+- `portal-cron fees` - Generování měsíčních poplatků + debt warning emaily (1. den v měsíci)
+- `portal-cron report` - Report nespárovaných plateb (ad-hoc)
 
 ## TODO
 

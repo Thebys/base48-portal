@@ -22,7 +22,7 @@ pkgs.buildGoModule rec {
 
     BUILD_DATE="${version} ($(date -u '+%Y-%m-%d %H:%M UTC'))"
     go build -ldflags="-s -w -X 'main.BuildDate=$BUILD_DATE'" -o $out/bin/portal cmd/server/main.go
-    go build -ldflags="-s -w" -o $out/bin/sync_fio_payments cmd/cron/sync_fio_payments.go
+    go build -ldflags="-s -w" -o $out/bin/portal-cron ./cmd/cron
 
     cp -r web/templates $out/share/portal/web/
     cp -r web/static $out/share/portal/web/
