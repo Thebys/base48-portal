@@ -263,6 +263,34 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	return &newUser, nil
 }
 
+// ServicesHandler displays Keycloak-linked services/applications
+func (h *Handler) ServicesHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+	if user == nil {
+		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
+		return
+	}
+
+	dbUser, err := h.getOrCreateUser(r, user)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if dbUser.State == "awaiting" && !user.IsAdmin() {
+		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		return
+	}
+
+	data := map[string]interface{}{
+		"Title":  "Služby",
+		"User":   user,
+		"DBUser": dbUser,
+	}
+
+	h.render(w, "services.html", data)
+}
+
 // ProfileHandler displays and updates user profile
 func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	user := h.auth.GetUser(r)
@@ -539,6 +567,11 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 			dataMap["BannerColor"] = color.Value
 		} else {
 			dataMap["BannerColor"] = "#dc2626"
+		}
+
+		// Inject Keycloak applications for navigation
+		if user, ok := dataMap["User"].(*auth.User); ok && user != nil {
+			dataMap["UserApplications"] = h.auth.GetUserApplications(user.ID)
 		}
 	}
 

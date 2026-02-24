@@ -101,6 +101,7 @@ func main() {
 		r.Use(authenticator.RequireAuth)
 		r.Get("/profile", h.ProfileHandler)
 		r.Post("/profile", h.ProfileHandler)
+		r.Get("/services", h.ServicesHandler)
 		r.Get("/finance", h.MemberFinanceHandler)
 		r.Get("/payments/recent", h.MemberRecentPaymentsHandler)
 		r.Get("/projects", h.MemberProjectsHandler)

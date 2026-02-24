@@ -6,9 +6,14 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -24,6 +29,42 @@ const (
 	sessionUserKey  = "user"
 	sessionStateKey = "oauth_state"
 )
+
+// KeycloakApplication represents a client/service visible in Keycloak
+type KeycloakApplication struct {
+	ClientID     string `json:"clientId"`
+	ClientName   string `json:"clientName"`
+	Description  string `json:"description"`
+	EffectiveURL string `json:"effectiveUrl"`
+	RootURL      string `json:"rootUrl"`
+	BaseURL      string `json:"baseUrl"`
+	LogoURI      string `json:"logoUri"`
+	InUse        bool   `json:"inUse"`
+}
+
+// DisplayName returns ClientName if set, otherwise ClientID
+func (a KeycloakApplication) DisplayName() string {
+	if a.ClientName != "" {
+		return a.ClientName
+	}
+	return a.ClientID
+}
+
+// URL returns the best available URL for the application
+func (a KeycloakApplication) URL() string {
+	if a.EffectiveURL != "" {
+		return a.EffectiveURL
+	}
+	if a.RootURL != "" && a.BaseURL != "" {
+		if joined, err := url.JoinPath(a.RootURL, a.BaseURL); err == nil {
+			return joined
+		}
+	}
+	if a.BaseURL != "" {
+		return a.BaseURL
+	}
+	return a.RootURL
+}
 
 // User represents the authenticated user from Keycloak
 type User struct {
@@ -48,6 +89,9 @@ type Authenticator struct {
 	queries      *db.Queries
 	httpClient   *http.Client // IPv4-only client for Keycloak communication
 	disabled     bool         // true if Keycloak is unavailable
+
+	appCache   map[string][]KeycloakApplication // keyed by Keycloak user ID
+	appCacheMu sync.RWMutex
 }
 
 func init() {
@@ -96,6 +140,7 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 			config:   cfg,
 			queries:  queries,
 			disabled: true,
+			appCache: make(map[string][]KeycloakApplication),
 		}, nil
 	}
 
@@ -131,6 +176,7 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 		queries:      queries,
 		httpClient:   httpClient,
 		disabled:     false,
+		appCache:     make(map[string][]KeycloakApplication),
 	}, nil
 }
 
@@ -257,6 +303,16 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 		Locale:        claims.Locale,
 	}
 
+	// Fetch user's Keycloak applications using the fresh access token
+	// This is cached server-side and does not block login on failure
+	if apps, err := a.fetchUserApplications(r.Context(), token.AccessToken); err != nil {
+		fmt.Printf("⚠ WARNING: Failed to fetch user applications: %v\n", err)
+	} else {
+		a.appCacheMu.Lock()
+		a.appCache[user.ID] = apps
+		a.appCacheMu.Unlock()
+	}
+
 	// Store user in session (but NOT the full token - it's too big for cookies)
 	// For admin operations, we'll use service account instead
 	session.Values[sessionUserKey] = &user
@@ -294,6 +350,13 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 
 // LogoutHandler clears the session and redirects to Keycloak logout
 func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
+	// Evict cached applications before clearing session
+	if user := a.GetUser(r); user != nil {
+		a.appCacheMu.Lock()
+		delete(a.appCache, user.ID)
+		a.appCacheMu.Unlock()
+	}
+
 	session, _ := a.store.Get(r, sessionName)
 	session.Values = make(map[interface{}]interface{})
 	session.Options.MaxAge = -1
@@ -381,6 +444,76 @@ func (u *User) IsActiveMember() bool {
 // IsInDebt checks if user has in_debt role
 func (u *User) IsInDebt() bool {
 	return u.HasRole("in_debt")
+}
+
+// GetUserApplications returns cached Keycloak applications for a user
+func (a *Authenticator) GetUserApplications(userID string) []KeycloakApplication {
+	a.appCacheMu.RLock()
+	defer a.appCacheMu.RUnlock()
+	apps := a.appCache[userID]
+	if len(apps) == 0 {
+		return nil
+	}
+	result := make([]KeycloakApplication, len(apps))
+	copy(result, apps)
+	return result
+}
+
+// fetchUserApplications calls Keycloak Account API to get applications visible to the user.
+// It filters out internal clients and clients without URLs.
+func (a *Authenticator) fetchUserApplications(ctx context.Context, accessToken string) ([]KeycloakApplication, error) {
+	url := fmt.Sprintf("%s/realms/%s/account/applications", a.config.KeycloakURL, a.config.KeycloakRealm)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("calling account API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("account API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var allApps []KeycloakApplication
+	if err := json.NewDecoder(resp.Body).Decode(&allApps); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	// Filter: skip internal clients and clients without usable URLs
+	skipClients := map[string]bool{
+		a.config.KeycloakClientID: true, // our own portal client
+		"account":                 true,
+		"account-console":         true,
+		"admin-cli":               true,
+		"broker":                  true,
+		"realm-management":        true,
+		"security-admin-console":  true,
+	}
+
+	var apps []KeycloakApplication
+	for _, app := range allApps {
+		if skipClients[app.ClientID] {
+			continue
+		}
+		if app.URL() == "" {
+			continue
+		}
+		apps = append(apps, app)
+	}
+
+	sort.Slice(apps, func(i, j int) bool {
+		return apps[i].DisplayName() < apps[j].DisplayName()
+	})
+
+	return apps, nil
 }
 
 // generateState creates a random state string for OAuth2
