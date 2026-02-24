@@ -35,7 +35,7 @@
         </div>
 
         <p class="text-sm text-gray-500 mb-4">
-            Tyto údaje jsou spravovány v Keycloak SSO systému. Pro jejich změnu použijte tlačítko výše.
+            Tyto údaje jsou spravovány v Keycloak SSO systému. Pro jejich změnu použij tlačítko výše.
         </p>
 
         <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
@@ -165,7 +165,7 @@
                 {{else}}
                 <dd class="mt-1 flex items-center gap-3">
                     <input id="vs-input" type="text" pattern="[0-9]*" inputmode="numeric"
-                        placeholder="Zadejte VS"
+                        placeholder="Zadej VS"
                         class="text-sm border-gray-300 rounded-md py-1 px-2 w-28 font-mono">
                     <button onclick="allocateVS(false)" class="btn btn-sm btn-primary">Uložit</button>
                     <button onclick="allocateVS(true)" class="btn btn-sm btn-primary" style="background-color: #059669;">Alokovat auto</button>
@@ -345,7 +345,7 @@ function changeUserEmail() {
     const input = document.getElementById('email-input');
     const newEmail = input.value.trim();
     if (!newEmail) {
-        alert('Zadejte email.');
+        alert('Zadej email.');
         return;
     }
     if (!confirm('Změnit email na: ' + newEmail + '?\n\nToto je nevratná operace pro legacy účty.')) return;
@@ -414,7 +414,7 @@ function changeUserState() {
     const select = document.getElementById('state-select');
     const newState = select.value;
     if (!newState) return;
-    if (!confirm('Opravdu chcete změnit stav na: ' + newState + '?\n\nPokud měníte na "accepted", bude odeslán uvítací e-mail.')) return;
+    if (!confirm('Opravdu chceš změnit stav na: ' + newState + '?\n\nPokud měníš na "accepted", bude odeslán uvítací e-mail.')) return;
 
     fetch('/api/admin/users/{{.TargetDBUser.ID}}/state', {
         method: 'POST',
@@ -437,7 +437,7 @@ function allocateVS(auto) {
     const vs = input.value.trim();
 
     if (!auto && !vs) {
-        alert('Zadejte variabilní symbol nebo použijte automatickou alokaci.');
+        alert('Zadej variabilní symbol nebo použij automatickou alokaci.');
         return;
     }
 

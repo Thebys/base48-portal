@@ -523,6 +523,11 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 		dataMap["BuildDate"] = h.buildDate
 		dataMap["DevMode"] = h.buildDate == "dev"
 
+		// Awaiting member message
+		if msg, err := h.queries.GetSetting(context.Background(), "awaiting_message"); err == nil && msg.Value != "" {
+			dataMap["AwaitingMessage"] = msg.Value
+		}
+
 		// Emergency banner
 		if banner, err := h.queries.GetSetting(context.Background(), "banner_text"); err == nil {
 			dataMap["BannerText"] = banner.Value

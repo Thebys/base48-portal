@@ -46,7 +46,8 @@ type Authenticator struct {
 	store        *sessions.CookieStore
 	config       *config.Config
 	queries      *db.Queries
-	disabled     bool // true if Keycloak is unavailable
+	httpClient   *http.Client // IPv4-only client for Keycloak communication
+	disabled     bool         // true if Keycloak is unavailable
 }
 
 func init() {
@@ -57,12 +58,16 @@ func init() {
 // New creates a new Authenticator instance
 func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authenticator, error) {
 	// Create HTTP client with aggressive timeouts for startup
+	// Force IPv4 — Keycloak's IPv6 endpoint resets TLS connections
+	dialer := &net.Dialer{
+		Timeout: 3 * time.Second,
+	}
 	httpClient := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout: 3 * time.Second,
-			}).DialContext,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, "tcp4", addr)
+			},
 			TLSHandshakeTimeout:   3 * time.Second,
 			ResponseHeaderTimeout: 3 * time.Second,
 		},
@@ -83,7 +88,7 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 			MaxAge:   3600, // 60 minutes — forces re-login to refresh Keycloak roles
 			HttpOnly: true,
 			Secure:   false,
-			SameSite: http.SameSiteStrictMode,
+			SameSite: http.SameSiteLaxMode,
 		}
 
 		return &Authenticator{
@@ -112,7 +117,7 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 		MaxAge:   3600, // 60 minutes — forces re-login to refresh Keycloak roles
 		HttpOnly: true,
 		Secure:   len(cfg.BaseURL) >= 5 && cfg.BaseURL[:5] == "https",
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 	}
 
 	fmt.Println("✓ Keycloak connection established")
@@ -124,6 +129,7 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 		store:        store,
 		config:       cfg,
 		queries:      queries,
+		httpClient:   httpClient,
 		disabled:     false,
 	}, nil
 }
@@ -168,9 +174,10 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	delete(session.Values, sessionStateKey)
 
-	// Exchange code for token
+	// Exchange code for token (use IPv4-only client)
 	code := r.URL.Query().Get("code")
-	token, err := a.oauth2Config.Exchange(r.Context(), code)
+	exchangeCtx := context.WithValue(r.Context(), oauth2.HTTPClient, a.httpClient)
+	token, err := a.oauth2Config.Exchange(exchangeCtx, code)
 	if err != nil {
 		http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
 		return
@@ -285,15 +292,26 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/profile", http.StatusTemporaryRedirect)
 }
 
-// LogoutHandler clears the session
+// LogoutHandler clears the session and redirects to Keycloak logout
 func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := a.store.Get(r, sessionName)
 	session.Values = make(map[interface{}]interface{})
 	session.Options.MaxAge = -1
 	session.Save(r, w)
 
-	// Redirect to Keycloak logout (optional)
-	// For now, just redirect to home
+	// Redirect to Keycloak end_session_endpoint to log out from SSO
+	if a.provider != nil {
+		// Keycloak logout URL with redirect back to our home page
+		logoutURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/logout?post_logout_redirect_uri=%s&client_id=%s",
+			a.config.KeycloakURL,
+			a.config.KeycloakRealm,
+			a.config.BaseURL,
+			a.config.KeycloakClientID,
+		)
+		http.Redirect(w, r, logoutURL, http.StatusTemporaryRedirect)
+		return
+	}
+
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 

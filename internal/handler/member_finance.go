@@ -217,6 +217,12 @@ func (h *Handler) MemberFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Awaiting members don't have access to financial overview
+	if dbUser.State == "awaiting" {
+		http.Redirect(w, r, "/profile", http.StatusTemporaryRedirect)
+		return
+	}
+
 	summary, err := h.buildFinanceSummary(r.Context())
 	if err != nil {
 		http.Error(w, "Failed to load financial data", http.StatusInternalServerError)

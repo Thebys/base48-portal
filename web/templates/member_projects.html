@@ -377,7 +377,7 @@ function setQRAmount(projectId, vs, encodedName) {
     const input = document.getElementById(`qr-amount-${projectId}`);
     const amount = parseInt(input.value);
     if (!amount || amount <= 0) {
-        alert('Zadejte platnou částku.');
+        alert('Zadej platnou částku.');
         return;
     }
     const newSrc = `/api/qr?vs=${vs}&amount=${amount}&msg=${encodedName}`;

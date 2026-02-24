@@ -267,7 +267,7 @@ func (h *Handler) AdminDeleteLevelHandler(w http.ResponseWriter, r *http.Request
 	}
 	for _, c := range feeCounts {
 		if c.LevelID == req.ID && c.Count > 0 {
-			h.jsonError(w, fmt.Sprintf("Nelze smazat — %d historických záznamů poplatků odkazuje na tuto úroveň. Použijte deaktivaci.", c.Count), http.StatusConflict)
+			h.jsonError(w, fmt.Sprintf("Nelze smazat — %d historických záznamů poplatků odkazuje na tuto úroveň. Použij deaktivaci.", c.Count), http.StatusConflict)
 			return
 		}
 	}

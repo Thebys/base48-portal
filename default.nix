@@ -5,7 +5,7 @@ let
 in
 pkgs.buildGoModule rec {
   pname = "base48-portal";
-  version = "1.1.148";
+  version = "1.2.50";
   src = ./.;
 
   vendorHash = "sha256-IVv6aQMOIR8zil9AdMSekAfFVkFV/MD2mrPZoatGkqQ=";

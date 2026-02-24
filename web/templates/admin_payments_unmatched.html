@@ -484,7 +484,7 @@
                                     <input type="text" id="userSearch" placeholder="Hledat podle emailu, jména nebo ID..." oninput="searchUsers()" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
                                     <div id="userList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px;">
                                         <div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">
-                                            Zadejte text pro vyhledání uživatele
+                                            Zadej text pro vyhledání uživatele
                                         </div>
                                     </div>
                                 </div>
@@ -582,7 +582,7 @@
 
             // Reset user search
             document.getElementById('userSearch').value = '';
-            document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">Zadejte text pro vyhledání uživatele</div>';
+            document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">Zadej text pro vyhledání uživatele</div>';
 
             // Load projects for dropdown
             loadProjects();
@@ -640,7 +640,7 @@
 
                 const select = document.getElementById('projectSelect');
                 if (data.projects && data.projects.length > 0) {
-                    select.innerHTML = '<option value="">-- Vyberte projekt --</option>';
+                    select.innerHTML = '<option value="">-- Vyber projekt --</option>';
                     data.projects.forEach(project => {
                         select.innerHTML += `<option value="${project.id}">${project.name} (VS: ${project.payments_id || 'N/A'})</option>`;
                     });
@@ -655,7 +655,7 @@
         async function searchUsers() {
             const query = document.getElementById('userSearch').value;
             if (query.length < 2) {
-                document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">Zadejte alespoň 2 znaky</div>';
+                document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">Zadej alespoň 2 znaky</div>';
                 return;
             }
 
@@ -743,13 +743,13 @@
             // Validate based on assignment type
             if (assignType && assignType.value === 'user') {
                 if (!selectedUserId) {
-                    alert('Prosím vyberte uživatele');
+                    alert('Vyber uživatele');
                     return;
                 }
             } else if (assignType && assignType.value === 'project') {
                 selectedProjectId = parseInt(document.getElementById('projectSelect').value);
                 if (!selectedProjectId) {
-                    alert('Prosím vyberte projekt');
+                    alert('Vyber projekt');
                     return;
                 }
             }

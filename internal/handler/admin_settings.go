@@ -83,6 +83,12 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		emailViews = append(emailViews, view)
 	}
 
+	// Load awaiting member message
+	awaitingMessage := ""
+	if s, err := h.queries.GetSetting(ctx, "awaiting_message"); err == nil {
+		awaitingMessage = s.Value
+	}
+
 	// Load emergency banner settings
 	bannerText := ""
 	bannerEnabled := false
@@ -109,9 +115,10 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"RecentEmails":   emailViews,
 		"OutboxCounts":   countsMap,
 		"SentToday":      sentToday,
-		"CurrentBannerText":    bannerText,
-		"CurrentBannerEnabled": bannerEnabled,
-		"CurrentBannerColor":   bannerColor,
+		"CurrentBannerText":       bannerText,
+		"CurrentBannerEnabled":    bannerEnabled,
+		"CurrentBannerColor":      bannerColor,
+		"CurrentAwaitingMessage":  awaitingMessage,
 	}
 
 	h.render(w, "admin_settings.html", data)
@@ -484,6 +491,27 @@ func (h *Handler) AdminPreviewEmailHandler(w http.ResponseWriter, r *http.Reques
 		"success": true,
 		"html":    rendered,
 	})
+}
+
+// AdminSaveAwaitingMessageHandler saves the awaiting member message.
+// POST /api/admin/awaiting-message
+func (h *Handler) AdminSaveAwaitingMessageHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := h.queries.UpsertSetting(ctx, db.UpsertSettingParams{Key: "awaiting_message", Value: req.Message}); err != nil {
+		h.jsonError(w, "Failed to save awaiting message: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonSuccess(w, "Zpráva uložena")
 }
 
 // AdminSaveBannerHandler saves the emergency banner settings.

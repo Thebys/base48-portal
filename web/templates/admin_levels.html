@@ -129,7 +129,7 @@ function saveEdit(id) {
 
 function toggleLevel(id, active, name) {
     const action = active ? 'aktivovat' : 'deaktivovat';
-    if (!confirm('Opravdu chcete ' + action + ' úroveň "' + name + '"?')) return;
+    if (!confirm('Opravdu chceš ' + action + ' úroveň "' + name + '"?')) return;
 
     fetch('/api/admin/levels/toggle', {
         method: 'POST',
@@ -148,7 +148,7 @@ function toggleLevel(id, active, name) {
 }
 
 function deleteLevel(id, name) {
-    if (!confirm('Opravdu chcete smazat úroveň "' + name + '"? Tato akce je nevratná.')) return;
+    if (!confirm('Opravdu chceš smazat úroveň "' + name + '"? Tato akce je nevratná.')) return;
 
     fetch('/api/admin/levels', {
         method: 'DELETE',

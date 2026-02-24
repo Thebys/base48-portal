@@ -41,6 +41,12 @@ func (h *Handler) MemberProjectsHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Awaiting members don't have access to fundraising
+	if dbUser.State == "awaiting" {
+		http.Redirect(w, r, "/profile", http.StatusTemporaryRedirect)
+		return
+	}
+
 	data := map[string]interface{}{
 		"Title":  "Fundraising",
 		"User":   user,

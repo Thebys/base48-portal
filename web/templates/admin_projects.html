@@ -436,7 +436,7 @@ async function loadProjects() {
         } else {
             container.innerHTML = `
                 <div style="text-align: center; padding: 40px; color: #6b7280;">
-                    Žádné projekty. Vytvořte první projekt pomocí tlačítka "+ Nový projekt".
+                    Žádné projekty. Vytvoř první projekt pomocí tlačítka "+ Nový projekt".
                 </div>
             `;
         }
@@ -506,7 +506,7 @@ async function loadProjectPayments(projectId) {
 }
 
 async function deleteProject(projectId, projectName) {
-    if (!confirm(`Opravdu chcete smazat projekt "${projectName}"? Tato akce je nevratná!`)) {
+    if (!confirm(`Opravdu chceš smazat projekt "${projectName}"? Tato akce je nevratná!`)) {
         return;
     }
 
@@ -583,7 +583,7 @@ window.onclick = function(event) {
 
 // Add VS to project
 async function addVSPrompt(projectId) {
-    const vs = prompt('Zadejte nový variabilní symbol pro projekt:');
+    const vs = prompt('Zadej nový variabilní symbol pro projekt:');
     if (!vs) return;
 
     // Validate VS is numeric
@@ -622,7 +622,7 @@ async function addVSPrompt(projectId) {
 
 // Remove VS from project
 async function removeVS(projectId, vs) {
-    if (!confirm(`Opravdu chcete odebrat VS "${vs}" z projektu?`)) {
+    if (!confirm(`Opravdu chceš odebrat VS "${vs}" z projektu?`)) {
         return;
     }
 
@@ -656,7 +656,7 @@ function setQRAmount(projectId, vs, encodedName) {
     const input = document.getElementById(`qr-amount-${projectId}`);
     const amount = parseInt(input.value);
     if (!amount || amount <= 0) {
-        alert('Zadejte platnou částku.');
+        alert('Zadej platnou částku.');
         return;
     }
     const newSrc = `/api/qr?vs=${vs}&amount=${amount}&msg=${encodedName}`;

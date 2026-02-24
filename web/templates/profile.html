@@ -12,6 +12,31 @@
     </div>
     {{end}}
 
+    {{if eq .DBUser.State "awaiting"}}
+    <!-- Awaiting Member Banner -->
+    <div class="bg-amber-50 border border-amber-300 rounded-lg p-6 mb-6">
+        <div class="flex items-start gap-3">
+            <svg class="h-6 w-6 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div>
+                <h2 class="text-lg font-semibold text-amber-900">Tvoje registrace čeká na schválení</h2>
+                {{if .AwaitingMessage}}
+                <p class="mt-2 text-sm text-amber-800">{{.AwaitingMessage}}</p>
+                {{else}}
+                <p class="mt-2 text-sm text-amber-800">
+                    Tvoje registrace byla přijata a bude posouzena radou na nejbližší schůzi.
+                    Přijď se mezitím podívat do hackerspace, poznej komunitu a buď aktivní — to je nejlepší cesta ke schválení členství.
+                </p>
+                <p class="mt-2 text-sm text-amber-700">
+                    Registrace bez návštěvy a aktivity v komunitě jsou po čase rušeny.
+                </p>
+                {{end}}
+            </div>
+        </div>
+    </div>
+    {{end}}
+
     <!-- Keycloak Account Section (Read-only) -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
         <div class="flex justify-between items-center mb-4">
@@ -26,7 +51,7 @@
         </div>
 
         <p class="text-sm text-gray-500 mb-4">
-            Tyto údaje jsou spravovány v Keycloak SSO systému. Pro jejich změnu použijte tlačítko výše.
+            Tyto údaje jsou spravovány v Keycloak SSO systému. Pro jejich změnu použij tlačítko výše.
         </p>
 
         <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
@@ -74,43 +99,88 @@
 
     <!-- Membership & Balance Overview -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
+        {{if eq .DBUser.State "awaiting"}}
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Stav registrace</h2>
+        <dl class="grid grid-cols-2 {{if .DBUser.PaymentsID.Valid}}sm:grid-cols-3{{end}} gap-4">
+            <div class="bg-purple-50 px-4 py-3 rounded-md text-center">
+                <div class="text-2xl font-bold text-purple-900">{{.DBUser.DateJoined.Format "02.01.2006"}}</div>
+                <div class="text-xs text-purple-600">Datum registrace</div>
+            </div>
+            <div class="bg-amber-50 px-4 py-3 rounded-md text-center">
+                <div class="mt-1"><span class="badge badge-{{ .DBUser.State }}">{{ .DBUser.State }}</span></div>
+                <div class="text-xs text-amber-600 mt-1">Stav registrace</div>
+            </div>
+            {{if .DBUser.PaymentsID.Valid}}
+            <div class="bg-indigo-50 px-4 py-3 rounded-md text-center">
+                <div class="text-2xl font-bold text-indigo-900 font-mono tracking-wider">{{.DBUser.PaymentsID.String}}</div>
+                <div class="text-xs text-indigo-600">Tvůj variabilní symbol (VS)<br>Důležitý pro správné přiřazené plateb</div>
+            </div>
+            <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
+                <div class="text-2xl font-bold text-blue-900">{{fmtNum .TotalPaid}} Kč</div>
+                <div class="text-xs text-blue-600">Zaplaceno celkem · {{len .Payments}} plateb</div>
+            </div>
+            <div class="px-4 py-3 rounded-md text-center {{if ge .Balance 0.0}}bg-green-50{{else}}bg-red-50{{end}}">
+                <div class="text-2xl font-bold {{if ge .Balance 0.0}}text-green-900{{else}}text-red-900{{end}}">{{fmtNum .Balance}} Kč</div>
+                <div class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">Bilance · {{if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}</div>
+            </div>
+            {{end}}
+        </dl>
+
+        {{if .DBUser.PaymentsID.Valid}}
+        {{if .PaymentQRCode}}
+        <!-- QR Payment Code -->
+        <div class="mt-6 pt-6 border-t border-gray-200">
+            <div class="flex flex-col sm:flex-row items-center gap-4">
+                <div class="flex-shrink-0">
+                    <a href="/api/qr?vs={{.TargetDBUser.PaymentsID.String}}&amount={{printf "%.0f" .QRAmount}}" target="_blank" title="Otevřít QR kód pro sdílení do bankovní aplikace">
+                        <img src="{{.PaymentQRCode}}" alt="QR platba" width="150" height="150" class="rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
+                    </a>
+                </div>
+                <div class="text-center sm:text-left">
+                    <h3 class="text-sm font-medium text-gray-900">QR kód pro platbu</h3>
+                    <p class="mt-1 text-sm text-gray-500">
+                        Klikni na QR kód pro otevření v bankovní aplikaci.
+                    </p>
+                    <p class="mt-2 text-sm {{if lt .Balance 0.0}}text-red-600 font-medium{{else}}text-gray-600{{end}}">
+                        Částka: {{printf "%.0f" .QRAmount}} Kč{{if lt .Balance 0.0}} (doplatek dluhu){{end}}
+                    </p>
+                </div>
+            </div>
+        </div>
+        {{end}}
+        {{end}}
+        {{else}}
         <h2 class="text-lg font-medium text-gray-900 mb-4">Členství a platby</h2>
 
-        <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="bg-gray-50 px-4 py-3 rounded-md">
-                <dt class="text-sm font-medium text-gray-500">Úroveň členství</dt>
-                <dd class="mt-1 text-sm text-gray-900 font-semibold">{{.Level.Name}}</dd>
-                <dd class="text-xs text-gray-500">{{.Level.Amount}} Kč/měsíc</dd>
+        <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div class="bg-gray-50 px-4 py-3 rounded-md text-center">
+                <div class="text-2xl font-bold text-gray-900">{{.Level.Name}}</div>
+                <div class="text-xs text-gray-500">Úroveň · {{.Level.Amount}} Kč/měsíc</div>
             </div>
-
-            <div class="bg-gray-50 px-4 py-3 rounded-md">
-                <dt class="text-sm font-medium text-gray-500">Členem od</dt>
-                <dd class="mt-1 text-sm text-gray-900 font-semibold">
-                    {{.DBUser.DateJoined.Format "02.01.2006"}}
-                </dd>
-                <dd class="text-xs text-gray-500">
-                    &nbsp;
-                </dd>
+            <div class="bg-purple-50 px-4 py-3 rounded-md text-center">
+                <div class="text-2xl font-bold text-purple-900">{{.DBUser.DateJoined.Format "02. 01. 2006"}}</div>
+                <div class="text-xs text-purple-600">Členem od</div>
             </div>
-
-            <div class="bg-blue-50 px-4 py-3 rounded-md">
-                <dt class="text-sm font-medium text-blue-700">Zaplaceno celkem</dt>
-                <dd class="mt-1 text-lg font-bold text-blue-900">
-                    {{fmtNum .TotalPaid}} Kč
-                </dd>
-                <dd class="text-xs text-blue-600">
-                    {{len .Payments}} plateb
-                </dd>
+            <div class="bg-indigo-50 px-4 py-3 rounded-md text-center">
+                {{if .DBUser.PaymentsID.Valid}}
+                <div class="text-2xl font-bold text-indigo-900 font-mono tracking-wider">{{.DBUser.PaymentsID.String}}</div>
+                <div class="text-xs text-indigo-600">VS · bez něj vyžaduje platba manuální zásah</div>
+                {{else}}
+                <div class="text-2xl font-bold text-indigo-300">—</div>
+                <div class="text-xs text-indigo-400">VS · nepřiřazen</div>
+                {{end}}
             </div>
-
-            <div class="px-4 py-3 rounded-md {{if ge .Balance 0.0}}bg-green-50{{else}}bg-red-50{{end}}">
-                <dt class="text-sm font-medium {{if ge .Balance 0.0}}text-green-700{{else}}text-red-700{{end}}">Bilance členství</dt>
-                <dd class="mt-1 text-lg font-bold {{if ge .Balance 0.0}}text-green-900{{else}}text-red-900{{end}}">
-                    {{fmtNum .Balance}} Kč
-                </dd>
-                <dd class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">
-                    {{if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}
-                </dd>
+            <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
+                <div class="text-2xl font-bold text-blue-900">{{fmtNum .TotalPaid}} Kč</div>
+                <div class="text-xs text-blue-600">Zaplaceno celkem · {{len .Payments}} plateb</div>
+            </div>
+            <div class="px-4 py-3 rounded-md text-center {{if ge .Balance 0.0}}bg-green-50{{else}}bg-red-50{{end}}">
+                <div class="text-2xl font-bold {{if ge .Balance 0.0}}text-green-900{{else}}text-red-900{{end}}">{{fmtNum .Balance}} Kč</div>
+                <div class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">Bilance · {{if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}</div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 rounded-md text-center">
+                <div class="mt-1"><span class="badge badge-{{ .DBUser.State }}">{{ .DBUser.State }}</span></div>
+                <div class="text-xs text-gray-500 mt-1">Stav členství</div>
             </div>
         </dl>
 
@@ -136,39 +206,45 @@
         </div>
         {{end}}
 
-        <!-- Additional membership details -->
-        <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 mt-4 pt-4 border-t border-gray-200">
-            <div>
-                <dt class="text-sm font-medium text-gray-500">Variabilní symbol pro platbu členského příspěvku</dt>
-                <dd class="mt-1 text-sm text-gray-900 font-mono">{{if .DBUser.PaymentsID.Valid}}{{.DBUser.PaymentsID.String}}{{else}}<span class="text-gray-400">Nepřiřazen</span>{{end}}</dd>
-            </div>
+        {{if .User.Roles}}
+        <div class="mt-4 pt-4 border-t border-gray-200">
+            <dt class="text-sm font-medium text-gray-500 mb-2">Role v systému</dt>
+            <dd class="badge-group">
+                {{range .User.Roles}}
+                <span class="badge badge-role badge-role-{{ . }}">{{ . }}</span>
+                {{end}}
+            </dd>
+        </div>
+        {{end}}
 
-            <div>
-                <dt class="text-sm font-medium text-gray-500">Stav členství</dt>
-                <dd class="mt-1">
-                    <span class="badge badge-{{ .DBUser.State }}">{{ .DBUser.State }}</span>
-                </dd>
-            </div>
-
-            {{if .User.Roles}}
-            <div class="sm:col-span-2">
-                <dt class="text-sm font-medium text-gray-500 mb-2">Role v systému</dt>
-                <dd class="badge-group">
-                    {{range .User.Roles}}
-                    <span class="badge badge-role badge-role-{{ . }}">{{ . }}</span>
-                    {{end}}
-                </dd>
-            </div>
-            {{end}}
-        </dl>
+        {{end}}
     </div>
 
+    {{if eq .DBUser.State "awaiting"}}
+    {{if .AllActiveLevels}}
+    <!-- Membership Levels (informational for awaiting members) -->
+    <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-2">Úrovně členství</h2>
+        <p class="text-sm text-gray-500 mb-4">
+            Po schválení členství si budeš moct zvolit úroveň a nastavit výši příspěvku.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {{range .AllActiveLevels}}
+            <div class="border border-gray-200 rounded-lg p-4">
+                <div class="font-semibold text-gray-900">{{.Name}}</div>
+                <div class="text-sm text-gray-500 mt-1">{{.Amount}} Kč/měsíc</div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+    {{else}}
     {{if .UpgradeLevels}}
     <!-- Membership Level Upgrade -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
         <h2 class="text-lg font-medium text-gray-900 mb-2">Změna úrovně členství</h2>
         <p class="text-sm text-gray-500 mb-4">
-            Podpořte base48 vyšším členským příspěvkem.
+            Podpoř base48 vyšším členským příspěvkem.
         </p>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {{range .UpgradeLevels}}
@@ -180,7 +256,7 @@
                     <div class="text-sm text-gray-500 mt-1">{{.Amount}} Kč/měsíc</div>
                     <button type="submit"
                         class="mt-3 w-full inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        onclick="return confirm('Opravdu chcete přejít na úroveň {{.Name}} ({{.Amount}} Kč/měsíc)?')">
+                        onclick="return confirm('Opravdu chceš přejít na úroveň {{.Name}} ({{.Amount}} Kč/měsíc)?')">
                         Přejít na {{.Name}}
                     </button>
                 </div>
@@ -189,7 +265,9 @@
         </div>
     </div>
     {{end}}
+    {{end}}
 
+    {{if ne .DBUser.State "awaiting"}}
     <!-- Custom Membership Fee Amount (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group">
@@ -208,7 +286,7 @@
             </summary>
             <div class="border-t border-gray-200 px-6 pb-6 pt-4">
                 <p class="text-sm text-gray-500 mb-4">
-                    Můžete dobrovolně platit vyšší členský příspěvek než je minimum pro vaši úroveň členství.
+                    Můžeš dobrovolně platit vyšší členský příspěvek než je minimum pro tvoji úroveň členství.
                     Minimální částka pro úroveň <strong>{{.Level.Name}}</strong> je <strong>{{.Level.Amount}} Kč/měsíc</strong>.
                 </p>
 
@@ -240,6 +318,7 @@
             </div>
         </details>
     </div>
+    {{end}}
 
     <!-- Member Portal User Attributes Section (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
@@ -291,6 +370,7 @@
         </details>
     </div>
 
+    {{if or (ne .DBUser.State "awaiting") .DBUser.PaymentsID.Valid}}
     <!-- Incoming Payments (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group">
@@ -384,5 +464,6 @@
             </div>
         </details>
     </div>
+    {{end}}
 </div>
 {{end}}
