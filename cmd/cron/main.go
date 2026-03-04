@@ -17,7 +17,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: portal-cron <command>\n\nCommands:\n  daemon  Run all jobs on schedule (sync every 2min, fees on 1st of month)\n  sync    Sync FIO payments, update debt/roles, send pending emails\n  fees    Create monthly membership fees\n  report  Report unmatched payments\n")
+		fmt.Fprintf(os.Stderr, "Usage: portal-cron <command>\n\nCommands:\n  daemon       Run all jobs on schedule (sync every 2min, fees on 1st of month)\n  sync         Sync FIO payments, update debt/roles, send pending emails\n  fees         Create monthly membership fees\n  debt-emails  Queue debt warning emails for members with negative balance\n  report       Report unmatched payments\n")
 		os.Exit(1)
 	}
 
@@ -44,6 +44,8 @@ func main() {
 		os.Exit(runSync(ctx, cfg, queries))
 	case "fees":
 		os.Exit(runFees(ctx, cfg, queries))
+	case "debt-emails":
+		os.Exit(runDebtEmails(ctx, cfg, queries))
 	case "report":
 		os.Exit(runReport(ctx, cfg, queries))
 	case "daemon":

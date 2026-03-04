@@ -346,6 +346,15 @@ UPDATE email_outbox SET
 WHERE id = ? AND status = 'pending'
 RETURNING *;
 
+-- name: GetRecentEmailByUserAndTemplate :one
+-- Anti-spam: check if an email of this type was already sent/queued for this user within 30 days
+SELECT * FROM email_outbox
+WHERE user_id = ? AND template_name = ?
+  AND status IN ('pending', 'sent')
+  AND created_at > datetime('now', '-30 days')
+ORDER BY created_at DESC
+LIMIT 1;
+
 -- ============================================================================
 -- EMAIL TEMPLATE CONTENT (editable text blocks)
 -- ============================================================================

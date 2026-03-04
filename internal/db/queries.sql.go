@@ -851,6 +851,43 @@ func (q *Queries) GetProjectVSByVS(ctx context.Context, vs string) (ProjectV, er
 	return i, err
 }
 
+const getRecentEmailByUserAndTemplate = `-- name: GetRecentEmailByUserAndTemplate :one
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox
+WHERE user_id = ? AND template_name = ?
+  AND status IN ('pending', 'sent')
+  AND created_at > datetime('now', '-30 days')
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetRecentEmailByUserAndTemplateParams struct {
+	UserID       sql.NullInt64 `json:"user_id"`
+	TemplateName string        `json:"template_name"`
+}
+
+// Anti-spam: check if an email of this type was already sent/queued for this user within 30 days
+func (q *Queries) GetRecentEmailByUserAndTemplate(ctx context.Context, arg GetRecentEmailByUserAndTemplateParams) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, getRecentEmailByUserAndTemplate, arg.UserID, arg.TemplateName)
+	var i EmailOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSetting = `-- name: GetSetting :one
 
 SELECT "key", value, updated_at FROM settings WHERE key = ? LIMIT 1
