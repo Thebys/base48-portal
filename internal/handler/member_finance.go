@@ -176,8 +176,7 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 	if rentDate != "" {
 		if rd, err := time.Parse("2006-01-02", rentDate); err == nil {
 			currentMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-			prevMonthCutoff := currentMonthStart.AddDate(0, 0, -5)
-			rentPaid = !rd.Before(prevMonthCutoff)
+			rentPaid = !rd.Before(currentMonthStart)
 		}
 	}
 
