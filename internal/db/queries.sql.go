@@ -888,6 +888,42 @@ func (q *Queries) GetRecentEmailByUserAndTemplate(ctx context.Context, arg GetRe
 	return i, err
 }
 
+const getRevbankAccountByUserID = `-- name: GetRevbankAccountByUserID :one
+SELECT id, username, user_id, balance_cents, last_transaction_at, synced_at FROM revbank_accounts WHERE user_id = ? LIMIT 1
+`
+
+func (q *Queries) GetRevbankAccountByUserID(ctx context.Context, userID sql.NullInt64) (RevbankAccount, error) {
+	row := q.db.QueryRowContext(ctx, getRevbankAccountByUserID, userID)
+	var i RevbankAccount
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.UserID,
+		&i.BalanceCents,
+		&i.LastTransactionAt,
+		&i.SyncedAt,
+	)
+	return i, err
+}
+
+const getRevbankAccountByUsername = `-- name: GetRevbankAccountByUsername :one
+SELECT id, username, user_id, balance_cents, last_transaction_at, synced_at FROM revbank_accounts WHERE username = ? LIMIT 1
+`
+
+func (q *Queries) GetRevbankAccountByUsername(ctx context.Context, username string) (RevbankAccount, error) {
+	row := q.db.QueryRowContext(ctx, getRevbankAccountByUsername, username)
+	var i RevbankAccount
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.UserID,
+		&i.BalanceCents,
+		&i.LastTransactionAt,
+		&i.SyncedAt,
+	)
+	return i, err
+}
+
 const getSetting = `-- name: GetSetting :one
 
 SELECT "key", value, updated_at FROM settings WHERE key = ? LIMIT 1
@@ -1029,6 +1065,41 @@ SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id,
 
 func (q *Queries) GetUserByPaymentsID(ctx context.Context, paymentsID sql.NullString) (User, error) {
 	row := q.db.QueryRowContext(ctx, getUserByPaymentsID, paymentsID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Locale,
+	)
+	return i, err
+}
+
+const getUserByUsername = `-- name: GetUserByUsername :one
+
+SELECT id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale FROM users WHERE LOWER(username) = LOWER(?1) LIMIT 1
+`
+
+// ============================================================================
+// REVBANK (Hackerspace kiosk bar/snack accounts)
+// ============================================================================
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByUsername, username)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -1733,6 +1804,161 @@ func (q *Queries) ListRecentPayments(ctx context.Context) ([]Payment, error) {
 			&i.DismissedAt,
 			&i.DismissedBy,
 			&i.DismissedReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRevbankAccounts = `-- name: ListRevbankAccounts :many
+SELECT id, username, user_id, balance_cents, last_transaction_at, synced_at FROM revbank_accounts ORDER BY username
+`
+
+func (q *Queries) ListRevbankAccounts(ctx context.Context) ([]RevbankAccount, error) {
+	rows, err := q.db.QueryContext(ctx, listRevbankAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RevbankAccount{}
+	for rows.Next() {
+		var i RevbankAccount
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.UserID,
+			&i.BalanceCents,
+			&i.LastTransactionAt,
+			&i.SyncedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRevbankRecentTransactions = `-- name: ListRevbankRecentTransactions :many
+SELECT id, transaction_id, username, user_id, amount_cents, description, counter_account, created_at, synced_at FROM revbank_transactions ORDER BY created_at DESC LIMIT ?
+`
+
+func (q *Queries) ListRevbankRecentTransactions(ctx context.Context, limit int64) ([]RevbankTransaction, error) {
+	rows, err := q.db.QueryContext(ctx, listRevbankRecentTransactions, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RevbankTransaction{}
+	for rows.Next() {
+		var i RevbankTransaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.TransactionID,
+			&i.Username,
+			&i.UserID,
+			&i.AmountCents,
+			&i.Description,
+			&i.CounterAccount,
+			&i.CreatedAt,
+			&i.SyncedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRevbankTransactionsByUserID = `-- name: ListRevbankTransactionsByUserID :many
+SELECT id, transaction_id, username, user_id, amount_cents, description, counter_account, created_at, synced_at FROM revbank_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+`
+
+type ListRevbankTransactionsByUserIDParams struct {
+	UserID sql.NullInt64 `json:"user_id"`
+	Limit  int64         `json:"limit"`
+}
+
+func (q *Queries) ListRevbankTransactionsByUserID(ctx context.Context, arg ListRevbankTransactionsByUserIDParams) ([]RevbankTransaction, error) {
+	rows, err := q.db.QueryContext(ctx, listRevbankTransactionsByUserID, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RevbankTransaction{}
+	for rows.Next() {
+		var i RevbankTransaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.TransactionID,
+			&i.Username,
+			&i.UserID,
+			&i.AmountCents,
+			&i.Description,
+			&i.CounterAccount,
+			&i.CreatedAt,
+			&i.SyncedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRevbankTransactionsByUsername = `-- name: ListRevbankTransactionsByUsername :many
+SELECT id, transaction_id, username, user_id, amount_cents, description, counter_account, created_at, synced_at FROM revbank_transactions WHERE username = ? ORDER BY created_at DESC LIMIT ?
+`
+
+type ListRevbankTransactionsByUsernameParams struct {
+	Username string `json:"username"`
+	Limit    int64  `json:"limit"`
+}
+
+func (q *Queries) ListRevbankTransactionsByUsername(ctx context.Context, arg ListRevbankTransactionsByUsernameParams) ([]RevbankTransaction, error) {
+	rows, err := q.db.QueryContext(ctx, listRevbankTransactionsByUsername, arg.Username, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RevbankTransaction{}
+	for rows.Next() {
+		var i RevbankTransaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.TransactionID,
+			&i.Username,
+			&i.UserID,
+			&i.AmountCents,
+			&i.Description,
+			&i.CounterAccount,
+			&i.CreatedAt,
+			&i.SyncedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2546,6 +2772,72 @@ func (q *Queries) UpsertPayment(ctx context.Context, arg UpsertPaymentParams) (P
 		&i.DismissedReason,
 	)
 	return i, err
+}
+
+const upsertRevbankAccount = `-- name: UpsertRevbankAccount :one
+INSERT INTO revbank_accounts (username, user_id, balance_cents, last_transaction_at, synced_at)
+VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)
+ON CONFLICT(username) DO UPDATE SET
+    user_id = excluded.user_id,
+    balance_cents = excluded.balance_cents,
+    last_transaction_at = excluded.last_transaction_at,
+    synced_at = CURRENT_TIMESTAMP
+RETURNING id, username, user_id, balance_cents, last_transaction_at, synced_at
+`
+
+type UpsertRevbankAccountParams struct {
+	Username          string        `json:"username"`
+	UserID            sql.NullInt64 `json:"user_id"`
+	BalanceCents      int64         `json:"balance_cents"`
+	LastTransactionAt sql.NullTime  `json:"last_transaction_at"`
+}
+
+func (q *Queries) UpsertRevbankAccount(ctx context.Context, arg UpsertRevbankAccountParams) (RevbankAccount, error) {
+	row := q.db.QueryRowContext(ctx, upsertRevbankAccount,
+		arg.Username,
+		arg.UserID,
+		arg.BalanceCents,
+		arg.LastTransactionAt,
+	)
+	var i RevbankAccount
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.UserID,
+		&i.BalanceCents,
+		&i.LastTransactionAt,
+		&i.SyncedAt,
+	)
+	return i, err
+}
+
+const upsertRevbankTransaction = `-- name: UpsertRevbankTransaction :exec
+INSERT INTO revbank_transactions (transaction_id, username, user_id, amount_cents, description, counter_account, created_at, synced_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
+ON CONFLICT(transaction_id) DO NOTHING
+`
+
+type UpsertRevbankTransactionParams struct {
+	TransactionID  string         `json:"transaction_id"`
+	Username       string         `json:"username"`
+	UserID         sql.NullInt64  `json:"user_id"`
+	AmountCents    int64          `json:"amount_cents"`
+	Description    string         `json:"description"`
+	CounterAccount sql.NullString `json:"counter_account"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
+func (q *Queries) UpsertRevbankTransaction(ctx context.Context, arg UpsertRevbankTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, upsertRevbankTransaction,
+		arg.TransactionID,
+		arg.Username,
+		arg.UserID,
+		arg.AmountCents,
+		arg.Description,
+		arg.CounterAccount,
+		arg.CreatedAt,
+	)
+	return err
 }
 
 const upsertSetting = `-- name: UpsertSetting :one

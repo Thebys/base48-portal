@@ -11,6 +11,7 @@ sql:
       - "migrations/008_email_outbox_and_templates.sql"
       - "migrations/009_email_multilingual.sql"
       - "migrations/013_settings.sql"
+      - "migrations/015_revbank.sql"
     gen:
       go:
         package: "db"

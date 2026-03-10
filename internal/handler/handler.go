@@ -578,6 +578,7 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 	// Parse templates fresh each time to avoid name conflicts
 	funcMap := template.FuncMap{
 		"fmtNum": formatNumber,
+		"fmtCZK": formatCentsAsCZK,
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseFiles(
 		filepath.Join(h.webRoot, "templates", "layout.html"),
