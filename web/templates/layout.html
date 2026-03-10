@@ -44,21 +44,25 @@
                         </a>
                         {{end}}
                         {{if .User.IsAdmin}}
-                        <a href="/admin/users" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
-                            Správa uživatelů
-                        </a>
-                        <a href="/admin/logs" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
-                            Systémové logy
-                        </a>
-                        <a href="/admin/levels" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
-                            Úrovně
-                        </a>
-                        <a href="/admin/settings" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
-                            Nastavení
-                        </a>
-                        <a href="/admin/revbank" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
-                            RevBank
-                        </a>
+                        <!-- Admin dropdown -->
+                        <div class="relative group/admin inline-flex items-center">
+                            <button class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium gap-1">
+                                Správa
+                                <svg class="w-3.5 h-3.5 transition-transform group-hover/admin:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                            <div class="absolute left-0 top-full pt-1 hidden group-hover/admin:block z-50">
+                                <div class="bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 min-w-[180px]">
+                                    <a href="/admin/users" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Uživatelé</a>
+                                    <a href="/admin/revbank" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">RevBank</a>
+                                    <a href="/admin/levels" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Úrovně</a>
+                                    <div class="border-t border-gray-100 my-1"></div>
+                                    <a href="/admin/logs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Systémové logy</a>
+                                    <a href="/admin/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Nastavení</a>
+                                </div>
+                            </div>
+                        </div>
                         {{end}}
                     </div>
                     {{end}}
@@ -148,11 +152,12 @@
                 {{end}}
                 {{if .User.IsAdmin}}
                 <div class="border-t border-gray-200 my-2"></div>
-                <a href="/admin/users" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Správa uživatelů</a>
-                <a href="/admin/logs" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Systémové logy</a>
-                <a href="/admin/levels" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Úrovně</a>
-                <a href="/admin/settings" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Nastavení</a>
-                <a href="/admin/revbank" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">RevBank</a>
+                <div class="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Správa</div>
+                <a href="/admin/users" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Uživatelé</a>
+                <a href="/admin/revbank" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">RevBank</a>
+                <a href="/admin/levels" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Úrovně</a>
+                <a href="/admin/logs" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Systémové logy</a>
+                <a href="/admin/settings" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Nastavení</a>
                 {{end}}
                 <div class="border-t border-gray-200 my-2"></div>
                 <a href="/auth/logout" class="block px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-gray-100">Logout</a>
