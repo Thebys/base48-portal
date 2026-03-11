@@ -184,7 +184,7 @@
             </div>
             {{if .RevbankAccount}}
             <div class="px-4 py-3 rounded-md text-center {{if ge .RevbankAccount.BalanceCents 0}}bg-amber-50{{else}}bg-red-50{{end}}">
-                <div class="text-2xl font-bold {{if ge .RevbankAccount.BalanceCents 0}}text-amber-900{{else}}text-red-900{{end}}">{{fmtCZK .RevbankAccount.BalanceCents}} Kč</div>
+                <div class="text-2xl font-bold {{if ge .RevbankAccount.BalanceCents 0}}text-amber-900{{else}}text-red-900{{end}}">{{fmtCZKWhole .RevbankAccount.BalanceCents}} Kč</div>
                 <div class="text-xs {{if ge .RevbankAccount.BalanceCents 0}}text-amber-600{{else}}text-red-600{{end}}">Bar kredit</div>
             </div>
             {{end}}

@@ -2121,6 +2121,34 @@ func (q *Queries) RemoveProjectVS(ctx context.Context, arg RemoveProjectVSParams
 	return err
 }
 
+const revbankSalesStats = `-- name: RevbankSalesStats :one
+SELECT
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND date(created_at) = date('now') THEN amount_cents ELSE 0 END), 0) AS sales_today,
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'weekday 1', '-7 days') THEN amount_cents ELSE 0 END), 0) AS sales_this_week,
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS sales_this_month,
+    COALESCE(SUM(CASE WHEN amount_cents > 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS deposits_this_month
+FROM revbank_transactions
+`
+
+type RevbankSalesStatsRow struct {
+	SalesToday        interface{} `json:"sales_today"`
+	SalesThisWeek     interface{} `json:"sales_this_week"`
+	SalesThisMonth    interface{} `json:"sales_this_month"`
+	DepositsThisMonth interface{} `json:"deposits_this_month"`
+}
+
+func (q *Queries) RevbankSalesStats(ctx context.Context) (RevbankSalesStatsRow, error) {
+	row := q.db.QueryRowContext(ctx, revbankSalesStats)
+	var i RevbankSalesStatsRow
+	err := row.Scan(
+		&i.SalesToday,
+		&i.SalesThisWeek,
+		&i.SalesThisMonth,
+		&i.DepositsThisMonth,
+	)
+	return i, err
+}
+
 const undismissPayment = `-- name: UndismissPayment :one
 UPDATE payments SET
     dismissed_at = NULL,

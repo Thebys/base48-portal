@@ -44,8 +44,9 @@ func (h *Handler) RequireRevbankAPIKey(next http.HandlerFunc) http.HandlerFunc {
 // --- Sync types ---
 
 type revbankSyncRequest struct {
-	Accounts     []revbankAccountInput     `json:"accounts"`
-	Transactions []revbankTransactionInput `json:"transactions"`
+	Accounts       []revbankAccountInput  `json:"accounts"`
+	Transactions   []revbankTransactionInput `json:"transactions"`
+	SystemAccounts map[string]int64       `json:"system_accounts,omitempty"`
 }
 
 type revbankAccountInput struct {
@@ -176,6 +177,16 @@ func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp.UsersMatched = len(matchedSet)
 
+	// Store system account balances (cash register, sales totals, etc.)
+	if len(req.SystemAccounts) > 0 {
+		if sysJSON, err := json.Marshal(req.SystemAccounts); err == nil {
+			h.queries.UpsertSetting(ctx, db.UpsertSettingParams{
+				Key:   "revbank_system_accounts",
+				Value: string(sysJSON),
+			})
+		}
+	}
+
 	// Update last sync timestamp
 	h.queries.UpsertSetting(ctx, db.UpsertSettingParams{
 		Key:   "revbank_last_sync",
@@ -206,21 +217,49 @@ func (h *Handler) AdminRevbankHandler(w http.ResponseWriter, r *http.Request) {
 		Valid:  true,
 	})
 
-	accounts, _ := h.queries.ListRevbankAccounts(ctx)
-	transactions, _ := h.queries.ListRevbankRecentTransactions(ctx, 50)
+	accounts, err := h.queries.ListRevbankAccounts(ctx)
+	if err != nil {
+		log.Printf("[RevBank] Failed to list accounts: %v", err)
+	}
+	transactions, err := h.queries.ListRevbankRecentTransactions(ctx, 50)
+	if err != nil {
+		log.Printf("[RevBank] Failed to list transactions: %v", err)
+	}
 
 	var lastSync string
 	if setting, err := h.queries.GetSetting(ctx, "revbank_last_sync"); err == nil {
 		lastSync = setting.Value
 	}
 
+	// Sales aggregate stats
+	stats, err := h.queries.RevbankSalesStats(ctx)
+	if err != nil {
+		log.Printf("[RevBank] Failed to get sales stats: %v", err)
+	}
+
+	// System accounts (cash register, sales totals)
+	// RevBank uses negative balances for source accounts (-cash, -cash/skimmed)
+	// We negate them for display (show as positive amounts)
+	var cashRegister int64
+	if setting, err := h.queries.GetSetting(ctx, "revbank_system_accounts"); err == nil {
+		var sysAccounts map[string]int64
+		if json.Unmarshal([]byte(setting.Value), &sysAccounts) == nil {
+			cashRegister = -sysAccounts["-cash"]
+		}
+	}
+
 	data := map[string]interface{}{
-		"Title":        "RevBank",
-		"User":         user,
-		"DBUser":       adminDBUser,
-		"Accounts":     accounts,
-		"Transactions": transactions,
-		"LastSync":     lastSync,
+		"Title":             "RevBank",
+		"User":              user,
+		"DBUser":            adminDBUser,
+		"Accounts":          accounts,
+		"Transactions":      transactions,
+		"LastSync":          lastSync,
+		"SalesToday":        -toInt64(stats.SalesToday),
+		"SalesThisWeek":     -toInt64(stats.SalesThisWeek),
+		"SalesThisMonth":    -toInt64(stats.SalesThisMonth),
+		"DepositsThisMonth": toInt64(stats.DepositsThisMonth),
+		"CashRegister":      cashRegister,
 	}
 
 	h.render(w, "admin_revbank.html", data)
@@ -253,6 +292,29 @@ func parseFlexibleTime(s string) (time.Time, error) {
 	}
 	// RevBank format: 2026-03-10_22:36:06
 	return time.Parse("2006-01-02_15:04:05", s)
+}
+
+// toInt64 converts interface{} from SQLite COALESCE results to int64.
+func toInt64(v interface{}) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case float64:
+		return int64(n)
+	case int:
+		return int64(n)
+	default:
+		return 0
+	}
+}
+
+// formatCentsAsWholeCZK formats cents as whole CZK: 2500 → "25", -5000 → "-50".
+func formatCentsAsWholeCZK(cents int64) string {
+	czk := cents / 100
+	if czk < 0 {
+		return fmt.Sprintf("-%s", formatNumber(-czk))
+	}
+	return formatNumber(czk)
 }
 
 // formatCentsAsCZK formats cents as "25,00" or "-10,50".

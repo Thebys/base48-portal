@@ -168,14 +168,38 @@ Simple data overview:
 
 ## Kiosk Sync Script
 
-Bash + curl/jq, runs via cron. No Perl.
+**Source**: [`contrib/revbank-sync.sh`](../contrib/revbank-sync.sh) in this repository.
 
+Bash script (no Perl dependency) that parses RevBank data files and POSTs them
+to the portal API. Designed to run via cron on the kiosk machine.
+
+**Requirements**: bash, awk, jq, curl
+
+**How it works**:
+1. Parses `~/.revbank/accounts` → account balances (skips system accounts)
+2. Parses `~/.revbank/log` → CHECKOUT lines for user-facing transactions
+3. Builds JSON payload, POSTs to `POST /api/revbank/sync`
+4. Tracks position in `~/.revbank/.sync_cursor` for incremental log sync
+
+**Deployment on kiosk**:
 ```bash
-#!/bin/bash
-# Parses ~/.revbank/accounts and log, POSTs to portal, pulls products
+# Copy script to kiosk
+scp contrib/revbank-sync.sh kiosk:/usr/local/bin/revbank-sync.sh
+chmod +x /usr/local/bin/revbank-sync.sh
+
+# Add cron job (as the user that owns ~/.revbank/)
+crontab -e
+# * * * * * REVBANK_PORTAL_URL=https://members.base48.cz REVBANK_API_KEY=<key> /usr/local/bin/revbank-sync.sh
 ```
 
-Tracks sync position in `~/.revbank/.sync_cursor` for incremental log sync.
+**Local testing**:
+```bash
+# Create test data dir or point to real data
+export REVBANK_DATA_DIR=/tmp/revbank-test/.revbank
+export REVBANK_PORTAL_URL=http://localhost:4848
+export REVBANK_API_KEY=test-key
+bash contrib/revbank-sync.sh
+```
 
 ## Security
 
