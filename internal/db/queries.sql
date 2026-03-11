@@ -459,3 +459,51 @@ GROUP BY 1;
 SELECT * FROM payments
 WHERE date >= date('now', 'start of month', '-1 month')
 ORDER BY date DESC;
+
+-- ============================================================================
+-- REVBANK (Hackerspace kiosk bar/snack accounts)
+-- ============================================================================
+
+-- name: GetUserByUsername :one
+SELECT * FROM users WHERE LOWER(username) = LOWER(sqlc.arg(username)) LIMIT 1;
+
+-- name: UpsertRevbankAccount :one
+INSERT INTO revbank_accounts (username, user_id, balance_cents, last_transaction_at, synced_at)
+VALUES (sqlc.arg(username), sqlc.arg(user_id), sqlc.arg(balance_cents), sqlc.arg(last_transaction_at), CURRENT_TIMESTAMP)
+ON CONFLICT(username) DO UPDATE SET
+    user_id = excluded.user_id,
+    balance_cents = excluded.balance_cents,
+    last_transaction_at = excluded.last_transaction_at,
+    synced_at = CURRENT_TIMESTAMP
+RETURNING *;
+
+-- name: UpsertRevbankTransaction :exec
+INSERT INTO revbank_transactions (transaction_id, username, user_id, amount_cents, description, counter_account, created_at, synced_at)
+VALUES (sqlc.arg(transaction_id), sqlc.arg(username), sqlc.arg(user_id), sqlc.arg(amount_cents), sqlc.arg(description), sqlc.arg(counter_account), sqlc.arg(created_at), CURRENT_TIMESTAMP)
+ON CONFLICT(transaction_id) DO NOTHING;
+
+-- name: GetRevbankAccountByUserID :one
+SELECT * FROM revbank_accounts WHERE user_id = ? LIMIT 1;
+
+-- name: GetRevbankAccountByUsername :one
+SELECT * FROM revbank_accounts WHERE username = ? LIMIT 1;
+
+-- name: ListRevbankTransactionsByUserID :many
+SELECT * FROM revbank_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?;
+
+-- name: ListRevbankTransactionsByUsername :many
+SELECT * FROM revbank_transactions WHERE username = ? ORDER BY created_at DESC LIMIT ?;
+
+-- name: ListRevbankAccounts :many
+SELECT * FROM revbank_accounts ORDER BY username;
+
+-- name: ListRevbankRecentTransactions :many
+SELECT * FROM revbank_transactions ORDER BY created_at DESC LIMIT ?;
+
+-- name: RevbankSalesStats :one
+SELECT
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND date(created_at) = date('now') THEN amount_cents ELSE 0 END), 0) AS sales_today,
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'weekday 1', '-7 days') THEN amount_cents ELSE 0 END), 0) AS sales_this_week,
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS sales_this_month,
+    COALESCE(SUM(CASE WHEN amount_cents > 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS deposits_this_month
+FROM revbank_transactions;

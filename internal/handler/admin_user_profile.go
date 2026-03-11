@@ -214,7 +214,7 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 		}
 	}
 
-	return map[string]interface{}{
+	data := map[string]interface{}{
 		"ViewedUser":         targetUser,    // The user being viewed (renamed for clarity)
 		"TargetDBUser":       targetDBUser,  // The user being viewed (DB record)
 		"Level":              level,
@@ -228,7 +228,22 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 		"IsAdminView":        false, // Default, will be overridden if admin view
 		"PaymentQRCode":      template.URL(paymentQRCode), // Mark as safe URL for template
 		"QRAmount":           qrAmount,
-	}, nil
+	}
+
+	// RevBank bar balance (if user has a username)
+	if targetDBUser.Username.Valid && targetDBUser.Username.String != "" {
+		revbankAccount, err := h.queries.GetRevbankAccountByUsername(ctx, strings.ToLower(targetDBUser.Username.String))
+		if err == nil {
+			data["RevbankAccount"] = revbankAccount
+			txns, _ := h.queries.ListRevbankTransactionsByUsername(ctx, db.ListRevbankTransactionsByUsernameParams{
+				Username: strings.ToLower(targetDBUser.Username.String),
+				Limit:    10,
+			})
+			data["RevbankTransactions"] = txns
+		}
+	}
+
+	return data, nil
 }
 
 // fetchKeycloakUserByID fetches a user from Keycloak by their ID.

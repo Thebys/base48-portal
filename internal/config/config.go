@@ -45,6 +45,9 @@ type Config struct {
 	EmailEnabled  bool   // Global email toggle
 	BankAccountCZ string // Czech bank account number for payment emails
 
+	// RevBank
+	RevbankAPIKey string
+
 	// Paths
 	WebRoot string // Base directory for web assets (templates, static files)
 }
@@ -74,6 +77,7 @@ func Load() (*Config, error) {
 		SMTPSkipTLS:                        getEnvBool("SMTP_SKIP_TLS", false),
 		EmailEnabled:                       getEnvBool("EMAIL_ENABLED", false),
 		BankAccountCZ:                      getEnv("BANK_ACCOUNT_CZ", "2800691518/2010"),
+		RevbankAPIKey:                      getEnv("REVBANK_API_KEY", ""),
 		WebRoot:                            getEnv("WEB_ROOT", "web"),
 	}
 

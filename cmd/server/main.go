@@ -114,6 +114,11 @@ func main() {
 		r.Get("/projects/payments", h.MemberProjectPaymentsHandler)
 	})
 
+	// RevBank API (API key auth, no session)
+	r.Route("/api/revbank", func(r chi.Router) {
+		r.Post("/sync", h.RequireRevbankAPIKey(h.RevbankSyncHandler))
+	})
+
 	// Admin routes (requires memberportal_admin role)
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(authenticator.RequireAuth)
@@ -126,6 +131,7 @@ func main() {
 		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))
 		r.Get("/levels", h.RequireAdmin(h.AdminLevelsHandler))
 		r.Get("/settings", h.RequireAdmin(h.AdminSettingsHandler))
+		r.Get("/revbank", h.RequireAdmin(h.AdminRevbankHandler))
 	})
 
 	// Admin API routes (requires memberportal_admin role)

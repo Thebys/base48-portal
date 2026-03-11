@@ -87,6 +87,27 @@ type ProjectV struct {
 	CreatedAt sql.NullTime   `json:"created_at"`
 }
 
+type RevbankAccount struct {
+	ID                int64         `json:"id"`
+	Username          string        `json:"username"`
+	UserID            sql.NullInt64 `json:"user_id"`
+	BalanceCents      int64         `json:"balance_cents"`
+	LastTransactionAt sql.NullTime  `json:"last_transaction_at"`
+	SyncedAt          time.Time     `json:"synced_at"`
+}
+
+type RevbankTransaction struct {
+	ID             int64          `json:"id"`
+	TransactionID  string         `json:"transaction_id"`
+	Username       string         `json:"username"`
+	UserID         sql.NullInt64  `json:"user_id"`
+	AmountCents    int64          `json:"amount_cents"`
+	Description    string         `json:"description"`
+	CounterAccount sql.NullString `json:"counter_account"`
+	CreatedAt      time.Time      `json:"created_at"`
+	SyncedAt       time.Time      `json:"synced_at"`
+}
+
 type Setting struct {
 	Key       string    `json:"key"`
 	Value     string    `json:"value"`

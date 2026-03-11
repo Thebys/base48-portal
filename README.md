@@ -46,7 +46,15 @@ portal-cron fees     # Měsíční poplatky (1. den v měsíci)
 portal-cron report   # Report nespárovaných plateb (ad-hoc)
 ```
 
+## RevBank (bar kiosek)
+
+Integrace s [RevBank](https://github.com/vega-d/revbank) kioskem.
+Sync script: [`contrib/revbank-sync.sh`](contrib/revbank-sync.sh) — běží na kiosku via cron, pushuje data do portálu.
+
+Detaily: [docs/REVBANK_INTEGRATION.md](docs/REVBANK_INTEGRATION.md)
+
 ## Dokumentace
 
 - [Keycloak setup](docs/KEYCLOAK_SETUP.md)
+- [RevBank integrace](docs/REVBANK_INTEGRATION.md)
 - [Specifikace](SPEC.md)
