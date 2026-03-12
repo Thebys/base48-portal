@@ -502,7 +502,7 @@ SELECT * FROM revbank_transactions ORDER BY created_at DESC LIMIT ?;
 
 -- name: RevbankSalesStats :one
 SELECT
-    COALESCE(SUM(CASE WHEN amount_cents < 0 AND date(created_at) = date('now') THEN amount_cents ELSE 0 END), 0) AS sales_today,
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now') AND created_at < date('now', '+1 day') THEN amount_cents ELSE 0 END), 0) AS sales_today,
     COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'weekday 1', '-7 days') THEN amount_cents ELSE 0 END), 0) AS sales_this_week,
     COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS sales_this_month,
     COALESCE(SUM(CASE WHEN amount_cents > 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS deposits_this_month
