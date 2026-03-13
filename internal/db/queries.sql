@@ -501,9 +501,17 @@ SELECT * FROM revbank_accounts ORDER BY username;
 SELECT * FROM revbank_transactions ORDER BY created_at DESC LIMIT ?;
 
 -- name: RevbankSalesStats :one
+-- Exclude both Undo transactions and the original transactions they reversed.
+-- Undo description format: "Undo N" where N is the transaction number (e.g. _T156_ in the ID).
 SELECT
     COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now') AND created_at < date('now', '+1 day') THEN amount_cents ELSE 0 END), 0) AS sales_today,
     COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'weekday 1', '-7 days') THEN amount_cents ELSE 0 END), 0) AS sales_this_week,
     COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS sales_this_month,
     COALESCE(SUM(CASE WHEN amount_cents > 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS deposits_this_month
-FROM revbank_transactions;
+FROM revbank_transactions rt
+WHERE rt.description NOT LIKE 'Undo %'
+AND NOT EXISTS (
+    SELECT 1 FROM revbank_transactions u
+    WHERE u.description LIKE 'Undo %'
+    AND INSTR(rt.transaction_id, '_T' || SUBSTR(u.description, 6) || '_') > 0
+);
