@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/db"
@@ -763,4 +764,156 @@ func (h *Handler) AdminUpdateUserEmailHandler(w http.ResponseWriter, r *http.Req
 	})
 
 	h.jsonSuccess(w, fmt.Sprintf("Email změněn na %s", req.Email))
+}
+
+// AdminDeleteFeeHandler deletes a fee record for a user
+// DELETE /api/admin/users/{id}/fees/{feeId}
+func (h *Handler) AdminDeleteFeeHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+	ctx := r.Context()
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	feeIDStr := chi.URLParam(r, "feeId")
+	feeID, err := strconv.ParseInt(feeIDStr, 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid fee ID", http.StatusBadRequest)
+		return
+	}
+
+	// Verify fee exists and belongs to this user
+	fee, err := h.queries.GetFee(ctx, feeID)
+	if err != nil {
+		h.jsonError(w, "Fee not found", http.StatusNotFound)
+		return
+	}
+	if fee.UserID != userID {
+		h.jsonError(w, "Fee does not belong to this user", http.StatusBadRequest)
+		return
+	}
+
+	// Delete the fee
+	if err := h.queries.DeleteFee(ctx, feeID); err != nil {
+		h.jsonError(w, "Failed to delete fee: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Log the action
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+		String: user.ID, Valid: true,
+	})
+	targetUser, _ := h.queries.GetUserByID(ctx, userID)
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "admin",
+		Level:     "warning",
+		UserID:    sql.NullInt64{Int64: userID, Valid: true},
+		Message: fmt.Sprintf("Fee deleted: %s Kč for period %s (user: %s, by admin: %s)",
+			fee.Amount, fee.PeriodStart.Format("2006-01"), targetUser.Email, adminDBUser.Email),
+		Metadata: logMetadata(map[string]interface{}{
+			"fee_id":      feeID,
+			"fee_amount":  fee.Amount,
+			"period":      fee.PeriodStart.Format("2006-01"),
+			"admin_email": adminDBUser.Email,
+		}),
+	})
+
+	h.jsonSuccess(w, fmt.Sprintf("Fee %s Kč za %s smazán", fee.Amount, fee.PeriodStart.Format("01/2006")))
+}
+
+// AdminCreateFeeHandler creates a manual fee record for a user
+// POST /api/admin/users/{id}/fees
+func (h *Handler) AdminCreateFeeHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+	ctx := r.Context()
+
+	userIDStr := chi.URLParam(r, "id")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		PeriodStart string `json:"period_start"` // "2026-03" format
+		Amount      string `json:"amount"`        // e.g. "1000" or "0"
+		LevelID     int64  `json:"level_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.PeriodStart == "" || req.Amount == "" || req.LevelID == 0 {
+		h.jsonError(w, "Missing required fields: period_start, amount, level_id", http.StatusBadRequest)
+		return
+	}
+
+	// Parse period_start "2026-03" to time.Time (first day of month)
+	periodTime, err := time.Parse("2006-01", req.PeriodStart)
+	if err != nil {
+		h.jsonError(w, "Invalid period format, use YYYY-MM", http.StatusBadRequest)
+		return
+	}
+
+	// Verify user exists
+	targetUser, err := h.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		h.jsonError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Check if fee already exists for this period
+	_, err = h.queries.GetFeeByUserAndPeriod(ctx, db.GetFeeByUserAndPeriodParams{
+		UserID:      userID,
+		PeriodStart: periodTime,
+	})
+	if err == nil {
+		h.jsonError(w, fmt.Sprintf("Fee pro období %s již existuje. Nejdřív ho smažte.", req.PeriodStart), http.StatusConflict)
+		return
+	}
+
+	// Verify level exists
+	level, err := h.queries.GetLevel(ctx, req.LevelID)
+	if err != nil {
+		h.jsonError(w, "Level not found", http.StatusNotFound)
+		return
+	}
+
+	// Create the fee
+	newFee, err := h.queries.CreateFee(ctx, db.CreateFeeParams{
+		UserID:      userID,
+		LevelID:     req.LevelID,
+		PeriodStart: periodTime,
+		Amount:      req.Amount,
+	})
+	if err != nil {
+		h.jsonError(w, "Failed to create fee: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Log the action
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+		String: user.ID, Valid: true,
+	})
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "admin",
+		Level:     "warning",
+		UserID:    sql.NullInt64{Int64: userID, Valid: true},
+		Message: fmt.Sprintf("Manual fee created: %s Kč for period %s, level %s (user: %s, by admin: %s)",
+			req.Amount, req.PeriodStart, level.Name, targetUser.Email, adminDBUser.Email),
+		Metadata: logMetadata(map[string]interface{}{
+			"fee_id":      newFee.ID,
+			"fee_amount":  req.Amount,
+			"level_name":  level.Name,
+			"period":      req.PeriodStart,
+			"admin_email": adminDBUser.Email,
+		}),
+	})
+
+	h.jsonSuccess(w, fmt.Sprintf("Fee %s Kč za %s vytvořen (úroveň: %s)", req.Amount, req.PeriodStart, level.Name))
 }

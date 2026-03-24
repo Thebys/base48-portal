@@ -182,6 +182,9 @@ RETURNING *;
 -- name: GetFeeByUserAndPeriod :one
 SELECT * FROM fees WHERE user_id = sqlc.arg(user_id) AND period_start = substr(sqlc.arg(period_start), 1, 10) LIMIT 1;
 
+-- name: DeleteFee :exec
+DELETE FROM fees WHERE id = ?;
+
 -- name: ListAcceptedUsersForFees :many
 SELECT u.*, l.amount as level_amount
 FROM users u
