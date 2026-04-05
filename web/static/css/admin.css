@@ -572,5 +572,6 @@ main :has(> table) {
 
 @media print {
     .bar-guide-screen-only { display: none !important; }
+    body:has(.bar-guide) > *:not(.bar-guide) { display: none !important; }
     .bar-guide { border: none; }
 }
