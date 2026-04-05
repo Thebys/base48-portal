@@ -196,7 +196,7 @@ main() {
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${API_KEY}" \
         -d "$payload" \
-        "${PORTAL_URL}/api/revbank/sync")
+        "${PORTAL_URL}/api/bar/sync")
 
     http_code=$(echo "$response" | tail -1)
     local body
