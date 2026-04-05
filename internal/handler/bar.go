@@ -17,11 +17,11 @@ import (
 
 // --- API key middleware ---
 
-// RequireRevbankAPIKey validates Bearer token against REVBANK_API_KEY.
-func (h *Handler) RequireRevbankAPIKey(next http.HandlerFunc) http.HandlerFunc {
+// RequireBarAPIKey validates Bearer token against REVBANK_API_KEY.
+func (h *Handler) RequireBarAPIKey(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.config.RevbankAPIKey == "" {
-			http.Error(w, `{"error":"revbank API key not configured"}`, http.StatusServiceUnavailable)
+			http.Error(w, `{"error":"bar API key not configured"}`, http.StatusServiceUnavailable)
 			return
 		}
 
@@ -44,9 +44,9 @@ func (h *Handler) RequireRevbankAPIKey(next http.HandlerFunc) http.HandlerFunc {
 // --- Sync types ---
 
 type revbankSyncRequest struct {
-	Accounts       []revbankAccountInput  `json:"accounts"`
+	Accounts       []revbankAccountInput     `json:"accounts"`
 	Transactions   []revbankTransactionInput `json:"transactions"`
-	SystemAccounts map[string]int64       `json:"system_accounts,omitempty"`
+	SystemAccounts map[string]int64          `json:"system_accounts,omitempty"`
 }
 
 type revbankAccountInput struct {
@@ -73,8 +73,8 @@ type revbankSyncResponse struct {
 
 // --- Sync endpoint ---
 
-// RevbankSyncHandler handles POST /api/revbank/sync
-func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
+// BarSyncHandler handles POST /api/bar/sync
+func (h *Handler) BarSyncHandler(w http.ResponseWriter, r *http.Request) {
 	// Limit body size (10MB)
 	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 
@@ -89,7 +89,7 @@ func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
 	// Build username -> user_id map (one query for all users)
 	allUsers, err := h.queries.ListUsers(ctx)
 	if err != nil {
-		log.Printf("[RevBank] Failed to list users: %v", err)
+		log.Printf("[Bar] Failed to list users: %v", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -105,7 +105,7 @@ func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Sync accounts
 	for _, acct := range req.Accounts {
-		if !isValidRevbankUsername(acct.Username) {
+		if !isValidBarUsername(acct.Username) {
 			continue
 		}
 
@@ -131,7 +131,7 @@ func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
 			LastTransactionAt: lastTx,
 		})
 		if err != nil {
-			log.Printf("[RevBank] Failed to upsert account %s: %v", acct.Username, err)
+			log.Printf("[Bar] Failed to upsert account %s: %v", acct.Username, err)
 			continue
 		}
 		resp.AccountsSynced++
@@ -142,7 +142,7 @@ func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
 		if tx.ID == "" || tx.Username == "" || len(tx.ID) > 200 || len(tx.Description) > 500 {
 			continue
 		}
-		if !isValidRevbankUsername(tx.Username) {
+		if !isValidBarUsername(tx.Username) {
 			continue
 		}
 		if math.Abs(float64(tx.AmountCents)) > 10_000_000 {
@@ -169,7 +169,7 @@ func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:      createdAt,
 		})
 		if err != nil {
-			log.Printf("[RevBank] Failed to upsert transaction %s: %v", tx.ID, err)
+			log.Printf("[Bar] Failed to upsert transaction %s: %v", tx.ID, err)
 			continue
 		}
 		resp.TransactionsSynced++
@@ -195,7 +195,7 @@ func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Log
 	h.queries.CreateLog(ctx, db.CreateLogParams{
-		Subsystem: "revbank",
+		Subsystem: "bar",
 		Level:     "info",
 		Message: fmt.Sprintf("Sync: %d accounts, %d transactions, %d matched",
 			resp.AccountsSynced, resp.TransactionsSynced, resp.UsersMatched),
@@ -207,8 +207,8 @@ func (h *Handler) RevbankSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 // --- Admin page ---
 
-// AdminRevbankHandler renders the admin RevBank overview page.
-func (h *Handler) AdminRevbankHandler(w http.ResponseWriter, r *http.Request) {
+// AdminBarHandler renders the admin Bar overview page.
+func (h *Handler) AdminBarHandler(w http.ResponseWriter, r *http.Request) {
 	user := h.auth.GetUser(r)
 	ctx := r.Context()
 
@@ -219,11 +219,11 @@ func (h *Handler) AdminRevbankHandler(w http.ResponseWriter, r *http.Request) {
 
 	accounts, err := h.queries.ListRevbankAccounts(ctx)
 	if err != nil {
-		log.Printf("[RevBank] Failed to list accounts: %v", err)
+		log.Printf("[Bar] Failed to list accounts: %v", err)
 	}
 	transactions, err := h.queries.ListRevbankRecentTransactions(ctx, 50)
 	if err != nil {
-		log.Printf("[RevBank] Failed to list transactions: %v", err)
+		log.Printf("[Bar] Failed to list transactions: %v", err)
 	}
 
 	var lastSync string
@@ -234,11 +234,11 @@ func (h *Handler) AdminRevbankHandler(w http.ResponseWriter, r *http.Request) {
 	// Sales aggregate stats
 	stats, err := h.queries.RevbankSalesStats(ctx)
 	if err != nil {
-		log.Printf("[RevBank] Failed to get sales stats: %v", err)
+		log.Printf("[Bar] Failed to get sales stats: %v", err)
 	}
 
 	// System accounts (cash register, sales totals)
-	// RevBank uses negative balances for source accounts (-cash, -cash/skimmed)
+	// Bar uses negative balances for source accounts (-cash, -cash/skimmed)
 	// We negate them for display (show as positive amounts)
 	var cashRegister int64
 	if setting, err := h.queries.GetSetting(ctx, "revbank_system_accounts"); err == nil {
@@ -249,7 +249,7 @@ func (h *Handler) AdminRevbankHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"Title":             "RevBank",
+		"Title":             "Bar",
 		"User":              user,
 		"DBUser":            adminDBUser,
 		"Accounts":          accounts,
@@ -262,13 +262,13 @@ func (h *Handler) AdminRevbankHandler(w http.ResponseWriter, r *http.Request) {
 		"CashRegister":      cashRegister,
 	}
 
-	h.render(w, "admin_revbank.html", data)
+	h.render(w, "admin_bar.html", data)
 }
 
 // --- Helpers ---
 
-// isValidRevbankUsername returns true for normal user accounts (not hidden/system).
-func isValidRevbankUsername(name string) bool {
+// isValidBarUsername returns true for normal user accounts (not hidden/system).
+func isValidBarUsername(name string) bool {
 	if name == "" || len(name) > 100 {
 		return false
 	}
@@ -330,4 +330,83 @@ func formatCentsAsCZK(cents int64) string {
 		return "-" + s
 	}
 	return s
+}
+
+// AdminBarCardsHandler renders the barcode card generator page.
+func (h *Handler) AdminBarCardsHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+	ctx := r.Context()
+
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
+		String: user.ID,
+		Valid:  true,
+	})
+
+	members, err := h.queries.ListAcceptedUsersWithUsername(ctx)
+	if err != nil {
+		log.Printf("[Bar] Failed to list members for cards: %v", err)
+	}
+
+	data := map[string]interface{}{
+		"Title":   "Bar — Kartičky",
+		"User":    user,
+		"DBUser":  adminDBUser,
+		"Members": members,
+	}
+
+	h.render(w, "admin_bar_cards.html", data)
+}
+
+// AdminBarGuidesHandler renders the guides listing page.
+func (h *Handler) AdminBarGuidesHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(r.Context(), sql.NullString{
+		String: user.ID,
+		Valid:  true,
+	})
+
+	data := map[string]interface{}{
+		"Title":  "Bar — Návody",
+		"User":   user,
+		"DBUser": adminDBUser,
+	}
+
+	h.render(w, "admin_bar_guides.html", data)
+}
+
+// AdminBarGuideBuyHandler renders the "Jak nakupovat" printable guide.
+func (h *Handler) AdminBarGuideBuyHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(r.Context(), sql.NullString{
+		String: user.ID,
+		Valid:  true,
+	})
+
+	data := map[string]interface{}{
+		"Title":  "Jak nakupovat",
+		"User":   user,
+		"DBUser": adminDBUser,
+	}
+
+	h.render(w, "admin_bar_guide_buy.html", data)
+}
+
+// AdminBarGuideDepositHandler renders the "Jak dobíjet" printable guide.
+func (h *Handler) AdminBarGuideDepositHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r)
+
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(r.Context(), sql.NullString{
+		String: user.ID,
+		Valid:  true,
+	})
+
+	data := map[string]interface{}{
+		"Title":  "Jak dobíjet",
+		"User":   user,
+		"DBUser": adminDBUser,
+	}
+
+	h.render(w, "admin_bar_guide_deposit.html", data)
 }

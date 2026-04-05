@@ -114,9 +114,13 @@ func main() {
 		r.Get("/projects/payments", h.MemberProjectPaymentsHandler)
 	})
 
-	// RevBank API (API key auth, no session)
-	r.Route("/api/revbank", func(r chi.Router) {
-		r.Post("/sync", h.RequireRevbankAPIKey(h.RevbankSyncHandler))
+	// Bar API (RevBank kiosk sync)
+	r.Route("/api/bar", func(r chi.Router) {
+		r.Post("/sync", h.RequireBarAPIKey(h.BarSyncHandler))
+	})
+	// Backward compat redirect
+	r.Post("/api/revbank/sync", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/api/bar/sync", http.StatusPermanentRedirect)
 	})
 
 	// Admin routes (requires memberportal_admin role)
@@ -131,7 +135,16 @@ func main() {
 		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))
 		r.Get("/levels", h.RequireAdmin(h.AdminLevelsHandler))
 		r.Get("/settings", h.RequireAdmin(h.AdminSettingsHandler))
-		r.Get("/revbank", h.RequireAdmin(h.AdminRevbankHandler))
+		// Bar admin pages
+		r.Get("/bar", h.RequireAdmin(h.AdminBarHandler))
+		r.Get("/bar/cards", h.RequireAdmin(h.AdminBarCardsHandler))
+		r.Get("/bar/guides", h.RequireAdmin(h.AdminBarGuidesHandler))
+		r.Get("/bar/guides/buy", h.RequireAdmin(h.AdminBarGuideBuyHandler))
+		r.Get("/bar/guides/deposit", h.RequireAdmin(h.AdminBarGuideDepositHandler))
+		// Backward compat redirect
+		r.Get("/revbank", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/admin/bar", http.StatusMovedPermanently)
+		})
 	})
 
 	// Admin API routes (requires memberportal_admin role)
