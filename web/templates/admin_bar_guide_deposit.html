@@ -1,0 +1,134 @@
+{{ define "content" }}
+<div class="bar-guide-screen-only max-w-7xl mx-auto mb-4">
+    <nav class="bar-tabs">
+        <a href="/admin/bar">Dashboard</a>
+        <a href="/admin/bar/cards">Kartičky</a>
+        <a href="/admin/bar/guides" class="active">Návody</a>
+    </nav>
+    <div class="flex items-center justify-between">
+        <a href="/admin/bar/guides" class="text-sm text-gray-500 hover:text-gray-700">&larr; Zpět na návody</a>
+        <button onclick="window.print()" class="btn btn-primary">Tisk (Ctrl+P)</button>
+    </div>
+</div>
+
+<div class="bar-guide">
+    <h1>Jak si dobít barový účet</h1>
+    <div class="guide-subtitle">Dvě pípnutí. Vlož peníze.</div>
+
+    <div style="display:flex;flex-direction:column;gap:0;">
+        <!-- Step 0: reset -->
+        <div class="guide-step" style="padding:3mm 6mm;">
+            <div class="guide-step-number" style="font-size:28pt;">0</div>
+            <div style="flex:1;">
+                <div class="guide-step-title" style="font-size:14pt;">Storno / Reset</div>
+                <div class="guide-step-desc" style="font-size:11pt;">Zruší aktivní/předchozí příkaz.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;">
+                <svg id="bc-abort"></svg>
+                <div class="guide-bc-label">abort</div>
+            </div>
+        </div>
+
+        <div class="guide-arrow">&#x25BC;</div>
+
+        <!-- Step 1: amount (sequential barcode) -->
+        <div class="guide-step" style="flex-direction:column;align-items:stretch;">
+            <div style="display:flex;align-items:center;gap:6mm;margin-bottom:2mm;">
+                <div class="guide-step-number">1</div>
+                <div style="flex:1;">
+                    <div class="guide-step-title">Vyber částku</div>
+                    <div class="guide-step-desc">Naskenuj jednu z částek &mdash; automaticky spustí dobíjení.</div>
+                </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:1mm;">
+                <div style="display:flex;align-items:center;border:1.5px solid #000;padding:1mm 4mm;">
+                    <div style="font-weight:900;font-size:16pt;min-width:28mm;text-align:right;">100 Kč</div>
+                    <svg id="bc-100" style="height:12mm;flex:1;"></svg>
+                </div>
+                <div style="display:flex;align-items:center;border:1.5px solid #000;padding:1mm 4mm;">
+                    <div style="font-weight:900;font-size:16pt;min-width:28mm;text-align:right;">200 Kč</div>
+                    <svg id="bc-200" style="height:12mm;flex:1;"></svg>
+                </div>
+                <div style="display:flex;align-items:center;border:1.5px solid #000;padding:1mm 4mm;">
+                    <div style="font-weight:900;font-size:16pt;min-width:28mm;text-align:right;">500 Kč</div>
+                    <svg id="bc-500" style="height:12mm;flex:1;"></svg>
+                </div>
+                <div style="display:flex;align-items:center;border:1.5px solid #000;padding:1mm 4mm;">
+                    <div style="font-weight:900;font-size:16pt;min-width:28mm;text-align:right;">1000 Kč</div>
+                    <svg id="bc-1000" style="height:12mm;flex:1;"></svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="guide-arrow">&#x25BC;</div>
+
+        <!-- Step 2: identity -->
+        <div class="guide-step" style="flex-direction:column;align-items:stretch;border-width:2.5px;">
+            <div style="display:flex;align-items:center;gap:6mm;margin-bottom:2mm;">
+                <div class="guide-step-number">2</div>
+                <div style="flex:1;">
+                    <div class="guide-step-title">Pípni sebe</div>
+                    <div class="guide-step-desc">Použij svoji kartičku, napiš přezdívku, nebo naskenuj guest.</div>
+                </div>
+            </div>
+            <div class="guide-options">
+                <div class="guide-option">
+                    <div class="guide-option-label">Tvoje kartička</div>
+                    <div class="guide-option-desc">Naskenuj svůj členský barkód</div>
+                    <div style="font-size:28pt;margin:1mm 0;">&#x1F4B3;</div>
+                </div>
+                <div class="guide-option">
+                    <div class="guide-option-label">Nebo napiš</div>
+                    <div class="guide-option-desc">Přezdívku na klávesnici + Enter</div>
+                    <div style="font-size:14pt;border:1px solid #000;padding:1mm 3mm;margin:1mm 0;letter-spacing:2px;">tvuj_nick</div>
+                </div>
+                <div class="guide-option">
+                    <div class="guide-option-label">Guest účet</div>
+                    <div class="guide-option-desc">Pro návštěvníky bez účtu</div>
+                    <svg id="bc-guest"></svg>
+                    <div class="guide-bc-label">guest</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="guide-arrow">&#x25BC;</div>
+
+        <!-- Step 3: insert money -->
+        <div class="guide-step">
+            <div class="guide-step-number">3</div>
+            <div style="flex:1;">
+                <div class="guide-step-title">Vlož peníze</div>
+                <div class="guide-step-desc" style="font-size:16pt;font-weight:bold;margin-top:1mm;">
+                    Nyní vlož hotovost do pokladny.
+                </div>
+            </div>
+            <div style="font-size:48pt;flex-shrink:0;text-align:center;min-width:20mm;">&#x1F4B0;</div>
+        </div>
+    </div>
+
+    <div class="guide-tip">
+        <strong>TIP:</strong> Zůstatek si zkontroluj načtením svojí kartičky nebo zadáním přezdívky.<br>
+        Pokud se něco pokazí, naskenuj <strong>abort</strong> a začni znovu.<br>
+        <strong>&#x26A0; Sekvenční barkódy (částka = deposit+cash v jednom) jsou experimentální.</strong>
+        Pokud nefungují se scannerem, použij klasický postup: deposit &rarr; částka &rarr; cash &rarr; identita.
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script>
+var bcOpts = {
+    format: 'CODE128', width: 2, margin: 5,
+    displayValue: false, background: '#ffffff', lineColor: '#000000',
+};
+JsBarcode('#bc-abort', 'abort', Object.assign({}, bcOpts, {height: 40}));
+JsBarcode('#bc-guest', 'guest', Object.assign({}, bcOpts, {height: 35}));
+
+// Sequential barcodes: deposit + amount + cash encoded in one CODE128.
+// The \n characters (0x0A) are sent by the scanner as Enter keystrokes,
+// causing RevBank to process each line as a separate command.
+JsBarcode('#bc-100', "deposit\n100\ncash", Object.assign({}, bcOpts, {height: 35}));
+JsBarcode('#bc-200', "deposit\n200\ncash", Object.assign({}, bcOpts, {height: 35}));
+JsBarcode('#bc-500', "deposit\n500\ncash", Object.assign({}, bcOpts, {height: 35}));
+JsBarcode('#bc-1000', "deposit\n1000\ncash", Object.assign({}, bcOpts, {height: 35}));
+</script>
+{{ end }}
