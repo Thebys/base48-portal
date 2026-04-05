@@ -518,3 +518,9 @@ AND NOT EXISTS (
     WHERE u.description LIKE 'Undo %'
     AND INSTR(rt.transaction_id, '_T' || SUBSTR(u.description, 6) || '_') > 0
 );
+
+-- name: ListAcceptedUsersWithUsername :many
+SELECT id, username, realname, email, state
+FROM users
+WHERE state = 'accepted' AND username IS NOT NULL AND username != ''
+ORDER BY username;

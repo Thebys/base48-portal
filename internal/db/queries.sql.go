@@ -1249,6 +1249,50 @@ func (q *Queries) ListAcceptedUsersForFees(ctx context.Context) ([]ListAcceptedU
 	return items, nil
 }
 
+const listAcceptedUsersWithUsername = `-- name: ListAcceptedUsersWithUsername :many
+SELECT id, username, realname, email, state
+FROM users
+WHERE state = 'accepted' AND username IS NOT NULL AND username != ''
+ORDER BY username
+`
+
+type ListAcceptedUsersWithUsernameRow struct {
+	ID       int64          `json:"id"`
+	Username sql.NullString `json:"username"`
+	Realname sql.NullString `json:"realname"`
+	Email    string         `json:"email"`
+	State    string         `json:"state"`
+}
+
+func (q *Queries) ListAcceptedUsersWithUsername(ctx context.Context) ([]ListAcceptedUsersWithUsernameRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAcceptedUsersWithUsername)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAcceptedUsersWithUsernameRow{}
+	for rows.Next() {
+		var i ListAcceptedUsersWithUsernameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Realname,
+			&i.Email,
+			&i.State,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveLevels = `-- name: ListActiveLevels :many
 SELECT id, name, amount, active, created_at FROM levels WHERE active = 1 ORDER BY CAST(amount AS REAL) ASC
 `
