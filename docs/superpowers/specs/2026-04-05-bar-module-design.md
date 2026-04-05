@@ -156,7 +156,7 @@ RevBank's readline processes each line sequentially from the input buffer:
 
 ### Backward Compatibility
 
-Old URLs (`/admin/revbank`, `/api/revbank/sync`) should redirect to new paths for a transition period. The kiosk sync script (`contrib/revbank-sync.sh`) will need its URL updated.
+Old URLs (`/admin/revbank`, `/api/revbank/sync`) get permanent redirects (301) to new paths. This ensures the kiosk sync script (`contrib/revbank-sync.sh`, line 199: `${PORTAL_URL}/api/revbank/sync`) keeps working immediately. The script itself will be updated to use `/api/bar/sync` as part of this work, but redirects stay as a safety net for any other consumers.
 
 ## Files Affected
 
