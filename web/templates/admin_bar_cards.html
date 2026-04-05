@@ -1,0 +1,167 @@
+{{ define "content" }}
+<div class="max-w-7xl mx-auto">
+    <!-- Tab navigation -->
+    <nav class="bar-tabs">
+        <a href="/admin/bar">Dashboard</a>
+        <a href="/admin/bar/cards" class="active">Kartičky</a>
+        <a href="/admin/bar/guides">Návody</a>
+    </nav>
+
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Členské kartičky</h1>
+            <p class="text-sm text-gray-500 mt-1">CODE128 barkódy pro RevBank terminál</p>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="generateAll()" class="btn btn-primary">Tisk všech aktivních</button>
+            <button onclick="generateSelected()" class="btn btn-secondary">Tisk vybraných</button>
+        </div>
+    </div>
+
+    <!-- Member table -->
+    <div class="bg-white shadow rounded-lg overflow-hidden mb-6">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left">
+                        <input type="checkbox" id="select-all" onchange="toggleAll(this.checked)" class="rounded border-gray-300">
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jméno</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Náhled</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {{ range .Members }}
+                <tr class="member-row hover:bg-gray-50" data-username="{{ .Username.String }}">
+                    <td class="px-4 py-3">
+                        <input type="checkbox" class="member-check rounded border-gray-300" value="{{ .Username.String }}">
+                    </td>
+                    <td class="px-4 py-3 text-sm font-mono font-medium text-gray-900">{{ .Username.String }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">
+                        {{ if .Realname.Valid }}{{ .Realname.String }}{{ else }}{{ .Email }}{{ end }}
+                    </td>
+                    <td class="px-4 py-3">
+                        <button onclick="previewCard('{{ .Username.String }}')" class="btn btn-sm btn-view">Náhled</button>
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Single card preview -->
+    <div id="card-preview" class="hidden mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Náhled kartičky</h2>
+        <div id="preview-container" class="flex justify-center"></div>
+        <div class="text-center mt-3">
+            <button onclick="printPreview()" class="btn btn-primary">Vytisknout tuto kartičku</button>
+        </div>
+    </div>
+</div>
+
+<!-- Print area (hidden on screen, shown on print) -->
+<div class="card-print-area" id="print-area"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script>
+// Card HTML builder. Username values are pre-escaped by Go html/template.
+// innerHTML below contains ONLY static string literals — no user data.
+// User data is injected exclusively via textContent (XSS-safe).
+function createCard(username) {
+    var card = document.createElement('div');
+    card.className = 'barcode-card';
+    // Static structure only — no user data here
+    card.innerHTML =
+        '<div class="card-corner corner-tl"></div>' +
+        '<div class="card-corner corner-tr"></div>' +
+        '<div class="card-corner corner-bl"></div>' +
+        '<div class="card-corner corner-br"></div>' +
+        '<div class="card-header">' +
+            '<div class="card-org">BASE48</div>' +
+            '<div class="card-subtitle">HACKERSPACE BRNO</div>' +
+        '</div>' +
+        '<hr class="card-separator">' +
+        '<div style="text-align:center;margin:0.5mm 0;">' +
+            '<div class="card-nick-label">member id</div>' +
+            '<div class="card-nick"></div>' +
+        '</div>' +
+        '<hr class="card-separator-thin">' +
+        '<div class="card-barcode">' +
+            '<svg class="barcode-svg"></svg>' +
+            '<div class="card-barcode-text"></div>' +
+        '</div>' +
+        '<hr class="card-separator-thin">' +
+        '<div class="card-footer">' +
+            '<div>REVBANK TERMINAL</div>' +
+            '<div style="text-align:right;">SCAN TO PAY</div>' +
+        '</div>';
+    // Set user data via textContent (XSS-safe — never goes through HTML parser)
+    card.querySelector('.card-nick').textContent = username;
+    card.querySelector('.card-barcode-text').textContent = username;
+    return card;
+}
+
+function renderBarcode(svgElement, username) {
+    JsBarcode(svgElement, username, {
+        format: 'CODE128',
+        width: 3,
+        height: 50,
+        margin: 10,
+        displayValue: false,
+        background: '#ffffff',
+        lineColor: '#1a1a2e',
+    });
+}
+
+function renderCards(usernames, container) {
+    container.replaceChildren();
+    usernames.forEach(function(username) {
+        var card = createCard(username);
+        container.appendChild(card);
+        renderBarcode(card.querySelector('.barcode-svg'), username);
+    });
+}
+
+function previewCard(username) {
+    var container = document.getElementById('preview-container');
+    renderCards([username], container);
+    document.getElementById('card-preview').classList.remove('hidden');
+}
+
+function printPreview() {
+    var preview = document.getElementById('preview-container');
+    var printArea = document.getElementById('print-area');
+    printArea.replaceChildren();
+    Array.from(preview.children).forEach(function(card) {
+        printArea.appendChild(card.cloneNode(true));
+    });
+    window.print();
+}
+
+function getSelectedUsernames() {
+    var checks = document.querySelectorAll('.member-check:checked');
+    return Array.from(checks).map(function(c) { return c.value; });
+}
+
+function generateSelected() {
+    var usernames = getSelectedUsernames();
+    if (usernames.length === 0) { alert('Vyber alespoň jednoho člena.'); return; }
+    var printArea = document.getElementById('print-area');
+    renderCards(usernames, printArea);
+    window.print();
+}
+
+function generateAll() {
+    var rows = document.querySelectorAll('.member-row');
+    var usernames = Array.from(rows).map(function(r) { return r.dataset.username; });
+    var printArea = document.getElementById('print-area');
+    renderCards(usernames, printArea);
+    window.print();
+}
+
+function toggleAll(checked) {
+    document.querySelectorAll('.member-check').forEach(function(c) { c.checked = checked; });
+}
+</script>
+{{ end }}

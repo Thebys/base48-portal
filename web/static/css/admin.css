@@ -301,3 +301,115 @@ main :has(> table) {
     border-bottom-color: #1a1a2e;
     font-weight: 600;
 }
+
+/* Barcode card — credit card size */
+.barcode-card {
+    width: 85.6mm;
+    height: 53.98mm;
+    background: #fff;
+    border: 2px solid #1a1a2e;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 3mm;
+    font-family: 'Courier New', Courier, monospace;
+    flex-shrink: 0;
+}
+.barcode-card .card-corner {
+    position: absolute;
+    width: 4mm;
+    height: 4mm;
+}
+.barcode-card .corner-tl { top: 1mm; left: 1mm; border-top: 1.5px solid #1a1a2e; border-left: 1.5px solid #1a1a2e; }
+.barcode-card .corner-tr { top: 1mm; right: 1mm; border-top: 1.5px solid #1a1a2e; border-right: 1.5px solid #1a1a2e; }
+.barcode-card .corner-bl { bottom: 1mm; left: 1mm; border-bottom: 1.5px solid #1a1a2e; border-left: 1.5px solid #1a1a2e; }
+.barcode-card .corner-br { bottom: 1mm; right: 1mm; border-bottom: 1.5px solid #1a1a2e; border-right: 1.5px solid #1a1a2e; }
+.barcode-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5mm;
+}
+.barcode-card .card-org {
+    font-weight: 900;
+    font-size: 7pt;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #1a1a2e;
+}
+.barcode-card .card-subtitle {
+    font-size: 5pt;
+    color: #666;
+}
+.barcode-card .card-separator {
+    border: none;
+    border-top: 2px solid #1a1a2e;
+    margin: 0.5mm 0;
+}
+.barcode-card .card-separator-thin {
+    border: none;
+    border-top: 0.5px dashed #aaa;
+    margin: 0.5mm 0;
+}
+.barcode-card .card-nick-label {
+    font-size: 4.5pt;
+    color: #888;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-align: center;
+}
+.barcode-card .card-nick {
+    font-weight: 700;
+    font-size: 16pt;
+    letter-spacing: 2px;
+    color: #1a1a2e;
+    text-align: center;
+}
+.barcode-card .card-barcode {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5mm 0;
+}
+.barcode-card .card-barcode svg {
+    width: 74mm;
+    max-height: 18mm;
+}
+.barcode-card .card-barcode-text {
+    font-size: 6.5pt;
+    letter-spacing: 2px;
+    color: #1a1a2e;
+    margin-top: 0.3mm;
+}
+.barcode-card .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: auto;
+    font-size: 4pt;
+    color: #999;
+    line-height: 1.4;
+}
+
+/* Card grid for printing */
+.card-print-area {
+    display: none;
+}
+
+@media print {
+    body:has(.card-print-area) > *:not(.card-print-area) { display: none !important; }
+    body:has(.card-print-area) .card-print-area {
+        display: grid !important;
+        grid-template-columns: repeat(2, 85.6mm);
+        gap: 5mm;
+        justify-content: center;
+        padding: 5mm;
+    }
+    .barcode-card {
+        border: 1px solid #1a1a2e;
+        break-inside: avoid;
+    }
+}
