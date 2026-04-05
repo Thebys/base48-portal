@@ -400,7 +400,11 @@ main :has(> table) {
 }
 
 @media print {
-    body:has(.card-print-area) > *:not(.card-print-area) { display: none !important; }
+    body:has(.card-print-area) > nav,
+    body:has(.card-print-area) > footer,
+    body:has(.card-print-area) > .bg-green-500 { display: none !important; }
+    body:has(.card-print-area) > main > *:not(.card-print-area) { display: none !important; }
+    body:has(.card-print-area) > main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
     body:has(.card-print-area) .card-print-area {
         display: grid !important;
         grid-template-columns: repeat(2, 85.6mm);
@@ -572,6 +576,9 @@ main :has(> table) {
 
 @media print {
     .bar-guide-screen-only { display: none !important; }
-    body:has(.bar-guide) > *:not(.bar-guide) { display: none !important; }
+    body:has(.bar-guide) > nav,
+    body:has(.bar-guide) > footer,
+    body:has(.bar-guide) > .bg-green-500 { display: none !important; }
+    body:has(.bar-guide) > main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
     .bar-guide { border: none; }
 }
