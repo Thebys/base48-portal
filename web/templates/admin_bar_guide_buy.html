@@ -1,0 +1,97 @@
+{{ define "content" }}
+<div class="bar-guide-screen-only max-w-7xl mx-auto mb-4">
+    <nav class="bar-tabs">
+        <a href="/admin/bar">Dashboard</a>
+        <a href="/admin/bar/cards">Kartičky</a>
+        <a href="/admin/bar/guides" class="active">Návody</a>
+    </nav>
+    <div class="flex items-center justify-between">
+        <a href="/admin/bar/guides" class="text-sm text-gray-500 hover:text-gray-700">&larr; Zpět na návody</a>
+        <button onclick="window.print()" class="btn btn-primary">Tisk (Ctrl+P)</button>
+    </div>
+</div>
+
+<div class="bar-guide">
+    <h1>Jak nakupovat</h1>
+    <div class="guide-subtitle">Dva kroky. Dvě pípnutí.</div>
+
+    <div style="display:flex;flex-direction:column;gap:0;">
+        <!-- Step 1: scan product -->
+        <div class="guide-step">
+            <div class="guide-step-number">1</div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:1mm;">
+                <div class="guide-step-title">Pípni zboží</div>
+                <div class="guide-step-desc">
+                    Naskenuj čárový kód produktu, jeden nebo více.<br>
+                    Sleduj stav na displeji.
+                </div>
+            </div>
+            <div style="font-size:48pt;flex-shrink:0;text-align:center;min-width:20mm;">&#x1F4E6;</div>
+        </div>
+
+        <div class="guide-arrow">&#x25BC;</div>
+
+        <!-- Step 2: scan yourself -->
+        <div class="guide-step" style="flex-direction:column;align-items:stretch;">
+            <div style="display:flex;align-items:center;gap:6mm;margin-bottom:3mm;">
+                <div class="guide-step-number">2</div>
+                <div style="flex:1;">
+                    <div class="guide-step-title">Pípni sebe</div>
+                    <div class="guide-step-desc">Identifikuj se jedním z těchto způsobů:</div>
+                </div>
+            </div>
+            <div class="guide-options">
+                <div class="guide-option guide-option-best">
+                    <div class="guide-badge">Nejrychlejší</div>
+                    <div class="guide-option-label">Tvoje kartička</div>
+                    <div class="guide-option-desc">Naskenuj svůj<br>členský barkód</div>
+                    <div style="font-size:36pt;">&#x1F4B3;</div>
+                    <div class="guide-option-desc">Nemáš? Řekni si o ni!</div>
+                </div>
+                <div class="guide-option">
+                    <div class="guide-option-label">Klávesnice</div>
+                    <div class="guide-option-desc">Napiš svoji<br>přezdívku + Enter</div>
+                    <div style="font-size:16pt;border:2px solid #000;padding:2mm 4mm;margin:2mm 0;letter-spacing:2px;">tvuj_nick</div>
+                </div>
+                <div class="guide-option">
+                    <div class="guide-option-label">Guest účet</div>
+                    <div class="guide-option-desc">Pro návštěvníky<br>bez účtu</div>
+                    <svg id="bc-guest"></svg>
+                    <div class="guide-bc-label">guest</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rescue barcodes -->
+    <div class="guide-rescue">
+        <div class="guide-rescue-title">Něco se nepovedlo?</div>
+        <div class="guide-rescue-item">
+            <div class="guide-rescue-label">Zrušit aktuální příkaz</div>
+            <svg id="bc-abort"></svg>
+            <div class="guide-bc-label">abort</div>
+        </div>
+        <div class="guide-rescue-item">
+            <div class="guide-rescue-label">Vrátit starou transakci (výběr)</div>
+            <svg id="bc-undo"></svg>
+            <div class="guide-bc-label">undo</div>
+        </div>
+    </div>
+
+    <div class="guide-tip">
+        <strong>TIP:</strong> Zůstatek zjistíš pípnutím karty nebo zadáním přezdívky bez předchozího příkazu.<br>
+        Účet si dobij hotovostí &mdash; návod vedle.
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script>
+var bcOpts = {
+    format: 'CODE128', width: 2, margin: 5,
+    displayValue: false, background: '#ffffff', lineColor: '#000000',
+};
+JsBarcode('#bc-guest', 'guest', Object.assign({}, bcOpts, {height: 40}));
+JsBarcode('#bc-abort', 'abort', Object.assign({}, bcOpts, {height: 35}));
+JsBarcode('#bc-undo', 'undo', Object.assign({}, bcOpts, {height: 35}));
+</script>
+{{ end }}

@@ -413,3 +413,164 @@ main :has(> table) {
         break-inside: avoid;
     }
 }
+
+/* Printable bar guides */
+.bar-guide {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 8mm;
+    font-family: 'Courier New', Courier, monospace;
+    background: #fff;
+    color: #000;
+}
+.bar-guide h1 {
+    font-weight: 900;
+    font-size: 28pt;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 1mm;
+    border-bottom: 2px solid #000;
+    padding-bottom: 2mm;
+}
+.bar-guide .guide-subtitle {
+    text-align: center;
+    font-size: 13pt;
+    color: #444;
+    margin-bottom: 5mm;
+}
+.bar-guide .guide-step {
+    border: 2px solid #000;
+    padding: 5mm 6mm;
+    display: flex;
+    align-items: center;
+    gap: 6mm;
+}
+.bar-guide .guide-step-number {
+    font-weight: 900;
+    font-size: 48pt;
+    min-width: 22mm;
+    text-align: center;
+    color: #000;
+    flex-shrink: 0;
+}
+.bar-guide .guide-step-title {
+    font-weight: 900;
+    font-size: 20pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+.bar-guide .guide-step-desc {
+    font-size: 13pt;
+    color: #333;
+    line-height: 1.5;
+}
+.bar-guide .guide-arrow {
+    text-align: center;
+    font-size: 20pt;
+    font-weight: bold;
+    line-height: 1;
+    color: #000;
+    padding: 1mm 0;
+}
+.bar-guide .guide-options {
+    display: flex;
+    gap: 4mm;
+    justify-content: center;
+    align-items: stretch;
+}
+.bar-guide .guide-option {
+    border: 1.5px dashed #666;
+    padding: 3mm;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5mm;
+    text-align: center;
+}
+.bar-guide .guide-option-best {
+    border-style: solid;
+    border-color: #000;
+    background: #f8f8f8;
+}
+.bar-guide .guide-option-label {
+    font-weight: 700;
+    font-size: 12pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+.bar-guide .guide-option-desc {
+    font-size: 10pt;
+    color: #444;
+}
+.bar-guide .guide-badge {
+    font-weight: 700;
+    font-size: 7pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: #000;
+    color: #fff;
+    padding: 0.5mm 2mm;
+    margin-bottom: 1mm;
+}
+.bar-guide .guide-rescue {
+    border: 1.5px solid #000;
+    padding: 3mm 6mm;
+    margin-top: 3mm;
+}
+.bar-guide .guide-rescue-title {
+    font-weight: 700;
+    font-size: 13pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 2mm;
+}
+.bar-guide .guide-rescue-item {
+    display: flex;
+    align-items: center;
+    gap: 4mm;
+    border: 1px dashed #666;
+    padding: 2mm 4mm;
+    margin-bottom: 2mm;
+}
+.bar-guide .guide-rescue-label {
+    font-size: 11pt;
+    width: 65mm;
+    flex-shrink: 0;
+}
+.bar-guide .guide-rescue-item svg {
+    height: 12mm;
+    flex: 1;
+}
+.bar-guide .guide-bc-label {
+    font-size: 9pt;
+    letter-spacing: 1px;
+    min-width: 12mm;
+}
+.bar-guide .guide-tip {
+    border: 1px solid #999;
+    padding: 3mm 4mm;
+    font-size: 10pt;
+    color: #333;
+    line-height: 1.5;
+    margin-top: 2mm;
+}
+.bar-guide .guide-option svg {
+    height: 14mm;
+    width: auto;
+}
+
+@media screen {
+    .bar-guide {
+        border: 1px solid #ccc;
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+}
+
+@media print {
+    .bar-guide-screen-only { display: none !important; }
+    .bar-guide { border: none; }
+}
