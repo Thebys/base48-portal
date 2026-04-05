@@ -1,7 +1,14 @@
 {{ define "content" }}
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="max-w-7xl mx-auto">
+    <!-- Tab navigation -->
+    <nav class="bar-tabs">
+        <a href="/admin/bar" class="active">Dashboard</a>
+        <a href="/admin/bar/cards">Kartičky</a>
+        <a href="/admin/bar/guides">Návody</a>
+    </nav>
+<div class="px-4 sm:px-6 lg:px-8 py-8">
     <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">RevBank</h1>
+        <h1 class="text-2xl font-bold text-gray-900">Bar</h1>
         <p class="mt-1 text-sm text-gray-500">
             Barový kiosek v hackerspace
             {{if .LastSync}}
@@ -135,6 +142,7 @@
             {{end}}
         </div>
     </details>
+</div>
 </div>
 
 <script>
