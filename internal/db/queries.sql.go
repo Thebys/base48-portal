@@ -2179,6 +2179,8 @@ SELECT
     COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now') AND created_at < date('now', '+1 day') THEN amount_cents ELSE 0 END), 0) AS sales_today,
     COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'weekday 1', '-7 days') THEN amount_cents ELSE 0 END), 0) AS sales_this_week,
     COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS sales_this_month,
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of month', '-1 month') AND created_at < date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS sales_last_month,
+    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of year') THEN amount_cents ELSE 0 END), 0) AS sales_this_year,
     COALESCE(SUM(CASE WHEN amount_cents > 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS deposits_this_month
 FROM revbank_transactions rt
 WHERE rt.description NOT LIKE 'Undo %'
@@ -2193,6 +2195,8 @@ type RevbankSalesStatsRow struct {
 	SalesToday        interface{} `json:"sales_today"`
 	SalesThisWeek     interface{} `json:"sales_this_week"`
 	SalesThisMonth    interface{} `json:"sales_this_month"`
+	SalesLastMonth    interface{} `json:"sales_last_month"`
+	SalesThisYear     interface{} `json:"sales_this_year"`
 	DepositsThisMonth interface{} `json:"deposits_this_month"`
 }
 
@@ -2205,6 +2209,8 @@ func (q *Queries) RevbankSalesStats(ctx context.Context) (RevbankSalesStatsRow, 
 		&i.SalesToday,
 		&i.SalesThisWeek,
 		&i.SalesThisMonth,
+		&i.SalesLastMonth,
+		&i.SalesThisYear,
 		&i.DepositsThisMonth,
 	)
 	return i, err

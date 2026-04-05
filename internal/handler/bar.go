@@ -258,6 +258,8 @@ func (h *Handler) AdminBarHandler(w http.ResponseWriter, r *http.Request) {
 		"SalesToday":        -toInt64(stats.SalesToday),
 		"SalesThisWeek":     -toInt64(stats.SalesThisWeek),
 		"SalesThisMonth":    -toInt64(stats.SalesThisMonth),
+		"SalesLastMonth":    -toInt64(stats.SalesLastMonth),
+		"SalesThisYear":     -toInt64(stats.SalesThisYear),
 		"DepositsThisMonth": toInt64(stats.DepositsThisMonth),
 		"CashRegister":      cashRegister,
 	}

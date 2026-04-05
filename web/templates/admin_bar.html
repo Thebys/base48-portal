@@ -20,30 +20,45 @@
     </div>
 
     <!-- Summary cards -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-        <div class="bg-red-50 px-4 py-3 rounded-md text-center">
-            <div class="text-xl font-bold text-red-900">{{fmtCZKWhole .SalesToday}} Kč</div>
-            <div class="text-xs text-red-600">Prodeje dnes</div>
+    <details open class="bg-white shadow rounded-lg mb-8">
+        <summary class="px-6 py-4 cursor-pointer flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-900">Statistiky</h2>
+        </summary>
+        <div class="border-t border-gray-200 px-6 py-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div class="bg-red-50 px-4 py-3 rounded-md text-center">
+                    <div class="text-xl font-bold text-red-900">{{fmtCZKWhole .SalesToday}} Kč</div>
+                    <div class="text-xs text-red-600">Prodeje dnes</div>
+                </div>
+                <div class="bg-orange-50 px-4 py-3 rounded-md text-center">
+                    <div class="text-xl font-bold text-orange-900">{{fmtCZKWhole .SalesThisWeek}} Kč</div>
+                    <div class="text-xs text-orange-600">Prodeje tento týden</div>
+                </div>
+                <div class="bg-amber-50 px-4 py-3 rounded-md text-center">
+                    <div class="text-xl font-bold text-amber-900">{{fmtCZKWhole .SalesThisMonth}} Kč</div>
+                    <div class="text-xs text-amber-600">Prodeje tento měsíc</div>
+                </div>
+                <div class="bg-yellow-50 px-4 py-3 rounded-md text-center">
+                    <div class="text-xl font-bold text-yellow-900">{{fmtCZKWhole .SalesLastMonth}} Kč</div>
+                    <div class="text-xs text-yellow-600">Prodeje minulý měsíc</div>
+                </div>
+                <div class="bg-purple-50 px-4 py-3 rounded-md text-center">
+                    <div class="text-xl font-bold text-purple-900">{{fmtCZKWhole .SalesThisYear}} Kč</div>
+                    <div class="text-xs text-purple-600">Prodeje tento rok</div>
+                </div>
+                <div class="bg-green-50 px-4 py-3 rounded-md text-center">
+                    <div class="text-xl font-bold text-green-900">{{fmtCZKWhole .DepositsThisMonth}} Kč</div>
+                    <div class="text-xs text-green-600">Deposity tento měsíc</div>
+                </div>
+                {{if .CashRegister}}
+                <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
+                    <div class="text-xl font-bold text-blue-900">{{fmtCZKWhole .CashRegister}} Kč</div>
+                    <div class="text-xs text-blue-600">Pokladna</div>
+                </div>
+                {{end}}
+            </div>
         </div>
-        <div class="bg-orange-50 px-4 py-3 rounded-md text-center">
-            <div class="text-xl font-bold text-orange-900">{{fmtCZKWhole .SalesThisWeek}} Kč</div>
-            <div class="text-xs text-orange-600">Prodeje tento týden</div>
-        </div>
-        <div class="bg-amber-50 px-4 py-3 rounded-md text-center">
-            <div class="text-xl font-bold text-amber-900">{{fmtCZKWhole .SalesThisMonth}} Kč</div>
-            <div class="text-xs text-amber-600">Prodeje tento měsíc</div>
-        </div>
-        <div class="bg-green-50 px-4 py-3 rounded-md text-center">
-            <div class="text-xl font-bold text-green-900">{{fmtCZKWhole .DepositsThisMonth}} Kč</div>
-            <div class="text-xs text-green-600">Deposity tento měsíc</div>
-        </div>
-        {{if .CashRegister}}
-        <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
-            <div class="text-xl font-bold text-blue-900">{{fmtCZKWhole .CashRegister}} Kč</div>
-            <div class="text-xs text-blue-600">Pokladna</div>
-        </div>
-        {{end}}
-    </div>
+    </details>
 
     <!-- Accounts table -->
     <details class="bg-white shadow rounded-lg mb-8">
