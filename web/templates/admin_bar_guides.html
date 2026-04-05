@@ -1,0 +1,49 @@
+{{ define "content" }}
+<div class="max-w-7xl mx-auto">
+    <!-- Tab navigation -->
+    <nav class="bar-tabs">
+        <a href="/admin/bar">Dashboard</a>
+        <a href="/admin/bar/cards">Kartičky</a>
+        <a href="/admin/bar/guides" class="active">Návody</a>
+    </nav>
+
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Návody pro bar</h1>
+        <p class="text-sm text-gray-500 mt-1">Tisknutelné plakáty k baru s čárovými kódy</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- How to buy guide -->
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+            <div class="px-6 py-5">
+                <h2 class="text-lg font-semibold text-gray-900">Jak nakupovat</h2>
+                <p class="text-sm text-gray-500 mt-2">
+                    Dvoustránkový návod pro zákazníky baru. Dva kroky: pípni zboží, pípni sebe.
+                    Obsahuje barkódy pro guest účet, abort a undo.
+                </p>
+                <div class="mt-4">
+                    <a href="/admin/bar/guides/buy" target="_blank" class="btn btn-primary">Otevřít / Tisk</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- How to deposit guide -->
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+            <div class="px-6 py-5">
+                <h2 class="text-lg font-semibold text-gray-900">Jak dobíjet účet</h2>
+                <p class="text-sm text-gray-500 mt-2">
+                    Návod na dobití barového účtu. Zjednodušený flow se sekvenčními barkódy —
+                    jedno pípnutí pro částku + cash potvrzení, druhé pro identitu.
+                </p>
+                <p class="text-xs text-amber-600 mt-2">
+                    &#x26A0; Sekvenční barkódy (deposit+částka+cash) jsou experimentální —
+                    otestuj se scannerem u baru před nasazením.
+                </p>
+                <div class="mt-4">
+                    <a href="/admin/bar/guides/deposit" target="_blank" class="btn btn-primary">Otevřít / Tisk</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}
