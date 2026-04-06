@@ -238,7 +238,7 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 			data["RevbankAccount"] = revbankAccount
 			txns, _ := h.queries.ListRevbankTransactionsByUsername(ctx, db.ListRevbankTransactionsByUsernameParams{
 				Username: strings.ToLower(targetDBUser.Username.String),
-				Limit:    10,
+				Limit:    50,
 			})
 			data["RevbankTransactions"] = txns
 		}

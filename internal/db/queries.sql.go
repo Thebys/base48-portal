@@ -2909,7 +2909,10 @@ func (q *Queries) UpsertRevbankAccount(ctx context.Context, arg UpsertRevbankAcc
 const upsertRevbankTransaction = `-- name: UpsertRevbankTransaction :exec
 INSERT INTO revbank_transactions (transaction_id, username, user_id, amount_cents, description, counter_account, created_at, synced_at)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
-ON CONFLICT(transaction_id) DO NOTHING
+ON CONFLICT(transaction_id) DO UPDATE SET
+    username = excluded.username,
+    user_id = excluded.user_id,
+    synced_at = CURRENT_TIMESTAMP
 `
 
 type UpsertRevbankTransactionParams struct {
