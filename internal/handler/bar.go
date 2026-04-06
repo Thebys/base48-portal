@@ -125,7 +125,7 @@ func (h *Handler) BarSyncHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		_, err := h.queries.UpsertRevbankAccount(ctx, db.UpsertRevbankAccountParams{
-			Username:          acct.Username,
+			Username:          strings.ToLower(acct.Username),
 			UserID:            userID,
 			BalanceCents:      acct.BalanceCents,
 			LastTransactionAt: lastTx,
@@ -161,7 +161,7 @@ func (h *Handler) BarSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 		err = h.queries.UpsertRevbankTransaction(ctx, db.UpsertRevbankTransactionParams{
 			TransactionID:  tx.ID,
-			Username:       tx.Username,
+			Username:       strings.ToLower(tx.Username),
 			UserID:         userID,
 			AmountCents:    tx.AmountCents,
 			Description:    tx.Description,
