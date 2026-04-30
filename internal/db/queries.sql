@@ -70,6 +70,21 @@ UPDATE users SET
 WHERE id = ?
 RETURNING *;
 
+-- name: GrantUserKeys :one
+UPDATE users SET
+    keys_granted = CURRENT_TIMESTAMP,
+    keys_returned = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: ReturnUserKeys :one
+UPDATE users SET
+    keys_returned = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
 -- name: GetLevel :one
 SELECT * FROM levels WHERE id = ? LIMIT 1;
 

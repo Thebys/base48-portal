@@ -1134,6 +1134,42 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
+const grantUserKeys = `-- name: GrantUserKeys :one
+UPDATE users SET
+    keys_granted = CURRENT_TIMESTAMP,
+    keys_returned = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
+`
+
+func (q *Queries) GrantUserKeys(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRowContext(ctx, grantUserKeys, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Locale,
+	)
+	return i, err
+}
+
 const linkKeycloakID = `-- name: LinkKeycloakID :one
 UPDATE users SET
     keycloak_id = ?,
@@ -2172,6 +2208,41 @@ type RemoveProjectVSParams struct {
 func (q *Queries) RemoveProjectVS(ctx context.Context, arg RemoveProjectVSParams) error {
 	_, err := q.db.ExecContext(ctx, removeProjectVS, arg.ProjectID, arg.Vs)
 	return err
+}
+
+const returnUserKeys = `-- name: ReturnUserKeys :one
+UPDATE users SET
+    keys_returned = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, keycloak_id, email, username, realname, phone, alt_contact, level_id, level_actual_amount, payments_id, date_joined, keys_granted, keys_returned, state, is_council, is_staff, created_at, updated_at, locale
+`
+
+func (q *Queries) ReturnUserKeys(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRowContext(ctx, returnUserKeys, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.KeycloakID,
+		&i.Email,
+		&i.Username,
+		&i.Realname,
+		&i.Phone,
+		&i.AltContact,
+		&i.LevelID,
+		&i.LevelActualAmount,
+		&i.PaymentsID,
+		&i.DateJoined,
+		&i.KeysGranted,
+		&i.KeysReturned,
+		&i.State,
+		&i.IsCouncil,
+		&i.IsStaff,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Locale,
+	)
+	return i, err
 }
 
 const revbankSalesStats = `-- name: RevbankSalesStats :one

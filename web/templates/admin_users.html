@@ -125,6 +125,15 @@
                                 Manage Roles
                             </button>
                         {{ end }}
+                        {{ if and .DBUser.KeysGranted.Valid (not .DBUser.KeysReturned.Valid) }}
+                            <button class="btn btn-sm btn-danger" onclick="toggleKeys('{{ .DBUser.ID }}', 'return', '{{ .DBUser.Email }}')" title="Returned: keys_granted={{ .DBUser.KeysGranted.Time.Format "2006-01-02" }}">
+                                Return Keys
+                            </button>
+                        {{ else }}
+                            <button class="btn btn-sm btn-primary" onclick="toggleKeys('{{ .DBUser.ID }}', 'grant', '{{ .DBUser.Email }}')">
+                                Give Keys
+                            </button>
+                        {{ end }}
                     </div>
                 </td>
             </tr>
@@ -340,6 +349,31 @@ async function removeRole() {
         }
     } catch (error) {
         alert('Failed to remove role: ' + error);
+    }
+}
+
+async function toggleKeys(userId, action, email) {
+    const verb = action === 'grant' ? 'give keys to' : 'mark keys returned for';
+    if (!confirm(`Are you sure you want to ${verb} ${email}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/admin/users/${userId}/keys`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Failed to update keys: ' + error);
     }
 }
 

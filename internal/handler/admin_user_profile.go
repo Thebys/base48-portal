@@ -917,3 +917,76 @@ func (h *Handler) AdminCreateFeeHandler(w http.ResponseWriter, r *http.Request) 
 
 	h.jsonSuccess(w, fmt.Sprintf("Fee %s Kč za %s vytvořen (úroveň: %s)", req.Amount, req.PeriodStart, level.Name))
 }
+
+// AdminUpdateUserKeysHandler toggles physical-key holder state.
+// POST /api/admin/users/{id}/keys with {"action": "grant"|"return"}.
+// "grant" sets keys_granted=now, keys_returned=NULL (re-issue clears any previous return).
+// "return" sets keys_returned=now, leaving keys_granted intact as historical record.
+func (h *Handler) AdminUpdateUserKeysHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
+	ctx := r.Context()
+
+	userID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		h.jsonError(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	target, err := h.queries.GetUserByID(ctx, userID)
+	if err != nil {
+		h.jsonError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	holdsKeys := target.KeysGranted.Valid && !target.KeysReturned.Valid
+
+	var (
+		updated db.User
+		message string
+	)
+	switch req.Action {
+	case "grant":
+		if holdsKeys {
+			h.jsonError(w, "User already holds keys", http.StatusConflict)
+			return
+		}
+		updated, err = h.queries.GrantUserKeys(ctx, userID)
+		message = "Klíče vydány"
+	case "return":
+		if !holdsKeys {
+			h.jsonError(w, "User does not hold keys", http.StatusConflict)
+			return
+		}
+		updated, err = h.queries.ReturnUserKeys(ctx, userID)
+		message = "Klíče vráceny"
+	default:
+		h.jsonError(w, "Invalid action (expected 'grant' or 'return')", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		h.jsonError(w, "Failed to update keys", http.StatusInternalServerError)
+		return
+	}
+
+	adminDBUser, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{String: user.ID, Valid: true})
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "keys",
+		Level:     "info",
+		UserID:    sql.NullInt64{Int64: userID, Valid: true},
+		Message:   fmt.Sprintf("Keys %s for %s (by admin %s)", req.Action, updated.Email, adminDBUser.Email),
+		Metadata: logMetadata(map[string]interface{}{
+			"action":      req.Action,
+			"admin_email": adminDBUser.Email,
+		}),
+	})
+
+	h.jsonSuccess(w, message)
+}
