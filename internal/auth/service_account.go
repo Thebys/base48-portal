@@ -51,15 +51,12 @@ func NewServiceAccountClient(ctx context.Context, cfg *config.Config, clientID, 
 		Scopes:       []string{"openid", "profile", "email"},
 	}
 
-	// Use custom HTTP client with timeout
+	// oauth2's TokenSource is lazy — it does no I/O until Token() is called,
+	// and then caches/refreshes automatically. Skipping the eager probe here
+	// means startup is independent of Keycloak availability; the first admin
+	// call that needs a token will fetch one (or surface the error inline).
 	ctxWithClient := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 	tokenSource := oauth2Config.TokenSource(ctxWithClient)
-
-	// Test the connection by getting a token
-	_, err := tokenSource.Token()
-	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate service account: %w", err)
-	}
 
 	return &ServiceAccountClient{
 		config:      cfg,

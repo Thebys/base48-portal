@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -79,16 +80,29 @@ type User struct {
 	Locale        string   `json:"locale"`
 }
 
-// Authenticator handles Keycloak OIDC authentication
-type Authenticator struct {
+// keycloakState bundles the OIDC primitives that are only valid once Keycloak
+// has been successfully contacted. The whole struct is swapped atomically
+// under Authenticator.mu, so handlers that grab a snapshot see a consistent
+// triplet (provider/oauth2Config/verifier) regardless of reconnects.
+type keycloakState struct {
 	provider     *oidc.Provider
 	oauth2Config oauth2.Config
 	verifier     *oidc.IDTokenVerifier
-	store        *sessions.CookieStore
-	config       *config.Config
-	queries      *db.Queries
-	httpClient   *http.Client // IPv4-only client for Keycloak communication
-	disabled     bool         // true if Keycloak is unavailable
+}
+
+// Authenticator handles Keycloak OIDC authentication
+type Authenticator struct {
+	// Immutable after construction.
+	store      *sessions.CookieStore
+	config     *config.Config
+	queries    *db.Queries
+	httpClient *http.Client // IPv4-only client for Keycloak communication
+
+	// Mutable Keycloak state. nil until the first successful connect; replaced
+	// atomically by connect() so handlers never observe a half-initialised
+	// triplet. Read via keycloak(), write only inside connect().
+	mu sync.RWMutex
+	kc *keycloakState
 
 	appCache   map[string][]KeycloakApplication // keyed by Keycloak user ID
 	appCacheMu sync.RWMutex
@@ -99,13 +113,15 @@ func init() {
 	gob.Register(&User{})
 }
 
-// New creates a new Authenticator instance
+// New creates a new Authenticator. It tries once to reach Keycloak so the
+// happy-path startup returns a fully ready authenticator. If Keycloak is
+// unreachable, the authenticator is returned in limited mode and a background
+// goroutine keeps retrying until it succeeds (or ctx is cancelled), at which
+// point the authenticator becomes fully functional without a process restart.
 func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authenticator, error) {
-	// Create HTTP client with aggressive timeouts for startup
-	// Force IPv4 — Keycloak's IPv6 endpoint resets TLS connections
-	dialer := &net.Dialer{
-		Timeout: 3 * time.Second,
-	}
+	// Force IPv4 — Keycloak's IPv6 endpoint resets TLS connections in our
+	// VPS environment.
+	dialer := &net.Dialer{Timeout: 3 * time.Second}
 	httpClient := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
@@ -117,72 +133,103 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 		},
 	}
 
-	// Try to connect to Keycloak with timeout
-	providerCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
-	provider, err := oidc.NewProvider(providerCtx, cfg.KeycloakIssuerURL())
-	if err != nil {
-		// Keycloak unavailable - start in limited mode
-		fmt.Printf("⚠ WARNING: Keycloak unavailable at %s\n", cfg.KeycloakIssuerURL())
-		fmt.Printf("⚠ Error: %v\n", err)
-		fmt.Println("⚠ Starting in LIMITED MODE - authentication will be unavailable")
-
-		store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
-		store.Options = &sessions.Options{
-			Path:     "/",
-			MaxAge:   3600, // 60 minutes — forces re-login to refresh Keycloak roles
-			HttpOnly: true,
-			Secure:   false,
-			SameSite: http.SameSiteLaxMode,
-		}
-
-		return &Authenticator{
-			store:    store,
-			config:   cfg,
-			queries:  queries,
-			disabled: true,
-			appCache: make(map[string][]KeycloakApplication),
-		}, nil
-	}
-
-	oauth2Config := oauth2.Config{
-		ClientID:     cfg.KeycloakClientID,
-		ClientSecret: cfg.KeycloakClientSecret,
-		RedirectURL:  cfg.OAuthCallbackURL(),
-		Endpoint:     provider.Endpoint(),
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
-	}
-
-	verifier := provider.Verifier(&oidc.Config{
-		ClientID: cfg.KeycloakClientID,
-	})
-
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
 	store.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   3600, // 60 minutes — forces re-login to refresh Keycloak roles
 		HttpOnly: true,
-		Secure:   len(cfg.BaseURL) >= 5 && cfg.BaseURL[:5] == "https",
+		Secure:   strings.HasPrefix(cfg.BaseURL, "https"),
 		SameSite: http.SameSiteLaxMode,
 	}
 
-	fmt.Println("✓ Keycloak connection established")
+	a := &Authenticator{
+		store:      store,
+		config:     cfg,
+		queries:    queries,
+		httpClient: httpClient,
+		appCache:   make(map[string][]KeycloakApplication),
+	}
 
-	return &Authenticator{
-		provider:     provider,
-		oauth2Config: oauth2Config,
-		verifier:     verifier,
-		store:        store,
-		config:       cfg,
-		queries:      queries,
-		httpClient:   httpClient,
-		disabled:     false,
-		appCache:     make(map[string][]KeycloakApplication),
-	}, nil
+	if err := a.connect(ctx); err != nil {
+		fmt.Printf("⚠ WARNING: Keycloak unavailable at %s: %v\n", cfg.KeycloakIssuerURL(), err)
+		fmt.Println("⚠ Starting in LIMITED MODE — will reconnect automatically once Keycloak is reachable")
+		go a.reconnectLoop(ctx)
+	} else {
+		fmt.Println("✓ Keycloak connection established")
+	}
+
+	return a, nil
+}
+
+// connect performs OIDC discovery against Keycloak. On success it atomically
+// publishes a fresh keycloakState so handlers (which read via keycloak())
+// never see a half-built triplet.
+func (a *Authenticator) connect(ctx context.Context) error {
+	providerCtx := context.WithValue(ctx, oauth2.HTTPClient, a.httpClient)
+	provider, err := oidc.NewProvider(providerCtx, a.config.KeycloakIssuerURL())
+	if err != nil {
+		return err
+	}
+
+	state := &keycloakState{
+		provider: provider,
+		oauth2Config: oauth2.Config{
+			ClientID:     a.config.KeycloakClientID,
+			ClientSecret: a.config.KeycloakClientSecret,
+			RedirectURL:  a.config.OAuthCallbackURL(),
+			Endpoint:     provider.Endpoint(),
+			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+		},
+		verifier: provider.Verifier(&oidc.Config{
+			ClientID: a.config.KeycloakClientID,
+		}),
+	}
+
+	a.mu.Lock()
+	a.kc = state
+	a.mu.Unlock()
+	return nil
+}
+
+// reconnectLoop retries connect() with capped exponential backoff until it
+// succeeds or ctx is cancelled. Started exactly once from New() when the
+// initial connect fails; exits silently on success after logging recovery.
+func (a *Authenticator) reconnectLoop(ctx context.Context) {
+	backoff := 5 * time.Second
+	const maxBackoff = 5 * time.Minute
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+
+		if err := a.connect(ctx); err == nil {
+			fmt.Println("✓ Keycloak connection established (recovered)")
+			return
+		}
+
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
+// keycloak returns the current ready Keycloak state, or nil if Keycloak has
+// never been reached (or the authenticator is otherwise in limited mode).
+// Callers MUST nil-check before dereferencing.
+func (a *Authenticator) keycloak() *keycloakState {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.kc
 }
 
 // LoginHandler redirects to Keycloak login
 func (a *Authenticator) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	if a.disabled {
+	kc := a.keycloak()
+	if kc == nil {
 		http.Error(w, "Authentication unavailable - Identity Provider (Keycloak) is not accessible", http.StatusServiceUnavailable)
 		return
 	}
@@ -196,12 +243,13 @@ func (a *Authenticator) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, a.oauth2Config.AuthCodeURL(state), http.StatusTemporaryRedirect)
+	http.Redirect(w, r, kc.oauth2Config.AuthCodeURL(state), http.StatusTemporaryRedirect)
 }
 
 // CallbackHandler handles the OAuth2 callback from Keycloak
 func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) {
-	if a.disabled {
+	kc := a.keycloak()
+	if kc == nil {
 		http.Error(w, "Authentication unavailable - Identity Provider (Keycloak) is not accessible", http.StatusServiceUnavailable)
 		return
 	}
@@ -223,7 +271,7 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	// Exchange code for token (use IPv4-only client)
 	code := r.URL.Query().Get("code")
 	exchangeCtx := context.WithValue(r.Context(), oauth2.HTTPClient, a.httpClient)
-	token, err := a.oauth2Config.Exchange(exchangeCtx, code)
+	token, err := kc.oauth2Config.Exchange(exchangeCtx, code)
 	if err != nil {
 		http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
 		return
@@ -237,7 +285,7 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Verify ID token
-	idToken, err := a.verifier.Verify(r.Context(), rawIDToken)
+	idToken, err := kc.verifier.Verify(r.Context(), rawIDToken)
 	if err != nil {
 		http.Error(w, "Failed to verify ID token", http.StatusInternalServerError)
 		return
@@ -363,8 +411,7 @@ func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	session.Save(r, w)
 
 	// Redirect to Keycloak end_session_endpoint to log out from SSO
-	if a.provider != nil {
-		// Keycloak logout URL with redirect back to our home page
+	if a.keycloak() != nil {
 		logoutURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/logout?post_logout_redirect_uri=%s&client_id=%s",
 			a.config.KeycloakURL,
 			a.config.KeycloakRealm,
