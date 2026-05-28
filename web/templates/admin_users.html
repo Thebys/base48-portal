@@ -1,9 +1,14 @@
 {{ define "content" }}
 <div class="container">
     <div class="header">
-        <div style="margin-bottom: 20px;">
-            <h1 style="margin: 0;">Admin - User Management</h1>
-            <p style="margin: 5px 0 0 0; color: #6b7280;">Showing {{ len .UserList }} users</p>
+        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <div>
+                <h1 style="margin: 0;">Admin - User Management</h1>
+                <p style="margin: 5px 0 0 0; color: #6b7280;">Showing {{ len .UserList }} users</p>
+            </div>
+            <a href="/admin/users/export.csv" class="btn btn-primary" title="CSV export členů ve stavu accepted + suspended (pro prezenčky, valné hromady apod.)">
+                Export CSV (accepted + suspended)
+            </a>
         </div>
     </div>
 

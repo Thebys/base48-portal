@@ -127,6 +127,7 @@ func main() {
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(authenticator.RequireAuth)
 		r.Get("/users", h.RequireAdmin(h.AdminUsersHandler))
+		r.Get("/users/export.csv", h.RequireAdmin(h.AdminUsersCSVExportHandler))
 		r.Get("/users/{id}", h.RequireAdmin(h.AdminUserProfileHandler))
 		r.Get("/finance", h.RequireAdmin(h.AdminFinanceHandler))
 		r.Get("/payments/unmatched", h.RequireAdmin(h.AdminUnmatchedPaymentsHandler))

@@ -2,12 +2,15 @@ package handler
 
 import (
 	"context"
+	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/keycloak"
@@ -286,7 +289,91 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// fetchAllKeycloakUsers fetches all users from Keycloak API with pagination and returns them as a map.
+// AdminUsersCSVExportHandler exports accepted+suspended users as a CSV file
+// intended for general-assembly attendance sheets etc.
+// GET /admin/users/export.csv
+func (h *Handler) AdminUsersCSVExportHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	dbUsers, err := h.queries.ListUsers(ctx)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	filtered := make([]db.User, 0, len(dbUsers))
+	for _, u := range dbUsers {
+		if u.State == "accepted" || u.State == "suspended" {
+			filtered = append(filtered, u)
+		}
+	}
+
+	// Group accepted first, then suspended; within each group sort by ID ascending.
+	stateRank := func(s string) int {
+		if s == "accepted" {
+			return 0
+		}
+		return 1
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		ri, rj := stateRank(filtered[i].State), stateRank(filtered[j].State)
+		if ri != rj {
+			return ri < rj
+		}
+		return filtered[i].ID < filtered[j].ID
+	})
+
+	filename := fmt.Sprintf("base48-clenove-%s.csv", time.Now().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.Header().Set("Cache-Control", "no-store")
+
+	// UTF-8 BOM so Excel detects encoding correctly.
+	if _, err := w.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
+		return
+	}
+
+	cw := csv.NewWriter(w)
+	defer cw.Flush()
+
+	header := []string{"Stav", "ID", "VS", "Přezdívka", "Jméno a příjmení", "E-mail", "Telefon"}
+	if err := cw.Write(header); err != nil {
+		return
+	}
+
+	stateCode := func(s string) string {
+		switch s {
+		case "accepted":
+			return "A"
+		case "suspended":
+			return "S"
+		default:
+			return s
+		}
+	}
+
+	for _, u := range filtered {
+		row := []string{
+			stateCode(u.State),
+			fmt.Sprintf("%d", u.ID),
+			nullStr(u.PaymentsID),
+			nullStr(u.Username),
+			nullStr(u.Realname),
+			u.Email,
+			nullStr(u.Phone),
+		}
+		if err := cw.Write(row); err != nil {
+			return
+		}
+	}
+}
+
+func nullStr(ns sql.NullString) string {
+	if ns.Valid {
+		return ns.String
+	}
+	return ""
+}
 // Keycloak defaults to max=100 per page, so we paginate to avoid silently missing users.
 func (h *Handler) fetchAllKeycloakUsers(ctx context.Context, accessToken string) (map[string]KeycloakUserInfo, error) {
 	baseURL := fmt.Sprintf("%s/admin/realms/%s/users", h.config.KeycloakURL, h.config.KeycloakRealm)
