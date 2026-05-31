@@ -117,13 +117,19 @@ parse_transactions() {
 }
 
 # --- Build JSON payload ---
+# Each sub-array is written to a temp file and recombined with --slurpfile
+# (not --argjson). On a full re-sync the transactions array is multi-MB; passing
+# it via --argjson would exceed Linux MAX_ARG_STRLEN (128 KiB per argv entry) and
+# fail with "Argument list too long". Files have no such limit.
 build_json() {
     local cursor
     cursor=$(cat "$CURSOR_FILE" 2>/dev/null || echo "0")
 
+    local tmpdir
+    tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/revbank-sync-json.XXXXXX")
+
     # Parse user accounts into JSON array
-    local accounts_json
-    accounts_json=$(parse_accounts user | jq -Rn '
+    parse_accounts user | jq -Rn '
         [inputs | split("\t") |
             {
                 username: .[0],
@@ -131,18 +137,16 @@ build_json() {
                 last_transaction_at: (if .[2] == "" then null else .[2] end)
             }
         ]
-    ')
+    ' > "$tmpdir/accounts.json"
 
     # Parse system accounts (cash, sales, etc.) as {name: balance} map
-    local system_json
-    system_json=$(parse_accounts system | jq -Rn '
+    parse_accounts system | jq -Rn '
         [inputs | split("\t") | {key: .[0], value: (.[1] | tonumber)}]
         | from_entries
-    ')
+    ' > "$tmpdir/system.json"
 
     # Parse new transactions into JSON array
-    local transactions_json
-    transactions_json=$(parse_transactions "$cursor" | jq -Rn '
+    parse_transactions "$cursor" | jq -Rn '
         [inputs | split("\t") |
             {
                 id: .[0],
@@ -152,14 +156,19 @@ build_json() {
                 description: .[4]
             }
         ]
-    ')
+    ' > "$tmpdir/transactions.json"
 
-    # Combine
-    jq -n \
-        --argjson accounts "$accounts_json" \
-        --argjson transactions "$transactions_json" \
-        --argjson system_accounts "$system_json" \
-        '{accounts: $accounts, transactions: $transactions, system_accounts: $system_accounts}'
+    # Combine — --slurpfile reads each file as a stream of JSON values, so the
+    # single array in each file is bound as element [0].
+    local combined
+    combined=$(jq -n \
+        --slurpfile accounts "$tmpdir/accounts.json" \
+        --slurpfile transactions "$tmpdir/transactions.json" \
+        --slurpfile system_accounts "$tmpdir/system.json" \
+        '{accounts: $accounts[0], transactions: $transactions[0], system_accounts: $system_accounts[0]}')
+
+    rm -rf "$tmpdir"
+    printf '%s\n' "$combined"
 }
 
 # --- Main ---
@@ -189,13 +198,21 @@ main() {
     fi
 
     # POST to portal
-    local http_code response
+    # NOTE: payload is sent from a temp file via --data-binary @file, not inline
+    # -d "$payload". A full re-sync (reset cursor) serializes the entire log and
+    # can exceed Linux MAX_ARG_STRLEN (128 KiB per argv entry), which would make
+    # an inline -d fail with "Argument list too long". A file has no such limit.
+    local http_code response payload_file
+    payload_file=$(mktemp "${TMPDIR:-/tmp}/revbank-sync-payload.XXXXXX")
+    trap 'rm -f "$payload_file"' RETURN
+    printf '%s' "$payload" > "$payload_file"
+
     response=$(curl -s -w "\n%{http_code}" \
         --max-time 30 \
         -X POST \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${API_KEY}" \
-        -d "$payload" \
+        --data-binary @"$payload_file" \
         "${PORTAL_URL}/api/bar/sync")
 
     http_code=$(echo "$response" | tail -1)
