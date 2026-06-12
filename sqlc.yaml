@@ -12,6 +12,7 @@ sql:
       - "migrations/009_email_multilingual.sql"
       - "migrations/013_settings.sql"
       - "migrations/015_revbank.sql"
+      - "migrations/016_workshop_reservations.sql"
     gen:
       go:
         package: "db"

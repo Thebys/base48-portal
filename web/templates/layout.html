@@ -37,6 +37,9 @@
                         <a href="{{if .User.IsAdmin}}/admin/projects{{else}}/projects{{end}}" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
                             Fundraising
                         </a>
+                        <a href="/workshop" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
+                            Autodílna
+                        </a>
                         {{end}}
                         {{if and .UserApplications (or .User.IsAdmin (and .DBUser (ne .DBUser.State "awaiting")))}}
                         <a href="/services" class="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium">
@@ -57,6 +60,7 @@
                                     <a href="/admin/users" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Uživatelé</a>
                                     <a href="/admin/bar" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Bar</a>
                                     <a href="/admin/levels" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Úrovně</a>
+                                    <a href="/admin/workshop" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Autodílna</a>
                                     <div class="border-t border-gray-100 my-1"></div>
                                     <a href="/admin/logs" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Systémové logy</a>
                                     <a href="/admin/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Nastavení</a>
@@ -146,6 +150,7 @@
                 {{if or .User.IsAdmin (and .DBUser (ne .DBUser.State "awaiting"))}}
                 <a href="{{if .User.IsAdmin}}/admin/finance{{else}}/finance{{end}}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Finanční přehled</a>
                 <a href="{{if .User.IsAdmin}}/admin/projects{{else}}/projects{{end}}" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Fundraising</a>
+                <a href="/workshop" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Autodílna</a>
                 {{end}}
                 {{if and .UserApplications (or .User.IsAdmin (and .DBUser (ne .DBUser.State "awaiting")))}}
                 <a href="/services" class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Služby</a>
@@ -156,6 +161,7 @@
                 <a href="/admin/users" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Uživatelé</a>
                 <a href="/admin/bar" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Bar</a>
                 <a href="/admin/levels" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Úrovně</a>
+                <a href="/admin/workshop" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Autodílna</a>
                 <a href="/admin/logs" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Systémové logy</a>
                 <a href="/admin/settings" class="block px-3 py-2 pl-6 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700">Nastavení</a>
                 {{end}}

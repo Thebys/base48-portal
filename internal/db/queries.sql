@@ -544,3 +544,85 @@ SELECT id, username, realname, email, state
 FROM users
 WHERE state = 'accepted' AND username IS NOT NULL AND username != ''
 ORDER BY username;
+
+-- ============ Workshop reservations ============
+
+-- name: ListResources :many
+SELECT * FROM resources ORDER BY id;
+
+-- name: GetResource :one
+SELECT * FROM resources WHERE id = ? LIMIT 1;
+
+-- name: UpdateResourceState :one
+UPDATE resources SET
+    state = ?,
+    blocked_reason = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING *;
+
+-- name: CreateReservation :one
+-- Atomic insert: succeeds only when the resource is available and no active
+-- reservation overlaps. Returns sql.ErrNoRows on conflict.
+INSERT INTO reservations (resource_id, user_id, starts_at, ends_at, note)
+SELECT sqlc.arg(resource_id), sqlc.arg(user_id), sqlc.arg(starts_at), sqlc.arg(ends_at), sqlc.arg(note)
+WHERE EXISTS (
+    SELECT 1 FROM resources WHERE id = sqlc.arg(resource_id) AND state = 'available'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM reservations
+    WHERE resource_id = sqlc.arg(resource_id)
+      AND state = 'active'
+      AND starts_at < sqlc.arg(ends_at)
+      AND ends_at > sqlc.arg(starts_at)
+)
+RETURNING *;
+
+-- name: GetReservation :one
+SELECT * FROM reservations WHERE id = ? LIMIT 1;
+
+-- name: ListActiveReservations :many
+-- Active reservations that have not ended yet (now = 'YYYY-MM-DD HH:MM' local).
+SELECT r.id, r.resource_id, r.user_id, r.starts_at, r.ends_at, r.note, r.state,
+       u.username, u.email
+FROM reservations r
+JOIN users u ON u.id = r.user_id
+WHERE r.state = 'active' AND r.ends_at > sqlc.arg(now)
+ORDER BY r.resource_id, r.starts_at;
+
+-- name: CancelOwnReservation :one
+UPDATE reservations SET
+    state = 'cancelled',
+    ended_by = sqlc.arg(user_id),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id) AND state = 'active'
+RETURNING *;
+
+-- name: UpdateOwnReservationEnd :one
+-- Extend/shorten own reservation. Fails (no rows) when the new end overlaps
+-- another active reservation or is not after the start.
+UPDATE reservations SET
+    ends_at = sqlc.arg(ends_at),
+    updated_at = CURRENT_TIMESTAMP
+WHERE reservations.id = sqlc.arg(id)
+  AND reservations.user_id = sqlc.arg(user_id)
+  AND reservations.state = 'active'
+  AND sqlc.arg(ends_at) > reservations.starts_at
+  AND NOT EXISTS (
+      SELECT 1 FROM reservations other
+      WHERE other.resource_id = reservations.resource_id
+        AND other.id != reservations.id
+        AND other.state = 'active'
+        AND other.starts_at < sqlc.arg(ends_at)
+        AND other.ends_at > reservations.starts_at
+  )
+RETURNING *;
+
+-- name: BumpReservation :one
+-- Admin force-end of any active reservation.
+UPDATE reservations SET
+    state = 'bumped',
+    ended_by = sqlc.arg(admin_user_id),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = sqlc.arg(id) AND state = 'active'
+RETURNING *;

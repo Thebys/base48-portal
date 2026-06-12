@@ -105,6 +105,7 @@ func main() {
 		r.Get("/finance", h.MemberFinanceHandler)
 		r.Get("/payments/recent", h.MemberRecentPaymentsHandler)
 		r.Get("/projects", h.MemberProjectsHandler)
+		r.Get("/workshop", h.WorkshopHandler)
 	})
 
 	// Member API routes (read-only, requires auth)
@@ -112,6 +113,10 @@ func main() {
 		r.Use(authenticator.RequireAuth)
 		r.Get("/projects", h.MemberProjectsAPIHandler)
 		r.Get("/projects/payments", h.MemberProjectPaymentsHandler)
+		r.Get("/workshop", h.WorkshopAPIHandler)
+		r.Post("/workshop/reservations", h.CreateReservationHandler)
+		r.Post("/workshop/reservations/{id}/cancel", h.CancelReservationHandler)
+		r.Post("/workshop/reservations/{id}/end", h.UpdateReservationEndHandler)
 	})
 
 	// Bar API (RevBank kiosk sync)
@@ -136,6 +141,7 @@ func main() {
 		r.Get("/logs", h.RequireAdmin(h.AdminLogsHandler))
 		r.Get("/levels", h.RequireAdmin(h.AdminLevelsHandler))
 		r.Get("/settings", h.RequireAdmin(h.AdminSettingsHandler))
+		r.Get("/workshop", h.RequireAdmin(h.AdminWorkshopHandler))
 		// Bar admin pages
 		r.Get("/bar", h.RequireAdmin(h.AdminBarHandler))
 		r.Get("/bar/cards", h.RequireAdmin(h.AdminBarCardsHandler))
@@ -186,6 +192,9 @@ func main() {
 		r.Get("/projects/payments", h.RequireAdmin(h.AdminProjectPaymentsHandler))
 		r.Post("/projects/vs", h.RequireAdmin(h.AdminAddProjectVSHandler))
 		r.Delete("/projects/vs", h.RequireAdmin(h.AdminRemoveProjectVSHandler))
+		r.Post("/workshop/resources/{id}", h.RequireAdmin(h.AdminUpdateResourceHandler))
+		r.Post("/workshop/reservations", h.RequireAdmin(h.AdminCreateReservationHandler))
+		r.Post("/workshop/reservations/{id}/bump", h.RequireAdmin(h.AdminBumpReservationHandler))
 	})
 
 	// Create server

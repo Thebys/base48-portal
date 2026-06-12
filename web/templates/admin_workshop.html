@@ -1,0 +1,270 @@
+{{ define "content" }}
+<link rel="stylesheet" href="/static/css/flatpickr.min.css">
+<script src="/static/js/flatpickr.min.js"></script>
+<script src="/static/js/flatpickr-cs.js"></script>
+<div class="px-4 sm:px-0">
+    <div class="mb-6 flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Správa autodílny</h1>
+            <p class="text-sm text-gray-500 mt-1">Stavy stání a aktivní rezervace. Členský pohled: <a href="/workshop" class="text-indigo-600 hover:text-indigo-800">/workshop</a></p>
+        </div>
+    </div>
+
+    <div id="workshop-error" class="hidden mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm"></div>
+
+    <!-- Resources -->
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Stání</h2>
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                    <th class="py-2 pr-4">Název</th>
+                    <th class="py-2 pr-4">Stav</th>
+                    <th class="py-2 pr-4">Důvod blokace</th>
+                    <th class="py-2"></th>
+                </tr>
+            </thead>
+            <tbody id="resources-body"></tbody>
+        </table>
+    </div>
+
+    <!-- New reservation for a member -->
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Nová rezervace za člena</h2>
+        <form id="admin-reservation-form" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Stání</label>
+                <select id="adm-res-resource" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"></select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Člen</label>
+                <select id="adm-res-user" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"></select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Od</label>
+                <input type="text" id="adm-res-start" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Do</label>
+                <input type="text" id="adm-res-end" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Poznámka</label>
+                <input type="text" id="adm-res-note" maxlength="200" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            </div>
+            <div>
+                <button type="submit" class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">Rezervovat</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Active reservations -->
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Aktivní rezervace</h2>
+        <table class="min-w-full text-sm">
+            <thead>
+                <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                    <th class="py-2 pr-4">Stání</th>
+                    <th class="py-2 pr-4">Člen</th>
+                    <th class="py-2 pr-4">Od</th>
+                    <th class="py-2 pr-4">Do</th>
+                    <th class="py-2 pr-4">Poznámka</th>
+                    <th class="py-2"></th>
+                </tr>
+            </thead>
+            <tbody id="reservations-body"></tbody>
+        </table>
+        <p id="no-reservations" class="hidden text-sm text-gray-400 mt-2">Žádné aktivní rezervace.</p>
+    </div>
+</div>
+
+<script>
+(function() {
+    var state = null;
+
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text !== undefined) e.textContent = text;
+        return e;
+    }
+
+    function fmtTs(s) {
+        return new Date(s.replace(' ', 'T')).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function showError(msg) {
+        var box = document.getElementById('workshop-error');
+        box.textContent = msg;
+        box.classList.remove('hidden');
+        setTimeout(function() { box.classList.add('hidden'); }, 6000);
+    }
+
+    function api(url, opts) {
+        return fetch(url, opts).then(function(r) {
+            return r.json().then(function(data) {
+                if (!r.ok || data.success === false) throw new Error(data.error || data.message || 'Chyba serveru');
+                return data;
+            });
+        });
+    }
+
+    function renderResources() {
+        var body = document.getElementById('resources-body');
+        body.innerHTML = '';
+        state.resources.forEach(function(resource) {
+            var tr = el('tr', 'border-b border-gray-100');
+
+            tr.appendChild(el('td', 'py-2 pr-4 font-medium text-gray-900', resource.name));
+
+            var stateTd = el('td', 'py-2 pr-4');
+            var select = el('select', 'border border-gray-300 rounded px-2 py-1 text-sm');
+            ['available', 'blocked', 'retired'].forEach(function(s) {
+                var opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = { available: 'Dostupné', blocked: 'Blokované', retired: 'Vyřazené' }[s];
+                opt.selected = resource.state === s;
+                select.appendChild(opt);
+            });
+            stateTd.appendChild(select);
+            tr.appendChild(stateTd);
+
+            var reasonTd = el('td', 'py-2 pr-4');
+            var reason = el('input', 'border border-gray-300 rounded px-2 py-1 text-sm w-full');
+            reason.type = 'text';
+            reason.placeholder = 'důvod blokace';
+            reason.value = resource.blocked_reason || '';
+            reasonTd.appendChild(reason);
+            tr.appendChild(reasonTd);
+
+            var actionTd = el('td', 'py-2 text-right');
+            var save = el('button', 'bg-indigo-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-indigo-700', 'Uložit');
+            save.addEventListener('click', function() {
+                api('/api/admin/workshop/resources/' + resource.id, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ state: select.value, blocked_reason: reason.value })
+                }).then(load).catch(function(e) { showError(e.message); });
+            });
+            actionTd.appendChild(save);
+            tr.appendChild(actionTd);
+
+            body.appendChild(tr);
+        });
+    }
+
+    function renderReservations() {
+        var body = document.getElementById('reservations-body');
+        body.innerHTML = '';
+        document.getElementById('no-reservations').classList.toggle('hidden', state.reservations.length > 0);
+
+        state.reservations.forEach(function(r) {
+            var resource = state.resources.find(function(res) { return res.id === r.resource_id; });
+            var tr = el('tr', 'border-b border-gray-100');
+            tr.appendChild(el('td', 'py-2 pr-4', resource ? resource.name : r.resource_id));
+            tr.appendChild(el('td', 'py-2 pr-4 font-medium text-gray-900', r.username));
+            tr.appendChild(el('td', 'py-2 pr-4 text-gray-500', fmtTs(r.starts_at)));
+            tr.appendChild(el('td', 'py-2 pr-4 text-gray-500', fmtTs(r.ends_at)));
+            tr.appendChild(el('td', 'py-2 pr-4 text-gray-400 italic', r.note || ''));
+
+            var actionTd = el('td', 'py-2 text-right');
+            var bump = el('button', 'bg-red-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-red-700', 'Ukončit (bump)');
+            bump.addEventListener('click', function() {
+                if (!confirm('Opravdu ukončit rezervaci člena ' + r.username + '? Člen o tom zatím nedostane notifikaci — domluvte se s ním.')) return;
+                api('/api/admin/workshop/reservations/' + r.id + '/bump', { method: 'POST' })
+                    .then(load).catch(function(e) { showError(e.message); });
+            });
+            actionTd.appendChild(bump);
+            tr.appendChild(actionTd);
+
+            body.appendChild(tr);
+        });
+    }
+
+    function renderForm() {
+        var resSelect = document.getElementById('adm-res-resource');
+        var prevResource = resSelect.value;
+        resSelect.innerHTML = '';
+        state.resources.filter(function(r) { return r.state === 'available'; }).forEach(function(r) {
+            var opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.name;
+            resSelect.appendChild(opt);
+        });
+        if (prevResource) resSelect.value = prevResource;
+
+        var userSelect = document.getElementById('adm-res-user');
+        if (userSelect.options.length === 0 && members) {
+            members.forEach(function(u) {
+                var opt = document.createElement('option');
+                opt.value = u.id;
+                opt.textContent = (u.username || u.email) + (u.realname ? ' (' + u.realname + ')' : '');
+                userSelect.appendChild(opt);
+            });
+        }
+    }
+
+    var members = null;
+
+    function load() {
+        return Promise.all([
+            api('/api/member/workshop'),
+            members ? Promise.resolve(null) : api('/api/admin/users')
+        ]).then(function(results) {
+            state = results[0];
+            if (results[1]) {
+                members = results[1].users.filter(function(u) { return u.state === 'accepted'; })
+                    .sort(function(a, b) { return (a.username || a.email).localeCompare(b.username || b.email, 'cs'); });
+            }
+            renderResources();
+            renderReservations();
+            renderForm();
+        }).catch(function(e) { showError(e.message); });
+    }
+
+    document.getElementById('admin-reservation-form').addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        api('/api/admin/workshop/reservations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                resource_id: parseInt(document.getElementById('adm-res-resource').value, 10),
+                user_id: parseInt(document.getElementById('adm-res-user').value, 10),
+                starts_at: document.getElementById('adm-res-start').value,
+                ends_at: document.getElementById('adm-res-end').value,
+                note: document.getElementById('adm-res-note').value
+            })
+        }).then(function() {
+            document.getElementById('adm-res-note').value = '';
+            return load();
+        }).catch(function(e) { showError(e.message); });
+    });
+
+    // Defaults: from now (rounded to 15 min) for one week
+    var now = new Date();
+    now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+    var p = function(n) { return String(n).padStart(2, '0'); };
+    var toLocalInput = function(d) {
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+    };
+    document.getElementById('adm-res-start').value = toLocalInput(now);
+    document.getElementById('adm-res-end').value = toLocalInput(new Date(now.getTime() + 7 * 86400000));
+
+    // Display d.m.Y H:i 24h via altInput; the real input value stays
+    // machine-readable Y-m-dTH:i, which the backend parses.
+    var fpOpts = {
+        enableTime: true,
+        time_24hr: true,
+        dateFormat: 'Y-m-d\\TH:i',
+        altInput: true,
+        altFormat: 'd.m.Y H:i',
+        minuteIncrement: 15,
+        locale: 'cs'
+    };
+    flatpickr('#adm-res-start', fpOpts);
+    flatpickr('#adm-res-end', fpOpts);
+
+    load();
+})();
+</script>
+{{ end }}

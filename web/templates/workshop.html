@@ -1,0 +1,337 @@
+{{ define "content" }}
+<link rel="stylesheet" href="/static/css/flatpickr.min.css">
+<script src="/static/js/flatpickr.min.js"></script>
+<script src="/static/js/flatpickr-cs.js"></script>
+<style>
+/* Page-specific styles for workshop reservations — shared styles are in /static/css/admin.css */
+
+    .timeline {
+        position: relative;
+        height: 56px;
+        background: #f3f4f6;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .timeline .day-tick {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        border-left: 1px solid #e5e7eb;
+    }
+
+    .timeline .day-label {
+        position: absolute;
+        top: 2px;
+        font-size: 10px;
+        color: #9ca3af;
+        padding-left: 3px;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+
+    .timeline .now-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #dc2626;
+        z-index: 3;
+    }
+
+    .timeline .block {
+        position: absolute;
+        top: 18px;
+        bottom: 4px;
+        background: #93c5fd;
+        border: 1px solid #3b82f6;
+        border-radius: 4px;
+        font-size: 11px;
+        color: #1e3a8a;
+        padding: 2px 4px;
+        overflow: hidden;
+        white-space: nowrap;
+        z-index: 2;
+    }
+
+    .timeline .block.mine {
+        background: #86efac;
+        border-color: #16a34a;
+        color: #14532d;
+    }
+
+    .timeline.blocked-overlay::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: repeating-linear-gradient(45deg, rgba(156,163,175,.35), rgba(156,163,175,.35) 8px, transparent 8px, transparent 16px);
+        z-index: 1;
+    }
+</style>
+
+<div class="px-4 sm:px-0">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Autodílna</h1>
+        <p class="text-sm text-gray-500 mt-1">Rezervace stání v autodílně. Buďte ohleduplní — po skončení práce stání uvolněte a rezervaci ukončete.</p>
+    </div>
+
+    <div id="workshop-error" class="hidden mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm"></div>
+
+    <div id="resources"></div>
+
+    <!-- New reservation -->
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 mt-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Nová rezervace</h2>
+        <form id="reservation-form" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Stání</label>
+                <select id="res-resource" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"></select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Od</label>
+                <input type="text" id="res-start" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Do</label>
+                <input type="text" id="res-end" required class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Poznámka (co tam budeš dělat)</label>
+                <input type="text" id="res-note" maxlength="200" placeholder="výměna brzd, Octavia" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+            </div>
+            <div>
+                <button type="submit" class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">Rezervovat</button>
+            </div>
+        </form>
+        <p class="text-xs text-gray-400 mt-3">Rezervace nemá pevný limit délky. Nech tam ale rezervu jen jakou reálně potřebuješ — když se plány změní, konec rezervace můžeš kdykoli posunout nebo rezervaci zrušit.</p>
+    </div>
+</div>
+
+<script>
+(function() {
+    var DAYS = 14;
+    var state = null;
+
+    // Display d.m.Y H:i 24h via altInput; the real input value stays
+    // machine-readable Y-m-dTH:i, which the backend parses.
+    var fpOpts = {
+        enableTime: true,
+        time_24hr: true,
+        dateFormat: 'Y-m-d\\TH:i',
+        altInput: true,
+        altFormat: 'd.m.Y H:i',
+        minuteIncrement: 15,
+        locale: 'cs'
+    };
+
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text !== undefined) e.textContent = text;
+        return e;
+    }
+
+    function parseTs(s) { return new Date(s.replace(' ', 'T')); }
+
+    function fmtRange(a, b) {
+        var opts = { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' };
+        return parseTs(a).toLocaleString('cs-CZ', opts) + ' – ' + parseTs(b).toLocaleString('cs-CZ', opts);
+    }
+
+    function toLocalInput(d) {
+        var p = function(n) { return String(n).padStart(2, '0'); };
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+
+    function showError(msg) {
+        var box = document.getElementById('workshop-error');
+        box.textContent = msg;
+        box.classList.remove('hidden');
+        setTimeout(function() { box.classList.add('hidden'); }, 6000);
+    }
+
+    function api(url, opts) {
+        return fetch(url, opts).then(function(r) {
+            return r.json().then(function(data) {
+                if (!r.ok || data.success === false) throw new Error(data.error || data.message || 'Chyba serveru');
+                return data;
+            });
+        });
+    }
+
+    function stateBadge(resource, reservations, now) {
+        if (resource.state === 'blocked') {
+            return el('span', 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700',
+                'Blokováno' + (resource.blocked_reason ? ': ' + resource.blocked_reason : ''));
+        }
+        if (resource.state === 'retired') {
+            return el('span', 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-500', 'Vyřazeno');
+        }
+        var occupied = reservations.find(function(r) {
+            return r.resource_id === resource.id && r.starts_at <= now && r.ends_at > now;
+        });
+        if (occupied) {
+            return el('span', 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800',
+                'Obsazeno (' + occupied.username + ')');
+        }
+        return el('span', 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800', 'Volno');
+    }
+
+    function buildTimeline(resource, reservations) {
+        var start = new Date(); start.setHours(0, 0, 0, 0);
+        var end = new Date(start.getTime() + DAYS * 86400000);
+        var span = end - start;
+
+        var tl = el('div', 'timeline' + (resource.state !== 'available' ? ' blocked-overlay' : ''));
+
+        for (var i = 0; i < DAYS; i++) {
+            var d = new Date(start.getTime() + i * 86400000);
+            var tick = el('div', 'day-tick');
+            tick.style.left = (i / DAYS * 100) + '%';
+            tl.appendChild(tick);
+            var label = el('div', 'day-label', d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' }));
+            label.style.left = (i / DAYS * 100) + '%';
+            tl.appendChild(label);
+        }
+
+        var nowLine = el('div', 'now-line');
+        nowLine.style.left = ((new Date() - start) / span * 100) + '%';
+        tl.appendChild(nowLine);
+
+        reservations.filter(function(r) { return r.resource_id === resource.id; }).forEach(function(r) {
+            var a = Math.max(parseTs(r.starts_at), start);
+            var b = Math.min(parseTs(r.ends_at), end);
+            if (b <= start || a >= end) return;
+            var block = el('div', 'block' + (r.mine ? ' mine' : ''), r.username);
+            block.style.left = ((a - start) / span * 100) + '%';
+            block.style.width = Math.max((b - a) / span * 100, 0.7) + '%';
+            block.title = r.username + '\n' + fmtRange(r.starts_at, r.ends_at) + (r.note ? '\n' + r.note : '');
+            tl.appendChild(block);
+        });
+
+        return tl;
+    }
+
+    function reservationRow(r) {
+        var row = el('div', 'flex flex-wrap items-center gap-x-3 gap-y-1 py-2 border-t border-gray-100 text-sm');
+        row.appendChild(el('span', 'font-medium ' + (r.mine ? 'text-green-700' : 'text-gray-900'), r.username + (r.mine ? ' (já)' : '')));
+        row.appendChild(el('span', 'text-gray-500', fmtRange(r.starts_at, r.ends_at)));
+        if (r.note) row.appendChild(el('span', 'text-gray-400 italic', r.note));
+
+        if (r.mine) {
+            var actions = el('span', 'ml-auto flex items-center gap-2');
+
+            var endBtn = el('button', 'text-indigo-600 hover:text-indigo-800 text-xs font-medium', 'Změnit konec');
+            var endInput = el('input', 'border border-gray-300 rounded px-2 py-1 text-xs');
+            endInput.type = 'text';
+            endInput.value = toLocalInput(parseTs(r.ends_at));
+            var endWrap = el('span', 'hidden');
+            endWrap.appendChild(endInput);
+            var endPicker = null;
+            endBtn.addEventListener('click', function() {
+                if (!endPicker) {
+                    endPicker = flatpickr(endInput, fpOpts);
+                    endWrap.classList.remove('hidden');
+                    endBtn.textContent = 'Uložit';
+                    return;
+                }
+                api('/api/member/workshop/reservations/' + r.id + '/end', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ends_at: endInput.value })
+                }).then(load).catch(function(e) { showError(e.message); });
+            });
+
+            var cancelBtn = el('button', 'text-red-600 hover:text-red-800 text-xs font-medium', 'Zrušit');
+            cancelBtn.addEventListener('click', function() {
+                if (!confirm('Opravdu zrušit rezervaci?')) return;
+                api('/api/member/workshop/reservations/' + r.id + '/cancel', { method: 'POST' })
+                    .then(load).catch(function(e) { showError(e.message); });
+            });
+
+            actions.appendChild(endWrap);
+            actions.appendChild(endBtn);
+            actions.appendChild(cancelBtn);
+            row.appendChild(actions);
+        }
+        return row;
+    }
+
+    function render() {
+        var container = document.getElementById('resources');
+        container.innerHTML = '';
+
+        state.resources.forEach(function(resource) {
+            if (resource.state === 'retired') return;
+
+            var card = el('div', 'bg-white border border-gray-200 rounded-lg shadow-sm p-5 mb-4');
+
+            var header = el('div', 'flex items-center justify-between mb-1');
+            var title = el('h2', 'text-lg font-semibold text-gray-900', resource.name);
+            header.appendChild(title);
+            header.appendChild(stateBadge(resource, state.reservations, state.now));
+            card.appendChild(header);
+
+            if (resource.description) card.appendChild(el('p', 'text-xs text-gray-400 mb-3', resource.description));
+
+            card.appendChild(buildTimeline(resource, state.reservations));
+
+            var list = state.reservations.filter(function(r) { return r.resource_id === resource.id; });
+            if (list.length) {
+                var listBox = el('div', 'mt-3');
+                list.forEach(function(r) { listBox.appendChild(reservationRow(r)); });
+                card.appendChild(listBox);
+            } else if (resource.state === 'available') {
+                card.appendChild(el('p', 'text-sm text-gray-400 mt-3', 'Žádné rezervace — stání je volné.'));
+            }
+
+            container.appendChild(card);
+        });
+
+        // Resource select: only available resources
+        var select = document.getElementById('res-resource');
+        select.innerHTML = '';
+        state.resources.filter(function(r) { return r.state === 'available'; }).forEach(function(r) {
+            var opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.name;
+            select.appendChild(opt);
+        });
+    }
+
+    function load() {
+        return api('/api/member/workshop').then(function(data) {
+            state = data;
+            render();
+        }).catch(function(e) { showError(e.message); });
+    }
+
+    document.getElementById('reservation-form').addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        api('/api/member/workshop/reservations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                resource_id: parseInt(document.getElementById('res-resource').value, 10),
+                starts_at: document.getElementById('res-start').value,
+                ends_at: document.getElementById('res-end').value,
+                note: document.getElementById('res-note').value
+            })
+        }).then(function() {
+            document.getElementById('res-note').value = '';
+            return load();
+        }).catch(function(e) { showError(e.message); });
+    });
+
+    // Sensible defaults: from now (rounded to 15 min) for 4 hours
+    var now = new Date();
+    now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+    document.getElementById('res-start').value = toLocalInput(now);
+    document.getElementById('res-end').value = toLocalInput(new Date(now.getTime() + 4 * 3600000));
+    flatpickr('#res-start', fpOpts);
+    flatpickr('#res-end', fpOpts);
+
+    load();
+})();
+</script>
+{{ end }}
