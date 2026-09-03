@@ -276,6 +276,37 @@ Overlay **nikdy nepoužívej na produkčním hostu** — vypnul by tam sync i ma
 > **Dočasná kapitola.** Platí jen dokud běží stará produkce na Jessice. Po
 > odstavení a ověření ji smaž i s odkazy na NixOS jinde v repu.
 
+### Nejdřív: co dělá `cron` v okamžiku, kdy stack naběhne
+
+`portal-cron daemon` **netiká, začne pracovat hned** — `daemonTick` se volá
+před prvním tickem. Je potřeba vědět, co to znamená v které fázi.
+
+**Nad prázdnou databází je neškodný.** Ověřeno v kódu:
+
+| co dělá | proč to nevadí |
+|---|---|
+| FIO sync | jede přes `/periods/` (rozsah dat), ne `/last/` — nehýbe kurzorem u FIO, takže transakce **neodebere** běžící produkci |
+| aktualizace dluhů a rolí | iteruje uživatele **z lokální databáze**; prázdná = nula zápisů do živého Keycloaku |
+| maily | gatované `EMAIL_ENABLED` |
+| měsíční poplatky | jen 1. dne v měsíci |
+
+**Nebezpečné je mít dva běžící daemony nad stejnými daty.** Jakmile se
+zkopíruje produkční databáze a Jessica pořád běží, oba:
+
+- zapisují role do stejného živého Keycloaku,
+- zpracovávají stejnou frontu mailů → **členům přijde všechno dvakrát**,
+- a 1. dne v měsíci **oba vytvoří měsíční poplatky**.
+
+> **Pravidlo:** Jessičiny systemd unity zastav **dřív**, než na Phoenix
+> zkopíruješ data. Ne naopak.
+
+### Migrace při prvním startu neproběhnou žádné
+
+Produkce má v `schema_migrations` verze `1,3,5…16`. Migrace `002` se přeskakuje
+záměrně (jednorázový import) a `004` neexistuje — v repu je díra v číslování.
+Zkopírovaná databáze je tedy plně zmigrovaná a start 1.5.0 nad ní **neaplikuje
+nic**. Zálohu si udělej stejně, ale tohle není ten rizikový krok.
+
 Není to výměna na místě — data se stěhují na jiný stroj, takže přibývá kopie
 databáze, nový vhost a přepnutí DNS. Jessica zůstává nedotčená až do konce,
 což je zároveň rollback.
