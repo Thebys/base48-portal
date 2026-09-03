@@ -91,10 +91,12 @@
       register: portal_env
       no_log: true
 
-    - name: Build and start the stack
+    # Pull, never build: the image comes from ghcr, built by CI from a tag.
+    # The checkout above is only here for docker-compose.yml, not for source.
+    - name: Pull and start the stack
       community.docker.docker_compose_v2:
         project_src: "{{ portal_dir }}"
-        build: always
+        pull: always
         state: present
         # Compose does not reliably notice .env content changes on its own.
         recreate: "{{ 'always' if portal_env.changed else 'auto' }}"

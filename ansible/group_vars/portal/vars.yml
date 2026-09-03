@@ -1,10 +1,9 @@
 ---
 # Non-secret settings. Secrets live in vault.yml (encrypted).
 
-# git ref to deploy: branch, tag or sha. A branch is a moving target -- prefer a
-# tag for anything you might need to roll back to. The deploy stamps the resolved
-# commit into the image tag either way, so what is running is always identifiable.
-portal_version: master
+# The image tag to deploy. This must be a tag CI has published to ghcr, so it
+# is a released version, not a branch -- `master` would not resolve to an image.
+portal_version: v1.4.3
 portal_dir: /opt/base48-portal
 portal_data_dir: /var/lib/member-portal
 portal_backup_dir: /var/backups/member-portal
