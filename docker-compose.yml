@@ -1,21 +1,48 @@
+# Base48 Member Portal. App-only: TLS and vhosts stay on the host's reverse proxy.
+#
+#   docker compose up -d --build
+#
+# Config comes from .env (see .env.example). In production Ansible generates
+# that file from the vault — see ansible/README.md.
+
+name: base48-portal
+
+x-portal: &portal
+  image: base48-portal:${PORTAL_TAG:-local}
+  build:
+    context: .
+    args:
+      VERSION: ${PORTAL_VERSION:-dev}
+  env_file: [.env]
+
+  # Container-internal facts, pinned so a dev .env can't misdirect them.
+  environment:
+    PORT: "8080"
+    DATABASE_URL: "file:/app/data/portal.db?_pragma=busy_timeout(5000)"
+    WEB_ROOT: "/app/web"
+    TZ: ${TZ:-Europe/Prague}
+
+  # portal.db is bind-mounted so it stays a normal file you can back up.
+  # PORTAL_UID/GID must own that directory on the host.
+  user: "${PORTAL_UID:-10001}:${PORTAL_GID:-10001}"
+  volumes:
+    - ${PORTAL_DATA_DIR:-./data}:/app/data
+
+  restart: unless-stopped
+
 services:
   portal:
-    build: .
+    <<: *portal
     ports:
-      - "4848:4848"
-    env_file:
-      - .env
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
+      - "${PORTAL_BIND_ADDR:-127.0.0.1}:${PORTAL_BIND_PORT:-8090}:8080"
 
-  fio-sync:
-    build: .
-    env_file:
-      - .env
-    volumes:
-      - ./data:/app/data
-    command: sh -c 'while true; do echo "=== FIO sync started at $$(date) ===" && ./sync-fio; sleep 120; done'
-    restart: unless-stopped
+  cron:
+    <<: *portal
+    command: [/app/portal-cron, daemon]
+    # Only the server runs migrations, so the daemon waits for it.
     depends_on:
-      - portal
+      portal:
+        condition: service_healthy
+    # The image healthcheck probes a port this process doesn't open.
+    healthcheck:
+      disable: true

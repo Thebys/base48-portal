@@ -1,0 +1,21 @@
+---
+# Template for the encrypted secrets file. Fill in real values, then:
+#
+#   cp vault.yml.example vault.yml
+#   ansible-vault encrypt vault.yml
+#
+# The encrypted vault.yml IS committed to git — that is the point of
+# ansible-vault. Before pushing, confirm it is actually encrypted:
+#
+#   head -c 30 vault.yml     # must print $ANSIBLE_VAULT;1.1;AES256
+#
+# Keep SESSION_SECRET free of '$' — docker compose reads .env and would treat
+# it as interpolation. `openssl rand -hex 32` is safe.
+
+vault_keycloak_client_secret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+vault_keycloak_service_client_secret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+vault_session_secret: generate-with-openssl-rand-hex-32
+vault_bank_fio_token: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+vault_revbank_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+vault_smtp_username: ""
+vault_smtp_password: ""

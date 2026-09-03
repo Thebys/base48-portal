@@ -58,12 +58,12 @@ func daemonTick(ctx context.Context, cfg *config.Config, queries *db.Queries, la
 
 	// On the 1st of each month, run fees then queue debt emails
 	if now.Day() == 1 && *lastFeesMonth != now.Month() {
-		log.Printf("\n" + repeat("=", 80))
+		log.Println("\n" + repeat("=", 80))
 		log.Println("MONTHLY FEES (1st of month, auto)")
 		log.Println(repeat("=", 80))
 		runFees(ctx, cfg, queries)
 
-		log.Printf("\n" + repeat("-", 80))
+		log.Println("\n" + repeat("-", 80))
 		log.Println("DEBT EMAILS (after fees)")
 		log.Println(repeat("-", 80))
 		runDebtEmails(ctx, cfg, queries)

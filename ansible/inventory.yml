@@ -1,0 +1,14 @@
+portal:
+  hosts:
+    phoenix:
+      ansible_host: 194.182.84.91
+      ansible_user: root
+
+# Old NixOS production. Deliberately NOT in the portal group: the playbook must
+# never target it. Kept here so `ansible legacy -m ...` can still reach it while
+# the migration is in flight.
+legacy:
+  hosts:
+    jessica:
+      ansible_host: 37.205.13.28
+      ansible_user: root

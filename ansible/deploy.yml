@@ -1,0 +1,116 @@
+---
+- name: Deploy Base48 member portal
+  hosts: portal
+  become: true
+
+  tasks:
+    - name: Check that Docker and Compose are available
+      ansible.builtin.command: docker compose version
+      register: portal_compose_version
+      changed_when: false
+
+    # Needed on the host for the pre-migration backup below. The image ships its
+    # own sqlite, but the backup has to happen before any container starts.
+    - name: Install sqlite3 for database backups
+      ansible.builtin.apt:
+        name: sqlite3
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # uid/gid are pinned rather than auto-allocated: the database is a bind-mounted
+    # file, so its ownership has to mean the same thing on every host it is copied
+    # to. 990:985 is what jessica has always used and both are free on phoenix.
+    - name: Create the group that owns the database
+      ansible.builtin.group:
+        name: member-portal
+        gid: "{{ portal_gid }}"
+        system: true
+
+    - name: Create the service user that owns the database
+      ansible.builtin.user:
+        name: member-portal
+        uid: "{{ portal_uid }}"
+        group: member-portal
+        system: true
+        home: "{{ portal_data_dir }}"
+        create_home: false
+        shell: /usr/sbin/nologin
+
+    - name: Create application directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ portal_dir }}"
+          owner: root
+          group: root
+          mode: "0755"
+        - path: "{{ portal_data_dir }}"
+          owner: member-portal
+          group: member-portal
+          mode: "0700"
+        - path: "{{ portal_backup_dir }}"
+          owner: root
+          group: root
+          mode: "0700"
+
+    - name: Check out the requested version
+      ansible.builtin.git:
+        repo: "{{ portal_repo }}"
+        dest: "{{ portal_dir }}"
+        version: "{{ portal_version }}"
+        force: true
+      register: portal_checkout
+
+    - name: Look for an existing database
+      ansible.builtin.stat:
+        path: "{{ portal_data_dir }}/portal.db"
+      register: portal_db
+
+    # The server runs migrations at startup, so the copy has to be taken before
+    # compose comes up. `.backup` is safe against a live writer; `cp` is not.
+    - name: Back up the database before migrations run
+      ansible.builtin.command:
+        cmd: >-
+          sqlite3 -readonly {{ portal_data_dir }}/portal.db
+          ".backup {{ portal_backup_dir }}/portal-{{ ansible_date_time.iso8601_basic_short }}.db"
+        creates: "{{ portal_backup_dir }}/portal-{{ ansible_date_time.iso8601_basic_short }}.db"
+      when: portal_db.stat.exists
+
+    # 0600 and root-owned: compose reads it as root before dropping to PORTAL_UID.
+    - name: Write .env from vault and vars
+      ansible.builtin.template:
+        src: env.j2
+        dest: "{{ portal_dir }}/.env"
+        owner: root
+        mode: "0600"
+      register: portal_env
+      no_log: true
+
+    - name: Build and start the stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ portal_dir }}"
+        build: always
+        state: present
+        # Compose does not reliably notice .env content changes on its own.
+        recreate: "{{ 'always' if portal_env.changed else 'auto' }}"
+        wait: true
+        wait_timeout: 120
+
+    - name: Verify the portal answers
+      ansible.builtin.uri:
+        url: "http://{{ portal_bind_addr }}:{{ portal_bind_port }}/healthz"
+        return_content: true
+      register: portal_health
+      failed_when: portal_health.json.status | default('') != "ok"
+
+    - name: Report deployed version
+      ansible.builtin.debug:
+        msg: >-
+          Deployed {{ portal_version }}
+          ({{ portal_checkout.after | default('unknown') }})
+          to {{ inventory_hostname }}

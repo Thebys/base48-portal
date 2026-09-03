@@ -23,6 +23,7 @@ import (
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
 	auth           *auth.Authenticator
+	db             *sql.DB
 	queries        *db.Queries
 	templates      *template.Template
 	config         *config.Config
@@ -69,6 +70,7 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 	// This is simpler than managing template name conflicts
 	return &Handler{
 		auth:           authenticator,
+		db:             database,
 		queries:        queries,
 		templates:      nil, // Will be loaded per-request
 		config:         cfg,

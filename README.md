@@ -41,10 +41,31 @@ make help       # Všechny příkazy
 ## Cron úlohy
 
 ```bash
+portal-cron daemon   # Vše na jednom místě (sync á 2 min, poplatky 1. v měsíci)
 portal-cron sync     # Synchronizace plateb + role sync (každé 2 min)
 portal-cron fees     # Měsíční poplatky (1. den v měsíci)
 portal-cron report   # Report nespárovaných plateb (ad-hoc)
 ```
+
+## Nasazení
+
+Produkce jede přes Ansible, secrets drží ansible-vault:
+
+```bash
+cd ansible && ansible-playbook deploy.yml --ask-vault-pass
+```
+
+Ručně (dev, nebo fallback na hostu):
+
+```bash
+cp .env.example .env && $EDITOR .env
+docker compose up -d --build
+```
+
+Stack je app-only — TLS a vhosty zůstávají na reverse proxy hostu.
+
+- [Ansible + vault](ansible/README.md)
+- [Docker stack, zálohy, cutover z NixOS](docs/DEPLOYMENT_DOCKER.md)
 
 ## RevBank (bar kiosek)
 
@@ -55,6 +76,8 @@ Detaily: [docs/REVBANK_INTEGRATION.md](docs/REVBANK_INTEGRATION.md)
 
 ## Dokumentace
 
+- [Ansible deployment](ansible/README.md)
+- [Docker deployment](docs/DEPLOYMENT_DOCKER.md)
 - [Keycloak setup](docs/KEYCLOAK_SETUP.md)
 - [RevBank integrace](docs/REVBANK_INTEGRATION.md)
 - [Specifikace](SPEC.md)

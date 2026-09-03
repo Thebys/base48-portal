@@ -87,6 +87,7 @@ func main() {
 
 	// Public routes
 	r.Get("/", h.HomeHandler)
+	r.Get("/healthz", h.HealthHandler)
 	r.Get("/api/qr", h.QRPaymentHandler)
 
 	// Auth routes

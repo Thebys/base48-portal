@@ -14,6 +14,7 @@ import (
 	"net/smtp"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -343,7 +344,7 @@ func (c *Client) checkSMTP() error {
 	if c.config.SMTPHost == "" {
 		return fmt.Errorf("SMTP not configured")
 	}
-	addr := fmt.Sprintf("%s:%d", c.config.SMTPHost, c.config.SMTPPort)
+	addr := net.JoinHostPort(c.config.SMTPHost, strconv.Itoa(c.config.SMTPPort))
 	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 	if err != nil {
 		return fmt.Errorf("SMTP unreachable (%s): %w", addr, err)
@@ -504,7 +505,7 @@ func (c *Client) attemptDelivery(ctx context.Context, entry db.EmailOutbox, para
 // When SMTPSkipTLS is set, it connects without STARTTLS and skips authentication
 // (suitable for local relays like Postfix that don't require TLS or auth).
 func (c *Client) sendSMTP(recipient, subject, htmlBody string) error {
-	addr := fmt.Sprintf("%s:%d", c.config.SMTPHost, c.config.SMTPPort)
+	addr := net.JoinHostPort(c.config.SMTPHost, strconv.Itoa(c.config.SMTPPort))
 	message := c.formatMessage(recipient, subject, htmlBody)
 
 	if !c.config.SMTPSkipTLS {

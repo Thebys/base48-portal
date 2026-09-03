@@ -1,0 +1,41 @@
+---
+# Non-secret settings. Secrets live in vault.yml (encrypted).
+
+# git ref to deploy: branch, tag or sha. A branch is a moving target -- prefer a
+# tag for anything you might need to roll back to. The deploy stamps the resolved
+# commit into the image tag either way, so what is running is always identifiable.
+portal_version: master
+portal_dir: /opt/base48-portal
+portal_data_dir: /var/lib/member-portal
+portal_backup_dir: /var/backups/member-portal
+portal_repo: https://github.com/Thebys/base48-portal.git
+
+# Pinned, not auto-allocated: portal.db is a bind-mounted file, so its numeric
+# ownership has to mean the same thing on every host it is copied to. These are
+# the values jessica has always used.
+portal_uid: 990
+portal_gid: 985
+
+# Where the host's reverse proxy will find the app. Keep it on loopback.
+portal_bind_addr: 127.0.0.1
+portal_bind_port: 8090
+
+portal_base_url: https://members.base48.cz
+portal_keycloak_url: https://sso.base48.cz
+portal_keycloak_realm: hackerspace
+portal_keycloak_client_id: member-portal-web
+portal_keycloak_service_client_id: member-portal-service
+
+portal_bank_iban: CZ6620100000002003436319
+portal_bank_bic: FIOBCZPPXXX
+portal_bank_account_cz: 2800691518/2010
+
+portal_email_enabled: true
+portal_smtp_host: localhost
+portal_smtp_port: 25
+portal_smtp_from: noreply@base48.cz
+portal_smtp_from_name: Base48 Hackerspace
+portal_smtp_reply_to: rada@lists.base48.cz
+portal_smtp_skip_tls: true
+
+portal_tz: Europe/Prague

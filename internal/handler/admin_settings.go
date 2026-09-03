@@ -38,7 +38,7 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	smtpConfigured := h.config.SMTPHost != "" && h.config.SMTPPort != 0
 	smtpReachable := false
 	if smtpConfigured {
-		addr := fmt.Sprintf("%s:%d", h.config.SMTPHost, h.config.SMTPPort)
+		addr := net.JoinHostPort(h.config.SMTPHost, strconv.Itoa(h.config.SMTPPort))
 		conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 		if err == nil {
 			conn.Close()

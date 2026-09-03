@@ -1,9 +1,21 @@
-.git
-.env
-data/
-*.db
-*.md
-.gitignore
-.dockerignore
-Dockerfile
-docker-compose.yml
+# Allowlist approach: ignore everything, then re-include only what the build needs.
+# Keeps the build context at a few hundred kB instead of ~140 MB of stray binaries,
+# and means a new file in the repo root can never silently bloat or poison an image.
+*
+
+# Go module definition (copied first for dependency layer caching)
+!go.mod
+!go.sum
+
+# Application source
+!cmd/
+!internal/
+!migrations/
+
+# Runtime assets copied into the final image
+!web/
+
+# Excluded from the re-included directories above.
+# Test files are kept: the optional `test` build stage runs `go test ./...`.
+cmd/test/
+**/testdata/

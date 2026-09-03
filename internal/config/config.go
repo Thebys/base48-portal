@@ -56,7 +56,12 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                               getEnv("PORT", "8080"),
 		BaseURL:                            getEnv("BASE_URL", "http://localhost:8080"),
-		DatabaseURL:                        getEnv("DATABASE_URL", "file:./data/portal.db?_fk=1"),
+		// NOTE: `_fk=1` is mattn/go-sqlite3 syntax and is silently ignored by
+		// modernc.org/sqlite, which this project uses -- foreign keys have never
+		// actually been enforced. Enabling them (`_pragma=foreign_keys(1)`) is a
+		// separate, data-dependent change: run `PRAGMA foreign_key_check` against a
+		// copy of production first, because the schema uses ON DELETE CASCADE.
+		DatabaseURL:                        getEnv("DATABASE_URL", "file:./data/portal.db?_pragma=busy_timeout(5000)"),
 		KeycloakURL:                        getEnv("KEYCLOAK_URL", ""),
 		KeycloakRealm:                      getEnv("KEYCLOAK_REALM", ""),
 		KeycloakClientID:                   getEnv("KEYCLOAK_CLIENT_ID", ""),

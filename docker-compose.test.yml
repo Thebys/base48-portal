@@ -1,0 +1,21 @@
+# Overlay for running against a COPY of production data.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up -d
+#
+# Blanks every credential that could reach out and change something real.
+# `environment:` wins over `env_file:`, so these override whatever .env holds.
+# Never use this on the production host.
+
+x-safe: &safe
+  KEYCLOAK_SERVICE_ACCOUNT_CLIENT_ID: ""      # no role writes to live Keycloak
+  KEYCLOAK_SERVICE_ACCOUNT_CLIENT_SECRET: ""
+  EMAIL_ENABLED: "false"                      # no mail to members
+  SMTP_HOST: ""
+  BANK_FIO_TOKEN: ""                          # no bank API calls
+  REVBANK_API_KEY: ""
+
+services:
+  portal:
+    environment: *safe
+  cron:
+    environment: *safe

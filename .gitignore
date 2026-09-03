@@ -4,10 +4,23 @@
 *.dll
 *.so
 *.dylib
-portal
-server
-portal-cron
-main
+# Anchored with a leading slash: an unanchored pattern matches directories at any
+# depth too, so a bare `cron` would hide cmd/cron/, `server` would hide cmd/server/,
+# `import` would hide cmd/import/, and `portal` would hide ansible/group_vars/portal/.
+# Already-tracked files keep working, which is what makes it easy to miss.
+/portal
+/server
+/portal-cron
+/import
+/main
+
+# Legacy binaries (superseded by portal-cron subcommands, were committed by mistake)
+/cron
+/create_monthly_fees
+/report_unmatched_payments
+/sync_fio
+/sync_fio_payments
+/update_debt_status
 
 # Test binary
 *.test
@@ -51,7 +64,6 @@ Thumbs.db
 tmp/
 *.log
 cursor_*.md
-import
 import.exe
 
 # Test files

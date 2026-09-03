@@ -1,0 +1,6 @@
+collections:
+  # docker_compose_v2 shells out to the `docker compose` CLI, so no Python SDK is
+  # needed on the host. Pinned to a floor because `build: always` and the wait/
+  # wait_timeout options landed in 3.x.
+  - name: community.docker
+    version: ">=3.6.0"
