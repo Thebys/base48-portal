@@ -52,8 +52,12 @@ jobs:
         id: meta
         with:
           images: ${{ steps.img.outputs.name }}
-          # Version tags and the commit sha. Deliberately no `latest`: production
-          # pins an explicit tag so a rollback is a one-line change.
+          # metadata-action tags the newest semver release as `latest` unless
+          # told not to. Production pins an explicit tag so a rollback is a
+          # one-line change, and a floating `latest` only invites someone to
+          # deploy something nobody chose.
+          flavor: latest=false
+          # Version tags and the commit sha.
           tags: |
             type=ref,event=tag
             type=sha,format=long
