@@ -12,45 +12,76 @@ ansible/
 ├── templates/env.j2                 šablona .env souboru
 └── group_vars/portal/
     ├── vars.yml                     nastavení (necitlivé, čitelné v gitu)
-    └── vault.yml                    secrets (šifrované, taky v gitu)
+    └── vault.yml.example            vzor — reálný vault sem NEPATŘÍ, viz níž
 ```
+
+> ## ⚠ Vault nepatří do tohohle repa
+>
+> **`Thebys/base48-portal` je veřejné repo.** Zašifrovaný vault je sice
+> nečitelný, ale kdokoliv si ho stáhne a láme offline, jak dlouho chce —
+> a z gitu se nikdy nedá vzít zpátky. `ansible-vault` navíc odvozuje klíč
+> přes PBKDF2 s **10 000 iteracemi**; OWASP dnes doporučuje 600 000+.
+>
+> Reálný `vault.yml` proto žije v **`base48/servers-config-ng`**, které je
+> privátní. Tady je jen `vault.yml.example` jako vzor struktury.
+>
+> Commit vaultu do tohohle repa blokuje pre-commit hook. Zapni si ho:
+> `make hooks`.
 
 ## Jak to funguje
 
 Rozdělení je jediná věc, kterou je potřeba pochopit: **nastavení a secrets
 jsou dva soubory**. `vars.yml` je normální YAML, který si každý přečte v gitu.
-`vault.yml` je stejný YAML, ale zašifrovaný AES-256 heslem — do gitu se commituje
-taky, jen jako nečitelný blok. Ansible ho při běhu dešifruje v paměti a obojí
-slije do `templates/env.j2`, ze kterého vznikne `.env` na cílovém stroji.
+`vault.yml` je stejný YAML, ale zašifrovaný AES-256 heslem. Ansible ho při běhu
+dešifruje **v paměti na tvém notebooku**, slije obojí do `templates/env.j2`
+a výsledek zapíše přes SSH jako `.env` na cílový stroj.
+
+Heslo k vaultu se na cílový stroj **nikdy nedostane**. Phoenix nemá o žádném
+secret managementu ponětí — leží tam obyčejný `.env` s právy 0600.
 
 Tím zmizí dnešní stav, kdy secrets žijou ručně editované v
 `/etc/nixos/secrets/member-portal.env` mimo jakoukoliv historii a `copyPathToStore`
 je navíc kopíruje do world-readable `/nix/store`.
 
+## Kde se co děje
+
+| kontext | co tam je | kdo se k tomu dostane |
+|---|---|---|
+| Bitwarden (sdílený) | **jen heslo k vaultu** | správci base48 |
+| tvůj notebook | plaintext secrets, ale jen v RAM po dobu běhu | ty |
+| git (servers-config-ng, privátní) | zašifrovaný `vault.yml` | kdo má přístup k repu |
+| Phoenix | `.env` 0600 root + proměnné v kontejneru | root, skupina `docker` |
+| Jessica | dnešní zdroj pravdy, plaintext | root — dokud ji neodstavíme |
+
 ## První nastavení
 
-```bash
-pip install --user ansible-core        # nebo dnf install ansible-core
-cd ansible
-ansible-galaxy collection install -r requirements.yml
+Heslo generuj, nevymýšlej — při 10k iteracích PBKDF2 je lidmi zvolená fráze
+lámatelná:
 
-cp group_vars/portal/vault.yml.example group_vars/portal/vault.yml
-$EDITOR group_vars/portal/vault.yml    # vyplnit reálné hodnoty
-ansible-vault encrypt group_vars/portal/vault.yml
+```bash
+openssl rand -base64 32        # → do Bitwardenu, sdílet se správci
 ```
 
-Heslo k vaultu si zvolíš při šifrování. Sdílí se mimo git — správci si ho
-předají osobně nebo přes password manager. Bez něj se s repem nedá deployovat,
-což je záměr.
+Vault zakládej přes `ansible-vault create`, **ne** kopií vzoru a následným
+šifrováním. `create` otevře editor nad dočasným souborem a na disk uloží až
+zašifrovaný výsledek — plaintext secrets se tak nikdy neocitnou v pracovním
+stromu gitu, kde je umí sebrat `git add -A`:
 
-> **Ulož ho na dvě místa dřív, než do vaultu půjdou ostré secrets.** Zašifrovaný
-> vault v gitu je k ničemu ve chvíli, kdy k němu nikdo nemá klíč. Dokud heslo
-> existuje jen na jednom notebooku, není to záloha secrets — je to jen jiný
-> jediný bod selhání než dnešní `/etc/nixos/secrets/`. Sdílený password manager
-> plus offline kopie.
+```bash
+cd <servers-config-ng>/portal
+ansible-vault create vault.yml      # NE: cp vault.yml.example vault.yml
+```
+
+Strukturu opiš z [vault.yml.example](group_vars/portal/vault.yml.example).
+Po uložení ověř, že je to opravdu zašifrované:
+
+```bash
+head -c 30 vault.yml                # musí vrátit $ANSIBLE_VAULT;1.1;AES256
+```
 
 Stávající hodnoty se dají zatím vytáhnout ze staré produkce (platí jen do
-odstavení Jessicy):
+odstavení Jessicy). Pozor na shell historii — proto `ssh` rovnou do editoru,
+ne přes proměnné:
 
 ```bash
 ssh jessica cat /etc/nixos/secrets/member-portal.env

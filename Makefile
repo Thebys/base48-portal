@@ -1,4 +1,4 @@
-.PHONY: all build build-all run test clean setup db-reset sqlc prod dev tools help
+.PHONY: all build build-all run test clean setup db-reset sqlc prod dev tools hooks help
 
 # Default target
 all: build
@@ -41,6 +41,11 @@ db-reset:
 sqlc:
 	sqlc generate
 
+# Enable the repo's git hooks (blocks committing secrets into this public repo)
+hooks:
+	git config core.hooksPath .githooks
+	@echo "hooks enabled: .githooks/pre-commit"
+
 # Install development tools
 tools:
 	go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
@@ -69,6 +74,7 @@ help:
 	@echo "  make setup      - Initial project setup"
 	@echo "  make db-reset   - Delete the database (server re-creates + migrates)"
 	@echo "  make sqlc       - Generate SQL code"
+	@echo "  make hooks      - Enable git hooks that block secret commits"
 	@echo "  make tools      - Install dev tools"
 	@echo "  make dev        - Run with hot reload"
 	@echo "  make prod       - Build for production"

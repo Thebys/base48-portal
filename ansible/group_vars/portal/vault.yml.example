@@ -1,11 +1,15 @@
 ---
-# Template for the encrypted secrets file. Fill in real values, then:
+# Structure template for the encrypted secrets file. This file holds no secrets
+# and is safe to read.
 #
-#   cp vault.yml.example vault.yml
-#   ansible-vault encrypt vault.yml
+# Do NOT create the real vault next to this one: base48-portal is a PUBLIC repo,
+# and an encrypted blob published there is downloadable forever and crackable
+# offline at leisure (ansible-vault uses only 10k PBKDF2 iterations). The real
+# vault lives in base48/servers-config-ng, which is private.
 #
-# The encrypted vault.yml IS committed to git — that is the point of
-# ansible-vault. Before pushing, confirm it is actually encrypted:
+# Create it there with `ansible-vault create vault.yml` rather than by copying
+# this file and encrypting afterwards -- `create` never writes plaintext to disk,
+# so the secrets cannot be picked up by a stray `git add -A`.
 #
 #   head -c 30 vault.yml     # must print $ANSIBLE_VAULT;1.1;AES256
 #

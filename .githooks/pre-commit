@@ -1,0 +1,41 @@
+#!/bin/sh
+# Refuses to commit an ansible-vault file that is not actually encrypted, and
+# refuses secrets-bearing files in this repo at all -- base48-portal is PUBLIC.
+#
+# Enable with:  make hooks
+set -e
+
+fail() { printf '\n  BLOCKED: %s\n\n' "$1" >&2; exit 1; }
+
+staged=$(git diff --cached --name-only --diff-filter=AM)
+
+for f in $staged; do
+    case "$f" in
+        # A real vault belongs in the private servers-config-ng repo, never here.
+        *vault.yml|*vault.yaml|*vault/*.yml)
+            case "$f" in *.example) continue ;; esac
+            fail "$f looks like an ansible-vault secrets file.
+  This repository is PUBLIC. Vaults belong in base48/servers-config-ng (private).
+  An encrypted blob committed here is downloadable forever and crackable offline
+  (ansible-vault uses only 10k PBKDF2 iterations)."
+            ;;
+        .env|*/.env)
+            fail "$f is a real environment file with secrets. Commit .env.example instead."
+            ;;
+    esac
+done
+
+# Belt and braces: anything staged that starts with the vault header is fine,
+# but a file NAMED like a vault that is readable YAML is the dangerous case.
+for f in $staged; do
+    case "$f" in
+        *vault*.example) continue ;;
+        *vault*)
+            if [ -f "$f" ] && ! head -c 30 "$f" 2>/dev/null | grep -q '^\$ANSIBLE_VAULT'; then
+                fail "$f is named like a vault but is NOT encrypted (no \$ANSIBLE_VAULT header)."
+            fi
+            ;;
+    esac
+done
+
+exit 0
