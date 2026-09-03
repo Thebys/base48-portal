@@ -45,7 +45,7 @@ sqlc:
 
 # Build the production image locally, tagged the way the host pulls it.
 # CI does this on a version tag; this is the manual fallback.
-PORTAL_IMAGE ?= ghcr.io/base48/member-portal
+PORTAL_IMAGE ?= ghcr.io/thebys/member-portal
 image:
 	docker build \
 		--build-arg VERSION=$(VERSION) \

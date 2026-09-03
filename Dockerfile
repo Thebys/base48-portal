@@ -40,7 +40,7 @@ FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d650
 # label is what makes the GHCR package page link to the repository.
 ARG VERSION=dev
 ARG REVISION=unknown
-ARG SOURCE=https://github.com/base48/base48-portal
+ARG SOURCE=https://github.com/Thebys/base48-portal
 LABEL org.opencontainers.image.title="Base48 member portal" \
       org.opencontainers.image.description="Membership, fees and payment portal for Base48 hackerspace" \
       org.opencontainers.image.source="${SOURCE}" \

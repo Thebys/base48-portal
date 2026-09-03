@@ -10,7 +10,9 @@ name: base48-portal
 x-portal: &portal
   # Same name the production host pulls, so `make image-push` can push whatever
   # this built. Production never builds -- it pulls a tag from ghcr.
-  image: ${PORTAL_IMAGE:-ghcr.io/base48/member-portal}:${PORTAL_TAG:-local}
+  # Published under the repo owner. Becomes ghcr.io/base48/... if the repo
+  # moves to the org -- the release workflow follows the owner automatically.
+  image: ${PORTAL_IMAGE:-ghcr.io/thebys/member-portal}:${PORTAL_TAG:-local}
   build:
     context: .
     args:
