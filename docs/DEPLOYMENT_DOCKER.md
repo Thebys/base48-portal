@@ -343,6 +343,13 @@ Prázdný FIO token. Buď je to záměr (test overlay), nebo chybí v `.env`.
 Pozor: `runSync` se při chybějícím tokenu ukončí hned, takže se přeskočí
 i aktualizace dluhů a odesílání mailů.
 
+**Maily se neodesílají / `smtp dial: connection refused`**
+`SMTP_HOST` je `localhost` nebo `127.0.0.1`. Uvnitř kontejneru to je kontejner
+sám, ne host. Patří tam `host.docker.internal` (compose ho mapuje na bridge
+gateway přes `extra_hosts`). Druhá půlka je na hostu: musí tam běžet MTA na :25,
+který přijímá poštu z docker bridge sítě — u postfixu `mynetworks` s
+`172.16.0.0/12`. **Phoenix zatím žádný MTA nemá**, Jessica má postfix.
+
 **Statika vrací 404 po cutoveru**
 V nginxu zůstal `alias` na nix store. Viz sekce Reverse proxy.
 

@@ -22,6 +22,12 @@ x-portal: &portal
     WEB_ROOT: "/app/web"
     TZ: ${TZ:-Europe/Prague}
 
+  # SMTP runs on the host, not in the stack. Inside a container "localhost" is the
+  # container itself, so the relay is reached through the docker bridge gateway.
+  # SMTP_HOST must be host.docker.internal for this to resolve.
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
   # portal.db is bind-mounted so it stays a normal file you can back up.
   # PORTAL_UID/GID must own that directory on the host.
   user: "${PORTAL_UID:-10001}:${PORTAL_GID:-10001}"

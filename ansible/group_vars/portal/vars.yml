@@ -31,7 +31,11 @@ portal_bank_bic: FIOBCZPPXXX
 portal_bank_account_cz: 2800691518/2010
 
 portal_email_enabled: true
-portal_smtp_host: localhost
+# NOT localhost/127.0.0.1: inside the container that is the container itself.
+# host.docker.internal is mapped to the docker bridge gateway by extra_hosts in
+# docker-compose.yml. The host needs an MTA on :25 that accepts mail from the
+# bridge network (postfix mynetworks must include 172.16.0.0/12).
+portal_smtp_host: host.docker.internal
 portal_smtp_port: 25
 portal_smtp_from: noreply@base48.cz
 portal_smtp_from_name: Base48 Hackerspace
