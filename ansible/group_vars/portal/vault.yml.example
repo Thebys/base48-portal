@@ -21,5 +21,6 @@ vault_keycloak_service_client_secret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 vault_session_secret: generate-with-openssl-rand-hex-32
 vault_bank_fio_token: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 vault_revbank_api_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-vault_smtp_username: ""
-vault_smtp_password: ""
+
+# No SMTP credentials: SMTP_SKIP_TLS=true means the client talks to the local
+# relay without authenticating, so the application never reads them.
