@@ -36,6 +36,18 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d AS runtime
 
+# Ties the published package back to the commit it was built from. The source
+# label is what makes the GHCR package page link to the repository.
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG SOURCE=https://github.com/base48/base48-portal
+LABEL org.opencontainers.image.title="Base48 member portal" \
+      org.opencontainers.image.description="Membership, fees and payment portal for Base48 hackerspace" \
+      org.opencontainers.image.source="${SOURCE}" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
+
 # ca-certificates: TLS out to Keycloak, FIO and SMTP.
 # tzdata: fee periods are computed in local time.
 # sqlite: online backups without a second image — hosts don't reliably have it.

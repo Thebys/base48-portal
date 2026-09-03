@@ -53,7 +53,43 @@ než na databázi sáhne daemon.
 Image je `alpine:3.21` + dvě statické Go binárky, **~61 MB**. Build context je
 díky allowlistu v `.dockerignore` **~1,6 MB**.
 
-## Rychlý start
+## Kde image vzniká
+
+**Produkce se nestaví na hostu — pullne hotový tag z GHCR.** Na produkčním
+stroji tak není zdroják, Go toolchain ani build cache, a „co běží" je
+jednoznačně dané tagem.
+
+Publikuje se pushnutím verzovaného tagu; workflow `.github/workflows/release.yml`
+pustí testy a teprve pak buildne a pushne:
+
+```bash
+# bump verze
+$EDITOR VERSION                       # a PORTAL_VERSION v .env.example
+git commit -am "Release 1.4.4"
+git tag v1.4.4 && git push origin v1.4.4
+```
+
+Ruční fallback bez CI (potřebuje `docker login ghcr.io` s PAT se scope
+`write:packages`):
+
+```bash
+make image-push
+```
+
+Balíček je **veřejný**, takže produkční host pullne bez přihlášení — na hostu
+tedy neleží žádný registry credential. První publikace je ale v GHCR defaultně
+**privátní**; po prvním pushi je potřeba viditelnost ručně přepnout.
+
+> **Do image nikdy neposílej secret přes `--build-arg`.** Build args se
+> natrvalo zapisují do `docker history` a u veřejného balíčku je uvidí každý.
+> Secrets do kontejneru vstupují až za běhu přes `.env`.
+
+Tagy jsou verze a commit sha. Záměrně **žádný `latest`** — produkce pinuje
+konkrétní tag, takže rollback je změna jednoho řádku.
+
+## Rychlý start (lokální vývoj)
+
+Lokálně se staví ze zdrojáku; produkce pullne — viz sekce výš.
 
 ```bash
 cp .env.example .env

@@ -1,4 +1,6 @@
-.PHONY: all build build-all run test clean setup db-reset sqlc prod dev tools hooks help
+VERSION := $(shell cat VERSION)
+
+.PHONY: all build build-all run test clean setup db-reset sqlc prod dev tools hooks image image-push help
 
 # Default target
 all: build
@@ -41,6 +43,20 @@ db-reset:
 sqlc:
 	sqlc generate
 
+# Build the production image locally, tagged the way the host pulls it.
+# CI does this on a version tag; this is the manual fallback.
+PORTAL_IMAGE ?= ghcr.io/base48/member-portal
+image:
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg REVISION=$(shell git rev-parse HEAD) \
+		--build-arg SOURCE=$(shell git remote get-url origin | sed 's/\.git$$//') \
+		-t $(PORTAL_IMAGE):$(VERSION) .
+
+# Requires `docker login ghcr.io` with a PAT that has write:packages.
+image-push: image
+	docker push $(PORTAL_IMAGE):$(VERSION)
+
 # Enable the repo's git hooks (blocks committing secrets into this public repo)
 hooks:
 	git config core.hooksPath .githooks
@@ -57,7 +73,6 @@ dev:
 
 # Build for production. Matches what the Docker image does: static, pure-Go
 # sqlite driver, version stamped from the VERSION file.
-VERSION := $(shell cat VERSION)
 prod:
 	CGO_ENABLED=0 go build -trimpath -buildvcs=false \
 		-ldflags="-s -w -X 'main.BuildDate=$(VERSION) ($(shell date -u '+%Y-%m-%d %H:%M UTC'))'" \
@@ -74,6 +89,8 @@ help:
 	@echo "  make setup      - Initial project setup"
 	@echo "  make db-reset   - Delete the database (server re-creates + migrates)"
 	@echo "  make sqlc       - Generate SQL code"
+	@echo "  make image      - Build the production image"
+	@echo "  make image-push - Build and push it to ghcr"
 	@echo "  make hooks      - Enable git hooks that block secret commits"
 	@echo "  make tools      - Install dev tools"
 	@echo "  make dev        - Run with hot reload"

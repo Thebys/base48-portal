@@ -1,0 +1,80 @@
+# Builds the portal image and publishes it to GHCR when a version tag is pushed.
+#
+#   git tag v1.4.3 && git push origin v1.4.3
+#
+# The image name follows the repository owner, so it becomes
+# ghcr.io/base48/member-portal automatically if this repo moves to the org.
+# GITHUB_TOKEN can only publish under the repo's own owner -- pushing to a
+# different namespace would need a PAT with write:packages in secrets.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to publish"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the image name
+        id: img
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/member-portal" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The test stage is not in the default build path, so ask for it by name.
+      # A red test here means nothing gets published.
+      - name: Run tests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: test
+          push: false
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ steps.img.outputs.name }}
+          # Version tags and the commit sha. Deliberately no `latest`: production
+          # pins an explicit tag so a rollback is a one-line change.
+          tags: |
+            type=ref,event=tag
+            type=sha,format=long
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            REVISION=${{ github.sha }}
+
+      - name: Say where it went
+        run: |
+          echo "Published:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo
+          echo "First publish is PRIVATE by default -- make the package public at"
+          echo "https://github.com/${GITHUB_REPOSITORY_OWNER}/member-portal/pkgs/container/member-portal"

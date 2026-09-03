@@ -8,7 +8,9 @@
 name: base48-portal
 
 x-portal: &portal
-  image: base48-portal:${PORTAL_TAG:-local}
+  # Same name the production host pulls, so `make image-push` can push whatever
+  # this built. Production never builds -- it pulls a tag from ghcr.
+  image: ${PORTAL_IMAGE:-ghcr.io/base48/member-portal}:${PORTAL_TAG:-local}
   build:
     context: .
     args:
