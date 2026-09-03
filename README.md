@@ -65,7 +65,7 @@ docker compose up -d --build
 Stack je app-only — TLS a vhosty zůstávají na reverse proxy hostu.
 
 - [Ansible + vault](ansible/README.md)
-- [Docker stack, zálohy, cutover z NixOS](docs/DEPLOYMENT_DOCKER.md)
+- [Docker stack, zálohy, migrace na Phoenix](docs/DEPLOYMENT_DOCKER.md)
 
 ## RevBank (bar kiosek)
 

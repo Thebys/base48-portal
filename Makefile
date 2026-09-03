@@ -1,20 +1,20 @@
-.PHONY: all build run test clean setup db-init db-reset sqlc
+.PHONY: all build build-all run test clean setup db-reset sqlc prod dev tools help
 
 # Default target
 all: build
 
 # Build the application
 build:
-	go build -o portal cmd/server/main.go
+	go build -o portal ./cmd/server
 
 # Build all binaries
 build-all: build
 	go build -o portal-cron ./cmd/cron
-	go build -o import cmd/import/main.go
+	go build -o import ./cmd/import
 
 # Run the application
 run:
-	go run cmd/server/main.go
+	go run ./cmd/server
 
 # Run tests
 test:
@@ -32,15 +32,10 @@ setup:
 	mkdir -p data
 	go mod tidy
 
-# Initialize database
-db-init:
-	mkdir -p data
-	sqlite3 data/portal.db < migrations/001_initial_schema.sql
-
-# Reset database (WARNING: deletes all data)
+# Reset database (WARNING: deletes all data). There is no db-init: the server
+# runs the embedded migrations at startup and creates the file if missing.
 db-reset:
-	rm -f data/portal.db
-	$(MAKE) db-init
+	rm -f data/portal.db data/portal.db-journal
 
 # Generate sqlc code
 sqlc:
@@ -55,9 +50,13 @@ tools:
 dev:
 	air
 
-# Build for production
+# Build for production. Matches what the Docker image does: static, pure-Go
+# sqlite driver, version stamped from the VERSION file.
+VERSION := $(shell cat VERSION)
 prod:
-	CGO_ENABLED=1 go build -ldflags="-s -w -X 'main.BuildDate=$(shell date -u '+%Y-%m-%d %H:%M UTC')'" -o portal cmd/server/main.go
+	CGO_ENABLED=0 go build -trimpath -buildvcs=false \
+		-ldflags="-s -w -X 'main.BuildDate=$(VERSION) ($(shell date -u '+%Y-%m-%d %H:%M UTC'))'" \
+		-o portal ./cmd/server
 
 # Help
 help:
@@ -68,8 +67,7 @@ help:
 	@echo "  make test       - Run tests"
 	@echo "  make clean      - Clean build artifacts"
 	@echo "  make setup      - Initial project setup"
-	@echo "  make db-init    - Initialize database"
-	@echo "  make db-reset   - Reset database (WARNING: deletes data)"
+	@echo "  make db-reset   - Delete the database (server re-creates + migrates)"
 	@echo "  make sqlc       - Generate SQL code"
 	@echo "  make tools      - Install dev tools"
 	@echo "  make dev        - Run with hot reload"

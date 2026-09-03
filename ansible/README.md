@@ -49,7 +49,8 @@ což je záměr.
 > jediný bod selhání než dnešní `/etc/nixos/secrets/`. Sdílený password manager
 > plus offline kopie.
 
-Stávající hodnoty se dají vytáhnout z produkce:
+Stávající hodnoty se dají zatím vytáhnout ze staré produkce (platí jen do
+odstavení Jessicy):
 
 ```bash
 ssh jessica cat /etc/nixos/secrets/member-portal.env

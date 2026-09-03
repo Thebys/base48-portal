@@ -1,12 +1,15 @@
 # Deployment: Docker / Compose
 
-Nasazení member portálu přes `docker compose`. Alternativa k NixOS modulu
-(`/etc/nixos/base48-portal.nix` na jessice), určená pro migraci infrastruktury
-pryč od Nixu.
+Nasazení member portálu přes `docker compose`. **Tohle je jediný podporovaný
+způsob nasazení** — Nix balení (`default.nix`) bylo z repa odstraněno.
 
 Tenhle dokument popisuje **stack samotný**. Orchestraci a secrets řeší Ansible —
 viz [ansible/README.md](../ansible/README.md). Ruční postup níž je použitelný
 pro dev a jako fallback, když je potřeba sáhnout na hosta přímo.
+
+> Migrace z Jessicy zatím **neproběhla**. Kapitola [Cutover](#cutover-z-jessicy-nixos-na-phoenix-docker)
+> a odkazy na NixOS v ní jsou dočasné — až bude Jessica odstavená, jde celá
+> pryč jedním commitem.
 
 ## Architektura
 
@@ -77,7 +80,7 @@ Aplikační proměnné jsou popsané v `.env.example`. Navíc pro Docker:
 | `PORTAL_DATA_DIR`    | `./data`       | Adresář na hostu s `portal.db`                              |
 | `PORTAL_UID` / `_GID`| `10001`        | UID:GID kontejneru — **musí vlastnit `PORTAL_DATA_DIR`**. Na produkci připnuté na `990:985`. |
 | `PORTAL_TAG`         | `local`        | Tag image                                                   |
-| `PORTAL_VERSION`     | —              | Verze v patičce portálu (drž synchronně s `default.nix`)    |
+| `PORTAL_VERSION`     | —              | Verze v patičce portálu (drž synchronně se souborem `VERSION`) |
 | `TZ`                 | `Europe/Prague`| Časová zóna — ovlivňuje výpočet období poplatků             |
 
 Tři proměnné compose **přebíjí natvrdo**, protože `.env` je sdílený s bare-metal
@@ -187,11 +190,12 @@ location / {
 }
 ```
 
-**Důležitá změna oproti NixOS nasazení:** nix modul servíruje `/static/` přímo
-z `/nix/store/.../share/portal/web/static/` vlastním `alias` blokem. Ten blok se
-musí **odstranit** — v Dockeru statiku servíruje aplikace sama a nix store na
-hostu po migraci nemusí existovat. Když se zapomene, portál bude po cutoveru
-vracet 404 na CSS a JS.
+Statiku servíruje **aplikace sama** — proxy ji jen propouští. Vhost tedy
+nepotřebuje žádný `alias` ani `root` blok.
+
+> Past při migraci z Jessicy: tamní nginx má `location /static/` s `alias` do
+> `/nix/store/…`. Do nového vhostu ho **nekopíruj** — po cutoveru by portál
+> vracel 404 na CSS a JS.
 
 Cachování statiky se dá zachovat na proxy:
 
@@ -232,6 +236,9 @@ nepůjde přihlášení. Viz [KEYCLOAK_SETUP.md](KEYCLOAK_SETUP.md).
 Overlay **nikdy nepoužívej na produkčním hostu** — vypnul by tam sync i maily.
 
 ## Cutover z Jessicy (NixOS) na Phoenix (Docker)
+
+> **Dočasná kapitola.** Platí jen dokud běží stará produkce na Jessice. Po
+> odstavení a ověření ji smaž i s odkazy na NixOS jinde v repu.
 
 Není to výměna na místě — data se stěhují na jiný stroj, takže přibývá kopie
 databáze, nový vhost a přepnutí DNS. Jessica zůstává nedotčená až do konce,
