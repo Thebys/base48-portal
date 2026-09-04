@@ -582,3 +582,189 @@ main :has(> table) {
     body:has(.bar-guide) > main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
     .bar-guide { border: none; }
 }
+
+/* ==========================================================================
+   Bar analytics
+   Palette: one blue hue for magnitude (heatmap, columns), a fixed five-slot
+   categorical order for the product mix. Slots are pinned to a category in Go,
+   so hiding or reordering rows never repaints the survivors. Colours live on
+   the marks only — every label stays in a text token.
+   ========================================================================== */
+
+.bar-seq-0 { background: #f3f4f6; }   /* nothing there — recedes to the surface */
+.bar-seq-1 { background: #cde2fb; }
+.bar-seq-2 { background: #9ec5f4; }
+.bar-seq-3 { background: #6da7ec; }
+.bar-seq-4 { background: #3987e5; }
+.bar-seq-5 { background: #2a78d6; }
+.bar-seq-6 { background: #256abf; }
+.bar-seq-7 { background: #184f95; }
+
+.bar-cat-1 { background: #2a78d6; }
+.bar-cat-2 { background: #eb6834; }
+.bar-cat-3 { background: #1baf7a; }
+.bar-cat-4 { background: #eda100; }
+.bar-cat-5 { background: #e87ba4; }
+
+/* Cohort cells carry a readable number, so they use a shorter ramp: steps 4 and
+   5 of the sequential scale above clear 4.5:1 against neither dark ink (4.03)
+   nor white (4.42), so this ramp skips straight past them. Dark ink to level 3,
+   white from level 4. */
+.bar-coh-0 { background: #f3f4f6; }
+.bar-coh-1 { background: #cde2fb; }
+.bar-coh-2 { background: #9ec5f4; }
+.bar-coh-3 { background: #6da7ec; }
+.bar-coh-4 { background: #256abf; }
+.bar-coh-5 { background: #184f95; }
+
+/* --- KPI tiles ------------------------------------------------------------ */
+/* The tile count varies (the cash register only shows when the kiosk reports
+   one), so the separators are drawn per tile rather than by a coloured grid
+   gap — a gap would paint the empty trailing cells of the last row grey. */
+.bar-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    background: #fff;
+    border-top: 1px solid #e5e7eb;
+}
+.bar-kpi {
+    padding: 0.875rem 1rem;
+    box-shadow: inset -1px 0 0 #e5e7eb, inset 0 -1px 0 #e5e7eb;
+}
+.bar-kpi-label { font-size: 0.75rem; color: #6b7280; }
+.bar-kpi-value {
+    margin-top: 0.25rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #111827;
+    line-height: 1.15;
+}
+.bar-kpi-value .unit { font-size: 0.875rem; font-weight: 500; color: #6b7280; margin-left: 0.15rem; }
+.bar-kpi-note { margin-top: 0.2rem; font-size: 0.6875rem; color: #9ca3af; }
+.bar-kpi-delta { font-size: 0.75rem; font-weight: 600; }
+.bar-kpi-delta.up   { color: #0ca30c; }
+.bar-kpi-delta.down { color: #d03b3b; }
+
+/* --- Column chart --------------------------------------------------------- */
+.bar-chart { display: flex; gap: 0.75rem; }
+.bar-chart-axis {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-size: 0.6875rem;
+    color: #9ca3af;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    height: 9rem;
+    flex-shrink: 0;
+}
+.bar-chart-plot {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;                 /* the 2px surface gap, not a stroke */
+    height: 9rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+/* Hairline, solid gridlines at the two axis ticks above the baseline. */
+.bar-chart-plot::before,
+.bar-chart-plot::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    border-top: 1px solid #f3f4f6;
+    pointer-events: none;
+}
+.bar-chart-plot::before { top: 0; }
+.bar-chart-plot::after  { top: 50%; }
+.bar-col {
+    z-index: 1;            /* columns sit above the gridlines, not under them */
+    flex: 1;
+    min-width: 0;
+    max-width: 24px;
+    margin: 0 auto;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    height: 100%;
+}
+.bar-col-fill {
+    width: 100%;
+    background: #2a78d6;
+    border-radius: 4px 4px 0 0;   /* rounded data-end, square at the baseline */
+    min-height: 2px;
+}
+.bar-col:hover .bar-col-fill { background: #184f95; }
+.bar-chart-labels {
+    display: flex;
+    gap: 2px;
+    margin-top: 0.375rem;
+    font-size: 0.625rem;
+    color: #9ca3af;
+    font-variant-numeric: tabular-nums;
+}
+.bar-chart-labels span { flex: 1; min-width: 0; text-align: center; }
+.bar-chart-labels span.tick { color: #4b5563; font-weight: 600; }
+
+/* --- Heatmap -------------------------------------------------------------- */
+.bar-heat { border-collapse: separate; border-spacing: 2px; }
+.bar-heat th {
+    font-size: 0.625rem;
+    font-weight: 500;
+    color: #9ca3af;
+    font-variant-numeric: tabular-nums;
+    padding: 0;
+}
+.bar-heat th.day { text-align: right; padding-right: 0.5rem; font-size: 0.75rem; color: #4b5563; }
+.bar-heat td { padding: 0; }
+/* No background here: it would out-specify the single-class ramp and flatten
+   the whole grid. The step class (bar-seq-0..7) carries the fill. */
+.bar-heat .cell {
+    width: 100%;
+    min-width: 0.65rem;
+    height: 1.5rem;
+    border-radius: 2px;
+    display: block;
+}
+.bar-heat-scale { display: flex; align-items: center; gap: 2px; }
+.bar-heat-scale i { width: 1.1rem; height: 0.6rem; border-radius: 2px; display: block; }
+
+/* --- Inline bars in tables ------------------------------------------------ */
+.bar-inline {
+    height: 0.5rem;
+    background: #2a78d6;
+    border-radius: 0 4px 4px 0;
+    min-width: 2px;
+    display: block;
+}
+.bar-inline-track { background: #f3f4f6; border-radius: 4px; width: 100%; }
+
+/* --- Stacked category bar ------------------------------------------------- */
+.bar-stack { display: flex; gap: 2px; height: 1.5rem; }
+.bar-stack > div { border-radius: 2px; min-width: 2px; }
+.bar-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin-top: 0.75rem; }
+.bar-legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #4b5563; }
+.bar-legend-item i { width: 0.6rem; height: 0.6rem; border-radius: 2px; flex-shrink: 0; }
+.bar-legend-item b { color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* --- Cohort grid ---------------------------------------------------------- */
+.bar-cohort { border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; }
+.bar-cohort th { font-size: 0.6875rem; font-weight: 500; color: #9ca3af; padding: 0 0.25rem; }
+.bar-cohort td { padding: 0; }
+.bar-cohort .cell {
+    display: block;
+    min-width: 3rem;
+    padding: 0.35rem 0.25rem;
+    border-radius: 2px;
+    font-size: 0.75rem;
+    text-align: center;
+    /* Dark ink clears 4.5:1 on ramp steps 0-4; ink-light takes over at 5,
+       where the fill goes dark enough that white wins instead. */
+    color: #1f2937;
+}
+/* Inside a filled mark, the label flips to white where the fill goes dark. */
+.bar-cohort .cell.ink-light,
+.bar-heat .cell.ink-light { color: #fff; }
+/* Two classes, so this beats the single-class ramp it sits beside. */
+.bar-cohort .cell.empty { background: transparent; color: #d1d5db; }

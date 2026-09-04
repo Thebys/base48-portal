@@ -2193,6 +2193,48 @@ func (q *Queries) ListRevbankAccounts(ctx context.Context) ([]RevbankAccount, er
 	return items, nil
 }
 
+const listRevbankAllTransactions = `-- name: ListRevbankAllTransactions :many
+SELECT id, transaction_id, username, user_id, amount_cents, description, counter_account, created_at, synced_at FROM revbank_transactions
+`
+
+// Full history for the bar dashboard, which aggregates it in Go: created_at is
+// stored in Go's "+0000 UTC" layout, which SQLite's date functions reject
+// (date()/strftime() return NULL on it), so hour- and weekday-level bucketing
+// cannot be expressed here at all. Deliberately unordered -- computeBarAnalytics
+// sorts, because it is the code that depends on the order.
+func (q *Queries) ListRevbankAllTransactions(ctx context.Context) ([]RevbankTransaction, error) {
+	rows, err := q.db.QueryContext(ctx, listRevbankAllTransactions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RevbankTransaction{}
+	for rows.Next() {
+		var i RevbankTransaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.TransactionID,
+			&i.Username,
+			&i.UserID,
+			&i.AmountCents,
+			&i.Description,
+			&i.CounterAccount,
+			&i.CreatedAt,
+			&i.SyncedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRevbankRecentTransactions = `-- name: ListRevbankRecentTransactions :many
 SELECT id, transaction_id, username, user_id, amount_cents, description, counter_account, created_at, synced_at FROM revbank_transactions ORDER BY created_at DESC LIMIT ?
 `
@@ -2493,48 +2535,6 @@ func (q *Queries) ReturnUserKeys(ctx context.Context, id int64) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Locale,
-	)
-	return i, err
-}
-
-const revbankSalesStats = `-- name: RevbankSalesStats :one
-SELECT
-    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now') AND created_at < date('now', '+1 day') THEN amount_cents ELSE 0 END), 0) AS sales_today,
-    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'weekday 1', '-7 days') THEN amount_cents ELSE 0 END), 0) AS sales_this_week,
-    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS sales_this_month,
-    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of month', '-1 month') AND created_at < date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS sales_last_month,
-    COALESCE(SUM(CASE WHEN amount_cents < 0 AND created_at >= date('now', 'start of year') THEN amount_cents ELSE 0 END), 0) AS sales_this_year,
-    COALESCE(SUM(CASE WHEN amount_cents > 0 AND created_at >= date('now', 'start of month') THEN amount_cents ELSE 0 END), 0) AS deposits_this_month
-FROM revbank_transactions rt
-WHERE rt.description NOT LIKE 'Undo %'
-AND NOT EXISTS (
-    SELECT 1 FROM revbank_transactions u
-    WHERE u.description LIKE 'Undo %'
-    AND INSTR(rt.transaction_id, '_T' || SUBSTR(u.description, 6) || '_') > 0
-)
-`
-
-type RevbankSalesStatsRow struct {
-	SalesToday        interface{} `json:"sales_today"`
-	SalesThisWeek     interface{} `json:"sales_this_week"`
-	SalesThisMonth    interface{} `json:"sales_this_month"`
-	SalesLastMonth    interface{} `json:"sales_last_month"`
-	SalesThisYear     interface{} `json:"sales_this_year"`
-	DepositsThisMonth interface{} `json:"deposits_this_month"`
-}
-
-// Exclude both Undo transactions and the original transactions they reversed.
-// Undo description format: "Undo N" where N is the transaction number (e.g. _T156_ in the ID).
-func (q *Queries) RevbankSalesStats(ctx context.Context) (RevbankSalesStatsRow, error) {
-	row := q.db.QueryRowContext(ctx, revbankSalesStats)
-	var i RevbankSalesStatsRow
-	err := row.Scan(
-		&i.SalesToday,
-		&i.SalesThisWeek,
-		&i.SalesThisMonth,
-		&i.SalesLastMonth,
-		&i.SalesThisYear,
-		&i.DepositsThisMonth,
 	)
 	return i, err
 }

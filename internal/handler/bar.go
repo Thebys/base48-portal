@@ -231,11 +231,12 @@ func (h *Handler) AdminBarHandler(w http.ResponseWriter, r *http.Request) {
 		lastSync = setting.Value
 	}
 
-	// Sales aggregate stats
-	stats, err := h.queries.RevbankSalesStats(ctx)
+	// Full history, aggregated in Go — see bar_analytics.go for why not in SQL.
+	allTx, err := h.queries.ListRevbankAllTransactions(ctx)
 	if err != nil {
-		log.Printf("[Bar] Failed to get sales stats: %v", err)
+		log.Printf("[Bar] Failed to list transactions for analytics: %v", err)
 	}
+	analytics := computeBarAnalytics(allTx, accounts, time.Now())
 
 	// System accounts (cash register, sales totals)
 	// Bar uses negative balances for source accounts (-cash, -cash/skimmed)
@@ -247,21 +248,26 @@ func (h *Handler) AdminBarHandler(w http.ResponseWriter, r *http.Request) {
 			cashRegister = -sysAccounts["-cash"]
 		}
 	}
+	// The register is a kiosk system account rather than anything derivable from
+	// the transaction history, so it joins the KPI row here instead of inside
+	// computeBarAnalytics.
+	if cashRegister != 0 {
+		analytics.Stats = append(analytics.Stats, BarStat{
+			Label: "Pokladna",
+			Value: formatCentsAsWholeCZK(cashRegister),
+			Unit:  "Kč",
+			Note:  "hotovost v kiosku",
+		})
+	}
 
 	data := map[string]interface{}{
-		"Title":             "Bar",
-		"User":              user,
-		"DBUser":            adminDBUser,
-		"Accounts":          accounts,
-		"Transactions":      transactions,
-		"LastSync":          lastSync,
-		"SalesToday":        -toInt64(stats.SalesToday),
-		"SalesThisWeek":     -toInt64(stats.SalesThisWeek),
-		"SalesThisMonth":    -toInt64(stats.SalesThisMonth),
-		"SalesLastMonth":    -toInt64(stats.SalesLastMonth),
-		"SalesThisYear":     -toInt64(stats.SalesThisYear),
-		"DepositsThisMonth": toInt64(stats.DepositsThisMonth),
-		"CashRegister":      cashRegister,
+		"Title":        "Bar",
+		"User":         user,
+		"DBUser":       adminDBUser,
+		"Accounts":     accounts,
+		"Transactions": transactions,
+		"LastSync":     lastSync,
+		"An":           analytics,
 	}
 
 	h.render(w, "admin_bar.html", data)
@@ -294,20 +300,6 @@ func parseFlexibleTime(s string) (time.Time, error) {
 	}
 	// RevBank format: 2026-03-10_22:36:06
 	return time.Parse("2006-01-02_15:04:05", s)
-}
-
-// toInt64 converts interface{} from SQLite COALESCE results to int64.
-func toInt64(v interface{}) int64 {
-	switch n := v.(type) {
-	case int64:
-		return n
-	case float64:
-		return int64(n)
-	case int:
-		return int64(n)
-	default:
-		return 0
-	}
 }
 
 // formatCentsAsWholeCZK formats cents as whole CZK: 2500 → "25", -5000 → "-50".

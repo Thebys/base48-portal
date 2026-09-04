@@ -226,3 +226,30 @@ bash contrib/revbank-sync.sh
 2. Handlers: `GET/POST /api/revbank/products`
 3. UI: admin product editor
 4. Kiosk: product sync in script
+
+## Známý dluh: `created_at` se ukládá jako wall clock
+
+RevBank loguje svůj vlastní čas jako `2026-03-07_04:09:09` — **lokální čas
+kiosku**, bez zóny. Sync ho posílá beze změny a `parseFlexibleTime`
+(`internal/handler/bar.go`) ho čte bezzónovým layoutem, takže Go ten wall clock
+označí za UTC. V databázi pak stojí `2026-03-07 04:09:09 +0000 UTC`, i když ten
+okamžik ve skutečnosti nastal v 04:09 pražského času, tedy 03:09 UTC.
+
+Dva důsledky:
+
+1. **Uložený okamžik je o hodinu až dvě posunutý.** Kdo si ta data načte a
+   převede do Evropy/Praha (což vypadá jako správný krok), posune je podruhé —
+   páteční večer se mu rozlije do soboty.
+2. **`date()` a `strftime()` nad tím vrací NULL**, protože sufix ` +0000 UTC`
+   SQLite neumí. Proto `computeBarAnalytics` agreguje v Go a ne v SQL.
+
+Analytika s tím pracuje vědomě: bere uložené hodnoty jako wall clock a do stejného
+prostoru si přeloží jen `time.Now()` (`barWallNow`). Šablony ze stejného důvodu
+timestampy **neformátují přes žádnou konverzi** — syrová hodnota je ta správná
+k zobrazení.
+
+**Správná oprava je na vstupu**, ne na výstupu: parsovat v `Europe/Prague`
+a ukládat ISO-8601 v UTC. Tím se okamžiky narovnají, `strftime()` začne fungovat
+a celý wall-clock trik zmizí. Chce to ale migraci, která přepíše existující
+řádky (posun o platný offset k datu každého řádku, tedy CET vs. CEST), takže je
+to samostatná změna s vlastní zálohou — ne něco, co se přibalí k featuře.
