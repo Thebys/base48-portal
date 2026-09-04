@@ -96,7 +96,7 @@ ansible-playbook deploy.yml --ask-vault-pass
 Nasadí `portal_version` z `vars.yml` (default `master`). Konkrétní verze:
 
 ```bash
-ansible-playbook deploy.yml --ask-vault-pass -e portal_version=v1.6.0
+ansible-playbook deploy.yml --ask-vault-pass -e portal_version=v1.6.1
 ```
 
 Suchý běh — ukáže, co by se změnilo, bez zásahu:

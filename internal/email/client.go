@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"log"
 	"math"
+	"mime"
 	"net"
 	"net/smtp"
 	"path/filepath"
@@ -592,16 +593,26 @@ func (c *Client) RenderPreview(params SendParams) (string, error) {
 	return c.renderTemplate(params)
 }
 
-// formatMessage creates RFC 2822 compliant email message
+// formatMessage builds the RFC 5322 message handed to the SMTP server.
+//
+// Header values that can carry non-ASCII — the subject and the From display
+// name — MUST be MIME encoded (RFC 2047). Raw UTF-8 in a header makes Postfix
+// mark the message as requiring SMTPUTF8, and every server that does not
+// advertise that extension then rejects it permanently with dsn=5.6.7.
+// Seznam (seznam.cz, email.cz) and Protonmail are among them, so mail to a
+// large part of the membership silently bounced. mime.QEncoding leaves
+// pure-ASCII values untouched, so English subjects stay human-readable on the
+// wire.
 func (c *Client) formatMessage(to, subject, body string) string {
 	from := c.config.SMTPFrom
 	if c.config.SMTPFromName != "" {
-		from = fmt.Sprintf("%s <%s>", c.config.SMTPFromName, c.config.SMTPFrom)
+		from = fmt.Sprintf("%s <%s>", mime.QEncoding.Encode("utf-8", c.config.SMTPFromName), c.config.SMTPFrom)
 	}
 
 	headers := fmt.Sprintf(
-		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8",
-		from, to, subject,
+		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\n"+
+			"Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit",
+		from, to, mime.QEncoding.Encode("utf-8", subject),
 	)
 	if c.config.SMTPReplyTo != "" {
 		headers += fmt.Sprintf("\r\nReply-To: %s", c.config.SMTPReplyTo)
