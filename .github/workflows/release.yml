@@ -1,6 +1,6 @@
 # Builds the portal image and publishes it to GHCR when a version tag is pushed.
 #
-#   git tag v1.5.0 && git push origin v1.5.0
+#   git tag v1.6.0 && git push origin v1.6.0
 #
 # The image name follows the repository owner, so it becomes
 # ghcr.io/base48/member-portal automatically if this repo moves to the org.

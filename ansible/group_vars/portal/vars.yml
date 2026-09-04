@@ -3,7 +3,7 @@
 
 # The image tag to deploy. This must be a tag CI has published to ghcr, so it
 # is a released version, not a branch -- `master` would not resolve to an image.
-portal_version: v1.5.0
+portal_version: v1.6.0
 portal_dir: /opt/base48-portal
 portal_data_dir: /var/lib/member-portal
 portal_backup_dir: /var/backups/member-portal
