@@ -175,10 +175,16 @@
         white-space: nowrap;
     }
 
+    /* The inset is one knob. `width: 100%` next to a horizontal margin makes the
+       table 2x the margin wider than its container, and since <details> is the
+       table's direct parent it picks up `overflow-x: auto` from admin.css and
+       grows a scrollbar for those 40px. Deriving the width from the same
+       variable keeps the two from drifting apart again. */
     .payments-table {
-        width: 100%;
+        --inset: 20px;
+        width: calc(100% - 2 * var(--inset));
         border-collapse: collapse;
-        margin: 20px;
+        margin: var(--inset);
     }
 
     .payments-table th {
@@ -293,7 +299,7 @@
             padding: 15px;
         }
         .payments-table {
-            margin: 10px;
+            --inset: 10px;
         }
     }
 </style>
