@@ -49,10 +49,12 @@ portal-cron report   # Report nespárovaných plateb (ad-hoc)
 
 ## Nasazení
 
-Produkce jede přes Ansible, secrets drží ansible-vault:
+Produkce jede přes Ansible z privátního repa `base48/servers-config-ng`
+(playbook potřebuje vault se secrets, tohle repo je veřejné):
 
 ```bash
-cd ansible && ansible-playbook deploy.yml --ask-vault-pass
+cd <servers-config-ng>
+ansible-playbook -i phoenix, member-portal/playbooks/deploy.yaml --ask-vault-pass
 ```
 
 Ručně (dev, nebo fallback na hostu):
@@ -64,8 +66,7 @@ docker compose up -d --build
 
 Stack je app-only — TLS a vhosty zůstávají na reverse proxy hostu.
 
-- [Ansible + vault](ansible/README.md)
-- [Docker stack, zálohy, migrace na Phoenix](docs/DEPLOYMENT_DOCKER.md)
+- [Docker stack, orchestrace, vault, zálohy](docs/DEPLOYMENT_DOCKER.md)
 
 ## RevBank (bar kiosek)
 
@@ -76,8 +77,7 @@ Detaily: [docs/REVBANK_INTEGRATION.md](docs/REVBANK_INTEGRATION.md)
 
 ## Dokumentace
 
-- [Ansible deployment](ansible/README.md)
-- [Docker deployment](docs/DEPLOYMENT_DOCKER.md)
+- [Docker deployment, orchestrace a secrets](docs/DEPLOYMENT_DOCKER.md)
 - [Keycloak setup](docs/KEYCLOAK_SETUP.md)
 - [RevBank integrace](docs/REVBANK_INTEGRATION.md)
 - [Specifikace](SPEC.md)

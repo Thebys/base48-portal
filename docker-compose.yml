@@ -3,7 +3,11 @@
 #   docker compose up -d --build
 #
 # Config comes from .env (see .env.example). In production Ansible generates
-# that file from the vault — see ansible/README.md.
+# that file from the vault — see docs/DEPLOYMENT_DOCKER.md.
+
+# Note: production does NOT use this file. The live stack runs from
+# compose.yaml in the private servers-config-ng repo; this one is for
+# development and as a host-side fallback.
 
 name: base48-portal
 

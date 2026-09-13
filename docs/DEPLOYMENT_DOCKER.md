@@ -3,13 +3,10 @@
 Nasazení member portálu přes `docker compose`. **Tohle je jediný podporovaný
 způsob nasazení** — Nix balení (`default.nix`) bylo z repa odstraněno.
 
-Tenhle dokument popisuje **stack samotný**. Orchestraci a secrets řeší Ansible —
-viz [ansible/README.md](../ansible/README.md). Ruční postup níž je použitelný
-pro dev a jako fallback, když je potřeba sáhnout na hosta přímo.
-
-> Migrace z Jessicy zatím **neproběhla**. Kapitola [Cutover](#cutover-z-jessicy-nixos-na-phoenix-docker)
-> a odkazy na NixOS v ní jsou dočasné — až bude Jessica odstavená, jde celá
-> pryč jedním commitem.
+Tenhle dokument popisuje **stack samotný**. Orchestraci a secrets řeší Ansible
+z privátního repa — viz [Orchestrace a secrets](#orchestrace-a-secrets). Ruční
+postup níž je použitelný pro dev a jako fallback, když je potřeba sáhnout na
+hosta přímo.
 
 ## Architektura
 
@@ -19,13 +16,13 @@ proxy, kterou už host má.
 ```
 internet :443
     │
-    ├─ haproxy        SNI router (jessica)
-    │      │
-    │      └─ nginx 127.0.0.1:1443    TLS termination, ACME, vhost
-    │              │
-    │              └─ proxy_pass ──► 127.0.0.1:8090
-    │                                     │
-    └─────────────────────────────────────┴─► kontejner portal :8080
+    └─ nginx stream (SNI)             /etc/nginx/stream-sni.d/*.map
+           │
+           └─ nginx vhost             TLS termination, ACME
+                   │
+                   └─ proxy_pass ──► 127.0.0.1:8090
+                                          │
+                                          └─► kontejner portal :8080
                                                   │
                                                   ├─ /app/data/portal.db  (bind mount)
                                                   └─ /app/web             (static + templates)
@@ -134,9 +131,9 @@ Databáze je bind-mountnutý soubor, aby se dala zálohovat obyčejným `cp`/`sc
 Kontejner tedy musí běžet pod UID, které na něj má právo zápisu.
 
 **Na produkci je UID:GID připnuté na `990:985`** (`portal_uid` / `portal_gid`
-v `group_vars`). Playbook uživatele zakládá s těmito čísly, nenechává si je
+v playbooku). Playbook uživatele zakládá s těmito čísly, nenechává si je
 přidělit. Důvod je stěhování mezi stroji: číselné vlastnictví souboru musí
-znamenat totéž na Jessice i na Phoenixu, jinak zkopírovaná `portal.db` skončí
+znamenat totéž na každém stroji, kam se databáze zkopíruje, jinak tam skončí
 jako nečitelná pro kontejner.
 
 ```bash
@@ -150,6 +147,71 @@ id -u; id -g                               # → 1000:1000
 > Když se databáze kopíruje ručně, přenášej ji s `rsync -a` / `scp -p` a po
 > rozbalení zkontroluj `stat`. `chown 990:985` je levnější než hledat, proč
 > portál hlásí `unable to open database file`.
+
+## Orchestrace a secrets
+
+Produkci nasazuje Ansible z **privátního** repa `base48/servers-config-ng`,
+protože playbook potřebuje vault se secrets a `base48-portal` je veřejné.
+
+```bash
+cd <servers-config-ng>
+ansible-playbook -i phoenix, member-portal/playbooks/deploy.yaml --ask-vault-pass
+```
+
+Playbook zazálohuje databázi, nainstaluje `compose.yaml`, vygeneruje `.env`,
+pullne image, překlopí stack, spravuje nginx vhost i SNI fragment a nakonec
+ověří `/healthz` i reálný request přes SNI vrstvu. Verze image je připnutá
+v jeho `vars:` jako `portal_version` — **bump téhle hodnoty je celý release**.
+
+> Playbook v tomhle repu **není**. Byl tu do 1.7.0 v `ansible/`, ale nikdy
+> neběžel proti produkci, mířil do jiného adresáře než živý stack a neuměl
+> nginx. Dva playbooky, které se rozcházejí, jsou horší než jeden.
+
+### Vars vs. secrets
+
+Nastavení a secrets jsou dva soubory. Necitlivé hodnoty jsou v playbooku
+normálním YAMLem; secrets v `member-portal/vault.yml`, zašifrované AES-256.
+Ansible vault dešifruje **v paměti na tvém notebooku**, slije obojí do
+`env.j2` a výsledek zapíše přes SSH jako `.env` s právy 0600.
+
+Heslo k vaultu se na cílový stroj **nikdy nedostane** — Phoenix o žádném secret
+managementu neví, leží tam obyčejný `.env`.
+
+| kontext | co tam je | kdo se k tomu dostane |
+|---|---|---|
+| Bitwarden (sdílený) | **jen heslo k vaultu** | správci base48 |
+| tvůj notebook | plaintext secrets, ale jen v RAM po dobu běhu | ty |
+| servers-config-ng (privátní) | zašifrovaný `vault.yml` | kdo má přístup k repu |
+| Phoenix | `.env` 0600 root + proměnné v kontejneru | root, skupina `docker` |
+
+Vault obsahuje pět položek: `vault_session_secret`,
+`vault_keycloak_client_secret`, `vault_keycloak_service_client_secret`,
+`vault_bank_fio_token`, `vault_revbank_api_key`.
+
+### Práce s vaultem
+
+Heslo generuj, nevymýšlej — `ansible-vault` odvozuje klíč přes PBKDF2 s
+**10 000 iteracemi**, takže lidmi zvolená fráze je lámatelná offline:
+
+```bash
+openssl rand -base64 32        # → do Bitwardenu, sdílet se správci
+```
+
+Nový vault zakládej přes `ansible-vault create`, **ne** kopií vzoru a následným
+šifrováním — `create` uloží na disk až zašifrovaný výsledek, takže se plaintext
+nikdy neocitne v pracovním stromu, kde ho umí sebrat `git add -A`.
+
+```bash
+ansible-vault view member-portal/vault.yml     # přečíst
+ansible-vault edit member-portal/vault.yml     # upravit
+ansible-vault rekey member-portal/vault.yml    # změnit heslo
+head -c 30 member-portal/vault.yml             # musí vrátit $ANSIBLE_VAULT;1.1;AES256
+```
+
+> **Zašifrovaný vault nepatří do veřejného repa.** Nečitelný je jen dokud
+> heslo drží; kdokoliv si ho stáhne a láme offline, jak dlouho chce, a z gitu
+> se nikdy nedá vzít zpátky. Commit blokuje pre-commit hook — zapni si ho
+> přes `make hooks`.
 
 ## Provoz
 
@@ -214,7 +276,8 @@ docker compose up -d
 
 ## Reverse proxy
 
-Nginx vhost, který nahrazuje ten z `base48-portal.nix`:
+Vhost portálu (na produkci ho spravuje playbook, viz
+[Orchestrace a secrets](#orchestrace-a-secrets)):
 
 ```nginx
 location / {
@@ -228,10 +291,6 @@ location / {
 
 Statiku servíruje **aplikace sama** — proxy ji jen propouští. Vhost tedy
 nepotřebuje žádný `alias` ani `root` blok.
-
-> Past při migraci z Jessicy: tamní nginx má `location /static/` s `alias` do
-> `/nix/store/…`. Do nového vhostu ho **nekopíruj** — po cutoveru by portál
-> vracel 404 na CSS a JS.
 
 Cachování statiky se dá zachovat na proxy:
 
@@ -251,11 +310,12 @@ běh nemůže sáhnout na produkci.
 
 ```bash
 # stažení konzistentního snapshotu z produkce
-ssh jessica "nix-shell -p sqlite --run \
-  'sqlite3 -readonly /var/lib/member-portal/portal.db \".backup /tmp/snap.db\"' \
-  && gzip -f /tmp/snap.db"
-scp jessica:/tmp/snap.db.gz ./
-ssh jessica "rm -f /tmp/snap.db.gz"
+# .timeout: portal i cron drží databázi otevřenou a není ve WAL režimu, takže
+# bez čekání na zámek záloha spadne a nechá po sobě nulový soubor
+ssh phoenix "sqlite3 -readonly -cmd '.timeout 30000' \
+  /var/lib/member-portal/portal.db '.backup /tmp/snap.db' && gzip -f /tmp/snap.db"
+scp phoenix:/tmp/snap.db.gz ./
+ssh phoenix "rm -f /tmp/snap.db.gz"
 
 mkdir -p data/docker-test
 gunzip -c snap.db.gz > data/docker-test/portal.db
@@ -270,135 +330,6 @@ zaregistrovaná redirect URI na Keycloak klientovi, takže na jiném portu
 nepůjde přihlášení. Viz [KEYCLOAK_SETUP.md](KEYCLOAK_SETUP.md).
 
 Overlay **nikdy nepoužívej na produkčním hostu** — vypnul by tam sync i maily.
-
-## Cutover z Jessicy (NixOS) na Phoenix (Docker)
-
-> **Dočasná kapitola.** Platí jen dokud běží stará produkce na Jessice. Po
-> odstavení a ověření ji smaž i s odkazy na NixOS jinde v repu.
-
-### Nejdřív: co dělá `cron` v okamžiku, kdy stack naběhne
-
-`portal-cron daemon` **netiká, začne pracovat hned** — `daemonTick` se volá
-před prvním tickem. Je potřeba vědět, co to znamená v které fázi.
-
-**Nad prázdnou databází je neškodný.** Ověřeno v kódu:
-
-| co dělá | proč to nevadí |
-|---|---|
-| FIO sync | jede přes `/periods/` (rozsah dat), ne `/last/` — nehýbe kurzorem u FIO, takže transakce **neodebere** běžící produkci |
-| aktualizace dluhů a rolí | iteruje uživatele **z lokální databáze**; prázdná = nula zápisů do živého Keycloaku |
-| maily | gatované `EMAIL_ENABLED` |
-| měsíční poplatky | jen 1. dne v měsíci |
-
-**Nebezpečné je mít dva běžící daemony nad stejnými daty.** Jakmile se
-zkopíruje produkční databáze a Jessica pořád běží, oba:
-
-- zapisují role do stejného živého Keycloaku,
-- zpracovávají stejnou frontu mailů → **členům přijde všechno dvakrát**,
-- a 1. dne v měsíci **oba vytvoří měsíční poplatky**.
-
-> **Pravidlo:** Jessičiny systemd unity zastav **dřív**, než na Phoenix
-> zkopíruješ data. Ne naopak.
-
-### Migrace při prvním startu neproběhnou žádné
-
-Produkce má v `schema_migrations` verze `1,3,5…16`. Migrace `002` se přeskakuje
-záměrně (jednorázový import) a `004` neexistuje — v repu je díra v číslování.
-Zkopírovaná databáze je tedy plně zmigrovaná a start 1.5.0 nad ní **neaplikuje
-nic**. Zálohu si udělej stejně, ale tohle není ten rizikový krok.
-
-Není to výměna na místě — data se stěhují na jiný stroj, takže přibývá kopie
-databáze, nový vhost a přepnutí DNS. Jessica zůstává nedotčená až do konce,
-což je zároveň rollback.
-
-**0. Předpoklady na Phoenixu**
-
-Docker Engine a Compose v2 tam už jsou. Co chybí, je rotace logů — nastav ji
-dřív, než se cokoliv rozjede, jinak sync smyčka á 2 minuty zaplní disk:
-
-```bash
-# /etc/docker/daemon.json
-{ "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "5" } }
-```
-
-**1. Příprava (bez výpadku)**
-
-Naplň vault podle [ansible/README.md](../ansible/README.md) a nech playbook
-založit uživatele, adresáře, `.env` a stack. Portál poběží na Phoenixu naprázdno
-s prázdnou databází — DNS pořád míří na Jessicu, takže se nikoho nedotkne.
-
-```bash
-cd ansible
-ansible-playbook deploy.yml --ask-vault-pass
-curl -s localhost:8090/healthz     # na phoenixu
-```
-
-**2. Nginx vhost na Phoenixu**
-
-Nový `members.base48.cz` podle vzoru ostatních vhostů, plus certifikát:
-
-```bash
-certbot --nginx -d members.base48.cz
-```
-
-Blok `location /static/` s `alias` do nix store **nekopíruj** — v Dockeru
-statiku servíruje aplikace sama.
-
-**3. Cutover (výpadek ~2 min)**
-
-```bash
-# na jessice: zastavit a udělat finální konzistentní snapshot
-systemctl stop member-portal-cron member-portal
-nix-shell -p sqlite --run \
-  "sqlite3 -readonly /var/lib/member-portal/portal.db \
-   '.backup /tmp/portal-cutover.db'"
-
-# přenos se zachováním práv
-scp -p /tmp/portal-cutover.db phoenix:/tmp/
-
-# na phoenixu
-docker compose -f /opt/base48-portal/docker-compose.yml down
-install -o 990 -g 985 -m 0600 /tmp/portal-cutover.db \
-  /var/lib/member-portal/portal.db
-cd /opt/base48-portal && docker compose up -d
-curl -s localhost:8090/healthz
-```
-
-UID `990:985` sedí na obou strojích, protože je playbook připíná — ale po
-`install` si to stejně ověř přes `stat`.
-
-**4. DNS** — `members.base48.cz` dnes míří přes `jessica.base48.cz` na
-`37.205.13.28`. Přepni na Phoenix (`194.182.84.91`). Než se to rozšíří, běží
-obojí; Jessica je zastavená, takže nehrozí, že by dva cronů zapisovaly do dvou
-různých databází.
-
-**5. Ověření** — homepage, přihlášení přes Keycloak, `/admin/users`, `/static/`
-assety, a v logu cronu úspěšný FIO sync do dvou minut.
-
-**6. Úklid až po ověření (klidně za týden)**
-
-```bash
-# na jessice
-systemctl disable member-portal member-portal-cron
-# services.base48-portal.enable = false; v configuration.nix
-```
-
-### Rollback
-
-Dokud je na Jessice nix modul jen zastavený a DNS se dá vrátit, je návrat
-otázkou minut:
-
-```bash
-# na phoenixu
-docker compose down
-# na jessice
-systemctl start member-portal member-portal-cron
-# a vrátit DNS zpět na 37.205.13.28
-```
-
-Databáze na Jessice zůstala nedotčená v původním stavu, takže se nic nemigruje
-zpátky. Ztratí se jen zápisy, které mezitím proběhly na Phoenixu — proto se
-ověřuje hned a rollback se rozhoduje rychle.
 
 ## Troubleshooting
 
@@ -415,10 +346,7 @@ i aktualizace dluhů a odesílání mailů.
 sám, ne host. Patří tam `host.docker.internal` (compose ho mapuje na bridge
 gateway přes `extra_hosts`). Druhá půlka je na hostu: musí tam běžet MTA na :25,
 který přijímá poštu z docker bridge sítě — u postfixu `mynetworks` s
-`172.16.0.0/12`. **Phoenix zatím žádný MTA nemá**, Jessica má postfix.
-
-**Statika vrací 404 po cutoveru**
-V nginxu zůstal `alias` na nix store. Viz sekce Reverse proxy.
+`172.16.0.0/12`. Phoenix má postfix, který poslouchá i na `172.17.0.1:25`.
 
 **Compose hlásí varování o `$` v hodnotě**
 Někde v `.env` je dolar. Escapuj ho jako `$$`, nebo hodnotu přegeneruj.

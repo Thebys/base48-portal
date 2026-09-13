@@ -6,7 +6,7 @@
 *.dylib
 # Anchored with a leading slash: an unanchored pattern matches directories at any
 # depth too, so a bare `cron` would hide cmd/cron/, `server` would hide cmd/server/,
-# `import` would hide cmd/import/, and `portal` would hide ansible/group_vars/portal/.
+# and `import` would hide cmd/import/.
 # Already-tracked files keep working, which is what makes it easy to miss.
 /portal
 /server
