@@ -44,7 +44,7 @@
     <link rel="stylesheet" href="/static/css/theme.css">
     <link rel="stylesheet" href="/static/css/admin.css">
 </head>
-<body class="h-full bg-gray-50">
+<body class="min-h-full flex flex-col bg-gray-50">
     {{/* One display name for the whole nav, resolved once. */}}
     {{$name := ""}}
     {{if .User}}
@@ -238,7 +238,7 @@
     <div class="bg-green-500 text-white text-center text-sm font-semibold py-1">LOCAL DEVELOPMENT ENVIRONMENT</div>
     {{end}}
 
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <main class="w-full max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {{template "content" .}}
     </main>
 
