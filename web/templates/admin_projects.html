@@ -19,15 +19,15 @@
     }
 
     .subtitle {
-        color: #666;
+        color: var(--ink-3);
         font-size: 14px;
     }
 
     table {
         width: 100%;
         border-collapse: collapse;
-        background: white;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        background: var(--surface);
+        box-shadow: var(--shadow-card);
         border-radius: 8px;
         overflow: hidden;
     }
@@ -35,13 +35,13 @@
     th, td {
         padding: 12px 16px;
         text-align: left;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--line);
     }
 
     th {
-        background-color: #f9fafb;
+        background-color: var(--surface-sunken);
         font-weight: 600;
-        color: #374151;
+        color: var(--ink-2);
         font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -52,12 +52,13 @@
     }
 
     tr:hover {
-        background-color: #f9fafb;
+        background-color: var(--surface-muted);
     }
 
     .vs {
         font-family: 'Courier New', monospace;
-        background: #f3f4f6;
+        background: var(--surface-muted);
+        color: var(--ink-2);
         padding: 2px 6px;
         border-radius: 3px;
         font-weight: 600;
@@ -68,8 +69,8 @@
         align-items: center;
         gap: 4px;
         font-family: 'Courier New', monospace;
-        background: #dbeafe;
-        color: #1e40af;
+        background: var(--tint-blue-bg);
+        color: var(--tint-blue-fg);
         padding: 2px 8px;
         border-radius: 12px;
         font-size: 12px;
@@ -80,45 +81,45 @@
 
     .vs-tag .remove-vs {
         cursor: pointer;
-        color: #6b7280;
+        color: var(--ink-3);
         font-size: 14px;
         margin-left: 2px;
         line-height: 1;
     }
 
     .vs-tag .remove-vs:hover {
-        color: #ef4444;
+        color: var(--accent-red);
     }
 
     .vs-tag.primary {
-        background: #d1fae5;
-        color: #065f46;
+        background: var(--tint-green-bg);
+        color: var(--tint-green-fg);
     }
 
     .add-vs-btn {
         display: inline-flex;
         align-items: center;
         gap: 2px;
-        background: #f3f4f6;
-        color: #6b7280;
+        background: var(--surface-muted);
+        color: var(--ink-3);
         padding: 2px 8px;
         border-radius: 12px;
         font-size: 12px;
         cursor: pointer;
-        border: 1px dashed #d1d5db;
+        border: 1px dashed var(--line-strong);
     }
 
     .add-vs-btn:hover {
-        background: #e5e7eb;
-        color: #374151;
+        background: var(--line);
+        color: var(--ink-2);
     }
 
     details {
-        background: white;
-        border: 1px solid #e5e7eb;
+        background: var(--surface);
+        border: 1px solid var(--line);
         border-radius: 8px;
         margin-bottom: 15px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        box-shadow: var(--shadow-card);
     }
 
     summary {
@@ -137,7 +138,7 @@
     }
 
     summary:hover {
-        background: #f9fafb;
+        background: var(--surface-muted);
     }
 
     .project-header {
@@ -156,20 +157,20 @@
 
     .project-title {
         font-size: 18px;
-        color: #111827;
+        color: var(--ink);
         margin-bottom: 5px;
     }
 
     .project-meta {
         font-size: 14px;
-        color: #6b7280;
+        color: var(--ink-3);
         font-weight: normal;
     }
 
     .project-balance {
         font-size: 24px;
         font-weight: 700;
-        color: #059669;
+        color: var(--accent-green);
         margin-right: 20px;
         white-space: nowrap;
     }
@@ -181,22 +182,22 @@
     }
 
     .payments-table th {
-        background: #f9fafb;
+        background: var(--surface-sunken);
         padding: 12px;
         text-align: left;
         font-weight: 600;
         font-size: 12px;
-        color: #374151;
-        border-bottom: 2px solid #e5e7eb;
+        color: var(--ink-2);
+        border-bottom: 2px solid var(--line);
     }
 
     .payments-table td {
         padding: 12px;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--line);
     }
 
     .payments-table tr:hover {
-        background: #f9fafb;
+        background: var(--surface-muted);
     }
 
     .form-group {
@@ -207,14 +208,14 @@
         display: block;
         margin-bottom: 5px;
         font-weight: 600;
-        color: #374151;
+        color: var(--ink-2);
     }
 
     .form-group input,
     .form-group textarea {
         width: 100%;
         padding: 8px;
-        border: 1px solid #ddd;
+        border: 1px solid var(--line-strong);
         border-radius: 4px;
         font-family: inherit;
     }
@@ -236,12 +237,12 @@
         align-items: flex-start;
         gap: 16px;
         padding: 20px;
-        border-top: 1px solid #e5e7eb;
+        border-top: 1px solid var(--line);
     }
 
     .qr-section img {
         border-radius: 8px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--line);
     }
 
     .qr-section a {
@@ -250,11 +251,11 @@
 
     .qr-info {
         font-size: 13px;
-        color: #6b7280;
+        color: var(--ink-3);
     }
 
     .qr-info strong {
-        color: #374151;
+        color: var(--ink-2);
     }
 
     .qr-amount-row {
@@ -268,7 +269,7 @@
     .qr-amount-row input {
         width: 100px;
         padding: 4px 8px;
-        border: 1px solid #d1d5db;
+        border: 1px solid var(--line-strong);
         border-radius: 4px;
         font-size: 13px;
     }

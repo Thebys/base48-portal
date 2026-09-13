@@ -54,7 +54,7 @@ main :has(> table) {
 }
 
 .btn-primary:disabled {
-    background-color: #9ca3af;
+    background-color: var(--ink-4);
     cursor: not-allowed;
 }
 
@@ -96,6 +96,21 @@ main :has(> table) {
     background-color: #059669;
 }
 
+/* Quiet row action. `btn-danger` red outshouts every badge on the row, which is
+   wrong for something that only records a fact (keys handed back). This is the
+   badge grey tint, so it reads one notch *below* the in_debt / admin badges
+   sitting next to it instead of above them. */
+.btn-quiet {
+    background-color: var(--tint-gray-bg);
+    color: var(--tint-gray-fg);
+    text-decoration: none;
+}
+
+.btn-quiet:hover {
+    background-color: var(--line);
+    color: var(--ink-2);
+}
+
 /* ===== Badges ===== */
 
 .badge {
@@ -117,126 +132,126 @@ main :has(> table) {
 
 /* Semantic variants */
 .badge-success {
-    background-color: #dcfce7;
-    color: #166534;
+    background-color: var(--tint-green-bg);
+    color: var(--tint-green-fg);
 }
 
 .badge-danger {
-    background-color: #fee2e2;
-    color: #991b1b;
+    background-color: var(--tint-red-bg);
+    color: var(--tint-red-fg);
 }
 
 .badge-warning {
-    background-color: #fef3c7;
-    color: #92400e;
+    background-color: var(--tint-yellow-bg);
+    color: var(--tint-yellow-fg);
 }
 
 /* State variants — member states */
 .badge-accepted {
-    background-color: #dcfce7;
-    color: #166534;
+    background-color: var(--tint-green-bg);
+    color: var(--tint-green-fg);
 }
 
 .badge-awaiting {
-    background-color: #fef3c7;
-    color: #92400e;
+    background-color: var(--tint-yellow-bg);
+    color: var(--tint-yellow-fg);
 }
 
 .badge-suspended {
-    background-color: #fee2e2;
-    color: #991b1b;
+    background-color: var(--tint-red-bg);
+    color: var(--tint-red-fg);
 }
 
 .badge-rejected {
-    background-color: #f3f4f6;
-    color: #6b7280;
+    background-color: var(--tint-gray-bg);
+    color: var(--tint-gray-fg);
 }
 
 .badge-exmember {
-    background-color: #f3f4f6;
-    color: #6b7280;
+    background-color: var(--tint-gray-bg);
+    color: var(--tint-gray-fg);
 }
 
 /* Role variants — per-role colors */
 .badge-role {
-    background-color: #dbeafe;
-    color: #1e40af;
+    background-color: var(--tint-blue-bg);
+    color: var(--tint-blue-fg);
 }
 
 .badge-role-active_member {
-    background-color: #dcfce7;
-    color: #166534;
+    background-color: var(--tint-green-bg);
+    color: var(--tint-green-fg);
 }
 
 .badge-role-memberportal_admin {
-    background-color: #fee2e2;
-    color: #991b1b;
+    background-color: var(--tint-red-bg);
+    color: var(--tint-red-fg);
 }
 
 .badge-role-council_member {
-    background-color: #dbeafe;
-    color: #1e40af;
+    background-color: var(--tint-blue-bg);
+    color: var(--tint-blue-fg);
 }
 
 .badge-role-in_debt {
-    background-color: #ffedd5;
-    color: #9a3412;
+    background-color: var(--tint-orange-bg);
+    color: var(--tint-orange-fg);
 }
 
 /* Generic color variants */
 .badge-gray {
-    background: #f3f4f6;
-    color: #6b7280;
+    background: var(--tint-gray-bg);
+    color: var(--tint-gray-fg);
 }
 
 .badge-yellow {
-    background: #fef3c7;
-    color: #92400e;
+    background: var(--tint-yellow-bg);
+    color: var(--tint-yellow-fg);
 }
 
 .badge-red {
-    background: #fee2e2;
-    color: #991b1b;
+    background: var(--tint-red-bg);
+    color: var(--tint-red-fg);
 }
 
 .badge-purple {
-    background: #ede9fe;
-    color: #5b21b6;
+    background: var(--tint-purple-bg);
+    color: var(--tint-purple-fg);
 }
 
 .badge-blue {
-    background: #dbeafe;
-    color: #1e40af;
+    background: var(--tint-blue-bg);
+    color: var(--tint-blue-fg);
 }
 
 .badge-green {
-    background: #dcfce7;
-    color: #166534;
+    background: var(--tint-green-bg);
+    color: var(--tint-green-fg);
 }
 
 .badge-orange {
-    background: #ffedd5;
-    color: #9a3412;
+    background: var(--tint-orange-bg);
+    color: var(--tint-orange-fg);
 }
 
 .badge-indigo {
-    background: #e0e7ff;
-    color: #3730a3;
+    background: var(--tint-indigo-bg);
+    color: var(--tint-indigo-fg);
 }
 
 /* ===== Text Utilities ===== */
 
 .text-negative {
-    color: #f44336;
+    color: var(--money-negative);
     font-weight: bold;
 }
 
 .text-positive {
-    color: #4CAF50;
+    color: var(--money-positive);
 }
 
 .text-muted {
-    color: #999;
+    color: var(--ink-4);
 }
 
 /* ===== Modal ===== */
@@ -248,20 +263,21 @@ main :has(> table) {
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--overlay);
 }
 
 .modal-content {
-    background-color: white;
+    background-color: var(--surface-raised);
+    color: var(--ink);
     margin: 2vh auto;
     padding: 30px;
-    border: 1px solid #888;
+    border: 1px solid var(--line-strong);
     width: 600px;
     max-width: 90%;
     max-height: 96vh;
     overflow-y: auto;
     border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-pop);
 }
 
 .modal .close {
@@ -269,36 +285,36 @@ main :has(> table) {
     font-size: 28px;
     font-weight: bold;
     cursor: pointer;
-    color: #6b7280;
+    color: var(--ink-3);
 }
 
 .modal .close:hover {
-    color: #ef4444;
+    color: var(--accent-red);
 }
 
-/* Bar tab navigation */
-.bar-tabs {
+/* Tab navigation — switches between views of one list */
+.tabs {
     display: flex;
     gap: 0;
-    border-bottom: 2px solid #e5e7eb;
+    border-bottom: 2px solid var(--line);
     margin-bottom: 1.5rem;
 }
-.bar-tabs a {
+.tabs a {
     padding: 0.5rem 1.25rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #6b7280;
+    color: var(--ink-3);
     text-decoration: none;
     border-bottom: 2px solid transparent;
     margin-bottom: -2px;
     transition: color 0.15s, border-color 0.15s;
 }
-.bar-tabs a:hover {
-    color: #1f2937;
+.tabs a:hover {
+    color: var(--ink);
 }
-.bar-tabs a.active {
-    color: #1a1a2e;
-    border-bottom-color: #1a1a2e;
+.tabs a.active {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
     font-weight: 600;
 }
 
@@ -307,6 +323,8 @@ main :has(> table) {
     width: 85.6mm;
     height: 53.98mm;
     background: #fff;
+    /* Explicit, not inherited: this is card stock, white in either theme. */
+    color: #1a1a2e;
     border: 2px solid #1a1a2e;
     position: relative;
     overflow: hidden;
@@ -591,7 +609,7 @@ main :has(> table) {
    the marks only — every label stays in a text token.
    ========================================================================== */
 
-.bar-seq-0 { background: #f3f4f6; }   /* nothing there — recedes to the surface */
+.bar-seq-0 { background: var(--surface-muted); }   /* nothing there — recedes to the surface */
 .bar-seq-1 { background: #cde2fb; }
 .bar-seq-2 { background: #9ec5f4; }
 .bar-seq-3 { background: #6da7ec; }
@@ -610,7 +628,7 @@ main :has(> table) {
    5 of the sequential scale above clear 4.5:1 against neither dark ink (4.03)
    nor white (4.42), so this ramp skips straight past them. Dark ink to level 3,
    white from level 4. */
-.bar-coh-0 { background: #f3f4f6; }
+.bar-coh-0 { background: var(--surface-muted); }
 .bar-coh-1 { background: #cde2fb; }
 .bar-coh-2 { background: #9ec5f4; }
 .bar-coh-3 { background: #6da7ec; }
@@ -624,26 +642,26 @@ main :has(> table) {
 .bar-kpis {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-    background: #fff;
-    border-top: 1px solid #e5e7eb;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
 }
 .bar-kpi {
     padding: 0.875rem 1rem;
-    box-shadow: inset -1px 0 0 #e5e7eb, inset 0 -1px 0 #e5e7eb;
+    box-shadow: inset -1px 0 0 var(--line), inset 0 -1px 0 var(--line);
 }
-.bar-kpi-label { font-size: 0.75rem; color: #6b7280; }
+.bar-kpi-label { font-size: 0.75rem; color: var(--ink-3); }
 .bar-kpi-value {
     margin-top: 0.25rem;
     font-size: 1.5rem;
     font-weight: 600;
-    color: #111827;
+    color: var(--ink);
     line-height: 1.15;
 }
-.bar-kpi-value .unit { font-size: 0.875rem; font-weight: 500; color: #6b7280; margin-left: 0.15rem; }
-.bar-kpi-note { margin-top: 0.2rem; font-size: 0.6875rem; color: #9ca3af; }
+.bar-kpi-value .unit { font-size: 0.875rem; font-weight: 500; color: var(--ink-3); margin-left: 0.15rem; }
+.bar-kpi-note { margin-top: 0.2rem; font-size: 0.6875rem; color: var(--ink-4); }
 .bar-kpi-delta { font-size: 0.75rem; font-weight: 600; }
-.bar-kpi-delta.up   { color: #0ca30c; }
-.bar-kpi-delta.down { color: #d03b3b; }
+.bar-kpi-delta.up   { color: var(--money-positive); }
+.bar-kpi-delta.down { color: var(--money-negative); }
 
 /* --- Column chart --------------------------------------------------------- */
 .bar-chart { display: flex; gap: 0.75rem; }
@@ -652,7 +670,7 @@ main :has(> table) {
     flex-direction: column;
     justify-content: space-between;
     font-size: 0.6875rem;
-    color: #9ca3af;
+    color: var(--ink-4);
     font-variant-numeric: tabular-nums;
     text-align: right;
     height: 9rem;
@@ -665,7 +683,7 @@ main :has(> table) {
     align-items: flex-end;
     gap: 2px;                 /* the 2px surface gap, not a stroke */
     height: 9rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--line);
 }
 /* Hairline, solid gridlines at the two axis ticks above the baseline. */
 .bar-chart-plot::before,
@@ -673,7 +691,7 @@ main :has(> table) {
     content: "";
     position: absolute;
     left: 0; right: 0;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid var(--line-soft);
     pointer-events: none;
 }
 .bar-chart-plot::before { top: 0; }
@@ -701,22 +719,22 @@ main :has(> table) {
     gap: 2px;
     margin-top: 0.375rem;
     font-size: 0.625rem;
-    color: #9ca3af;
+    color: var(--ink-4);
     font-variant-numeric: tabular-nums;
 }
 .bar-chart-labels span { flex: 1; min-width: 0; text-align: center; }
-.bar-chart-labels span.tick { color: #4b5563; font-weight: 600; }
+.bar-chart-labels span.tick { color: var(--ink-2); font-weight: 600; }
 
 /* --- Heatmap -------------------------------------------------------------- */
 .bar-heat { border-collapse: separate; border-spacing: 2px; }
 .bar-heat th {
     font-size: 0.625rem;
     font-weight: 500;
-    color: #9ca3af;
+    color: var(--ink-4);
     font-variant-numeric: tabular-nums;
     padding: 0;
 }
-.bar-heat th.day { text-align: right; padding-right: 0.5rem; font-size: 0.75rem; color: #4b5563; }
+.bar-heat th.day { text-align: right; padding-right: 0.5rem; font-size: 0.75rem; color: var(--ink-2); }
 .bar-heat td { padding: 0; }
 /* No background here: it would out-specify the single-class ramp and flatten
    the whole grid. The step class (bar-seq-0..7) carries the fill. */
@@ -738,19 +756,19 @@ main :has(> table) {
     min-width: 2px;
     display: block;
 }
-.bar-inline-track { background: #f3f4f6; border-radius: 4px; width: 100%; }
+.bar-inline-track { background: var(--surface-muted); border-radius: 4px; width: 100%; }
 
 /* --- Stacked category bar ------------------------------------------------- */
 .bar-stack { display: flex; gap: 2px; height: 1.5rem; }
 .bar-stack > div { border-radius: 2px; min-width: 2px; }
 .bar-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin-top: 0.75rem; }
-.bar-legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #4b5563; }
+.bar-legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--ink-2); }
 .bar-legend-item i { width: 0.6rem; height: 0.6rem; border-radius: 2px; flex-shrink: 0; }
-.bar-legend-item b { color: #111827; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar-legend-item b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* --- Cohort grid ---------------------------------------------------------- */
 .bar-cohort { border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; }
-.bar-cohort th { font-size: 0.6875rem; font-weight: 500; color: #9ca3af; padding: 0 0.25rem; }
+.bar-cohort th { font-size: 0.6875rem; font-weight: 500; color: var(--ink-4); padding: 0 0.25rem; }
 .bar-cohort td { padding: 0; }
 .bar-cohort .cell {
     display: block;
@@ -767,4 +785,259 @@ main :has(> table) {
 .bar-cohort .cell.ink-light,
 .bar-heat .cell.ink-light { color: #fff; }
 /* Two classes, so this beats the single-class ramp it sits beside. */
-.bar-cohort .cell.empty { background: transparent; color: #d1d5db; }
+.bar-cohort .cell.empty { background: transparent; color: var(--line-strong); }
+
+/* ==========================================================================
+   Navigation
+   Every colour here is a token, so the bar, the menus and the theme switch
+   follow the theme without a single `.dark` rule of their own.
+   ========================================================================== */
+
+.nav-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+}
+
+/* --- Top-level links ------------------------------------------------------ */
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--ink-3);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+}
+.nav-link:hover { color: var(--ink); }
+
+/* Set by the inline script at the end of <nav>, from location.pathname. */
+.nav-link[aria-current="page"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent-indigo);
+}
+
+/* --- Icon-only buttons (hamburger) --------------------------------------- */
+.nav-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: var(--ink-3);
+    cursor: pointer;
+}
+.nav-icon-btn:hover { background: var(--surface-muted); color: var(--ink); }
+
+/* --- Avatar trigger ------------------------------------------------------- */
+.nav-user-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--ink-3);
+}
+.nav-user-btn:hover { background: var(--surface-muted); }
+
+.nav-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: var(--surface-muted);
+    color: var(--ink-2);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    /* Initials are letters, not prose — kill any inherited text styling. */
+    text-transform: uppercase;
+    line-height: 1;
+    user-select: none;
+}
+/* An admin's own avatar is the one place a role needs to be visible without
+   opening anything — it is the account they are about to act as. */
+.nav-avatar.is-admin {
+    background: var(--tint-red-bg);
+    color: var(--tint-red-fg);
+}
+
+.nav-caret { transition: transform 0.15s; flex-shrink: 0; }
+[aria-expanded="true"] > .nav-caret { transform: rotate(180deg); }
+
+/* --- Dropdown panel ------------------------------------------------------- */
+.nav-menu-wrap { position: relative; }
+
+.nav-menu {
+    position: absolute;
+    top: 100%;
+    margin-top: 0.5rem;
+    min-width: 12rem;
+    padding: 0.375rem;
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: 0.625rem;
+    box-shadow: var(--shadow-pop);
+    z-index: 50;
+}
+.nav-menu.align-right { right: 0; }
+.nav-menu.align-left { left: 0; }
+.nav-menu.is-wide { width: 16rem; }
+
+/* [hidden] can't transition, so visibility carries the closed state and the
+   attribute is only used as the accessibility source of truth. */
+.nav-menu[hidden] {
+    display: block;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-0.25rem);
+    pointer-events: none;
+}
+.nav-menu:not([hidden]) {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+}
+.nav-menu { transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s; }
+
+@media (prefers-reduced-motion: reduce) {
+    .nav-menu, .nav-caret { transition: none; }
+    .nav-menu[hidden] { transform: none; }
+}
+
+.nav-menu-head {
+    padding: 0.5rem 0.625rem 0.625rem;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 0.375rem;
+}
+.nav-menu-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--ink);
+    /* Long nicks must not widen the panel. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.nav-menu-mail {
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.nav-menu-head .badge-group { margin-top: 0.4rem; }
+
+.nav-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    padding: 0.5rem 0.625rem;
+    border: none;
+    border-radius: 0.375rem;
+    background: transparent;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--ink-2);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+}
+.nav-menu-item:hover { background: var(--surface-muted); color: var(--ink); }
+.nav-menu-item svg { flex-shrink: 0; color: var(--ink-4); }
+.nav-menu-item:hover svg { color: var(--ink-3); }
+
+.nav-menu-item.is-danger { color: var(--accent-red); }
+.nav-menu-item.is-danger:hover { background: var(--tint-red-bg); color: var(--accent-red); }
+.nav-menu-item.is-danger svg { color: currentColor; }
+
+.nav-menu-sep {
+    height: 1px;
+    margin: 0.375rem -0.375rem;
+    background: var(--line);
+}
+
+.nav-menu-label {
+    padding: 0.375rem 0.625rem 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+}
+
+/* --- Theme switch --------------------------------------------------------- */
+.theme-switch {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    margin: 0 0.625rem 0.25rem;
+    padding: 2px;
+    background: var(--surface-muted);
+    border-radius: 0.5rem;
+}
+.theme-switch button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.25rem;
+    border: none;
+    border-radius: 0.375rem;
+    background: transparent;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--ink-3);
+    cursor: pointer;
+}
+.theme-switch button:hover { color: var(--ink); }
+.theme-switch button[aria-pressed="true"] {
+    background: var(--surface-raised);
+    color: var(--ink);
+    box-shadow: var(--shadow-card);
+}
+.theme-switch svg { flex-shrink: 0; }
+
+/* --- Mobile panel --------------------------------------------------------- */
+.nav-mobile {
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+}
+.nav-mobile-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--ink-2);
+    text-decoration: none;
+}
+.nav-mobile-item:hover { background: var(--surface-muted); color: var(--ink); }
+.nav-mobile-item[aria-current="page"] { color: var(--ink); background: var(--surface-muted); }
+.nav-mobile-item.is-sub { padding-left: 1.5rem; }
+.nav-mobile-item.is-danger { color: var(--accent-red); }
+
+/* --- Focus ---------------------------------------------------------------- */
+/* One visible focus ring for everything the keyboard can reach in the nav. */
+.nav-link:focus-visible,
+.nav-icon-btn:focus-visible,
+.nav-user-btn:focus-visible,
+.nav-menu-item:focus-visible,
+.nav-mobile-item:focus-visible,
+.theme-switch button:focus-visible {
+    outline: 2px solid var(--accent-indigo);
+    outline-offset: 2px;
+}

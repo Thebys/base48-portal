@@ -1,72 +1,83 @@
 {{ define "content" }}
 <div class="container">
     <div class="header">
-        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap;">
-            <div>
-                <h1 style="margin: 0;">Admin - User Management</h1>
-                <p style="margin: 5px 0 0 0; color: #6b7280;">Showing {{ len .UserList }} users</p>
-            </div>
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <h1 style="margin: 0;">Admin - User Management</h1>
             <a href="/admin/users/export.csv" class="btn btn-primary" title="CSV export členů ve stavu accepted + suspended (pro prezenčky, valné hromady apod.)">
                 Export CSV (accepted + suspended)
             </a>
         </div>
     </div>
 
-    <!-- Filter Form -->
-    <form method="GET" action="/admin/users" class="filter-form">
-        <div class="filter-row">
-            <div class="filter-group">
-                <label>Search:</label>
-                <input type="text" name="search" placeholder="Email or name..." value="{{ .FilterSearch }}" />
-            </div>
+    <!-- Presets. The four lists actually asked for, each with its own ordering.
+         Counts come from every user, not the current filter. -->
+    <div class="tabs">
+        {{ range .UserViews }}
+        <a href="{{ .URL }}"{{ if .Active }} class="active" aria-current="page"{{ end }}>
+            {{ .Label }} <span class="text-muted">{{ .Count }}</span>
+        </a>
+        {{ end }}
+    </div>
 
-            <div class="filter-group">
-                <label>State:</label>
-                <select name="state">
-                    <option value="">All</option>
-                    <option value="accepted" {{ if eq .FilterState "accepted" }}selected{{ end }}>Accepted</option>
-                    <option value="awaiting" {{ if eq .FilterState "awaiting" }}selected{{ end }}>Awaiting</option>
-                    <option value="suspended" {{ if eq .FilterState "suspended" }}selected{{ end }}>Suspended</option>
-                    <option value="rejected" {{ if eq .FilterState "rejected" }}selected{{ end }}>Rejected</option>
-                    <option value="exmember" {{ if eq .FilterState "exmember" }}selected{{ end }}>Ex-member</option>
-                </select>
-            </div>
+    <!-- Escape hatch: collapsed unless the current filters are off-preset, so it
+         costs no vertical space on the way anyone normally arrives here. -->
+    <details class="filters"{{ if .CustomView }} open{{ end }}>
+        <summary>Podrobný filtr <span class="text-muted">· zobrazeno {{ len .UserList }}</span></summary>
+        <form method="GET" action="/admin/users" class="filter-form">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>Search:</label>
+                    <input type="text" name="search" placeholder="Email or name..." value="{{ .FilterSearch }}" />
+                </div>
 
-            <div class="filter-group">
-                <label>Keycloak:</label>
-                <select name="keycloak">
-                    <option value="">All</option>
-                    <option value="linked" {{ if eq .FilterKeycloak "linked" }}selected{{ end }}>Linked</option>
-                    <option value="not_linked" {{ if eq .FilterKeycloak "not_linked" }}selected{{ end }}>Not Linked</option>
-                </select>
-            </div>
+                <div class="filter-group">
+                    <label>State:</label>
+                    <select name="state">
+                        <option value="">All</option>
+                        <option value="accepted" {{ if eq .FilterState "accepted" }}selected{{ end }}>Accepted</option>
+                        <option value="awaiting" {{ if eq .FilterState "awaiting" }}selected{{ end }}>Awaiting</option>
+                        <option value="suspended" {{ if eq .FilterState "suspended" }}selected{{ end }}>Suspended</option>
+                        <option value="rejected" {{ if eq .FilterState "rejected" }}selected{{ end }}>Rejected</option>
+                        <option value="exmember" {{ if eq .FilterState "exmember" }}selected{{ end }}>Ex-member</option>
+                    </select>
+                </div>
 
-            <div class="filter-group">
-                <label>Balance:</label>
-                <select name="balance">
-                    <option value="">All</option>
-                    <option value="positive" {{ if eq .FilterBalance "positive" }}selected{{ end }}>Positive</option>
-                    <option value="negative" {{ if eq .FilterBalance "negative" }}selected{{ end }}>Negative</option>
-                </select>
-            </div>
+                <div class="filter-group">
+                    <label>Keycloak:</label>
+                    <select name="keycloak">
+                        <option value="">All</option>
+                        <option value="linked" {{ if eq .FilterKeycloak "linked" }}selected{{ end }}>Linked</option>
+                        <option value="not_linked" {{ if eq .FilterKeycloak "not_linked" }}selected{{ end }}>Not Linked</option>
+                    </select>
+                </div>
 
-            <div class="filter-group">
-                <label>Sort by:</label>
-                <select name="sort">
-                    <option value="">Default (ID High to Low)</option>
-                    <option value="id_asc" {{ if eq .SortBy "id_asc" }}selected{{ end }}>ID (Low to High)</option>
-                    <option value="id_desc" {{ if eq .SortBy "id_desc" }}selected{{ end }}>ID (High to Low)</option>
-                    <option value="balance_asc" {{ if eq .SortBy "balance_asc" }}selected{{ end }}>Balance (Low to High)</option>
-                    <option value="balance_desc" {{ if eq .SortBy "balance_desc" }}selected{{ end }}>Balance (High to Low)</option>
-                </select>
-            </div>
+                <div class="filter-group">
+                    <label>Balance:</label>
+                    <select name="balance">
+                        <option value="">All</option>
+                        <option value="positive" {{ if eq .FilterBalance "positive" }}selected{{ end }}>Positive</option>
+                        <option value="negative" {{ if eq .FilterBalance "negative" }}selected{{ end }}>Negative</option>
+                    </select>
+                </div>
 
-            <div class="filter-group filter-buttons">
-                <button type="submit" class="btn btn-primary">Apply</button>
-                <a href="/admin/users" class="btn btn-secondary">Clear</a>
+                <div class="filter-group">
+                    <label>Sort by:</label>
+                    <select name="sort">
+                        <option value="">Default (ID High to Low)</option>
+                        <option value="id_asc" {{ if eq .SortBy "id_asc" }}selected{{ end }}>ID (Low to High)</option>
+                        <option value="id_desc" {{ if eq .SortBy "id_desc" }}selected{{ end }}>ID (High to Low)</option>
+                        <option value="balance_asc" {{ if eq .SortBy "balance_asc" }}selected{{ end }}>Balance (Low to High)</option>
+                        <option value="balance_desc" {{ if eq .SortBy "balance_desc" }}selected{{ end }}>Balance (High to Low)</option>
+                    </select>
+                </div>
+
+                <div class="filter-group filter-buttons">
+                    <button type="submit" class="btn btn-primary">Apply</button>
+                    <a href="/admin/users" class="btn btn-secondary">Clear</a>
+                </div>
             </div>
-        </div>
-    </form>
+        </form>
+    </details>
 
     <div>
     <table class="users-table">
@@ -99,8 +110,8 @@
                 <td>
                     <span class="badge badge-{{ .DBUser.State }}">{{ .DBUser.State }}</span>
                 </td>
-                <td class="{{ if lt .Balance 0 }}text-negative{{ else }}text-positive{{ end }}" style="white-space: nowrap;">
-                    {{ .Balance }}&nbsp;Kč
+                <td class="{{ if lt .Balance 0 }}text-negative{{ else }}text-positive{{ end }}">
+                    {{ fmtNum .Balance }}&nbsp;Kč
                 </td>
                 <td>
                     {{ if .KeycloakLinked }}
@@ -125,13 +136,8 @@
                         <a href="/admin/users/{{ .DBUser.ID }}" class="btn btn-sm btn-view" title="View profile">
                             View
                         </a>
-                        {{ if .DBUser.KeycloakID.Valid }}
-                            <button class="btn btn-sm btn-view" onclick="manageRoles('{{ .DBUser.KeycloakID.String }}', '{{ .DBUser.Email }}')">
-                                Manage Roles
-                            </button>
-                        {{ end }}
                         {{ if and .DBUser.KeysGranted.Valid (not .DBUser.KeysReturned.Valid) }}
-                            <button class="btn btn-sm btn-danger" onclick="toggleKeys('{{ .DBUser.ID }}', 'return', '{{ .DBUser.Email }}')" title="Returned: keys_granted={{ .DBUser.KeysGranted.Time.Format "2006-01-02" }}">
+                            <button class="btn btn-sm btn-quiet" onclick="toggleKeys('{{ .DBUser.ID }}', 'return', '{{ .DBUser.Email }}')" title="Returned: keys_granted={{ .DBUser.KeysGranted.Time.Format "2006-01-02" }}">
                                 Return Keys
                             </button>
                         {{ else }}
@@ -144,50 +150,43 @@
             </tr>
             {{ end }}
         </tbody>
+        {{ if .ShowTotals }}
+        <tfoot>
+            <tr>
+                <td colspan="6">
+                    Σ {{ len .UserList }}&nbsp;uživatelů{{ if and .DebtorCount (not .AllDebtors) }},
+                    z toho {{ .DebtorCount }} v&nbsp;dluhu <span class="text-negative">{{ fmtNum .TotalDebt }}&nbsp;Kč</span>{{ end }}
+                </td>
+                <td class="{{ if lt .TotalBalance 0 }}text-negative{{ else }}text-positive{{ end }}">
+                    {{ fmtNum .TotalBalance }}&nbsp;Kč
+                </td>
+                <td colspan="3"></td>
+            </tr>
+        </tfoot>
+        {{ end }}
     </table>
-    </div>
-</div>
-
-<!-- Role Management Modal -->
-<div id="roleModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <span class="close" onclick="closeModal()">&times;</span>
-        <h2>Manage Roles</h2>
-        <p>User: <strong id="modalUserEmail"></strong></p>
-        <input type="hidden" id="modalUserId" />
-
-        <div class="role-actions">
-            <h3>Assign Role</h3>
-            <select id="roleSelect">
-                <option value="">Select role...</option>
-                <option value="active_member">active_member</option>
-                <option value="in_debt">in_debt</option>
-                <option value="memberportal_admin">memberportal_admin</option>
-            </select>
-            <button onclick="assignRole()" class="btn btn-primary">Assign</button>
-        </div>
-
-        <div class="role-actions">
-            <h3>Remove Role</h3>
-            <select id="removeRoleSelect">
-                <option value="">Select role...</option>
-                <option value="active_member">active_member</option>
-                <option value="in_debt">in_debt</option>
-                <option value="memberportal_admin">memberportal_admin</option>
-            </select>
-            <button onclick="removeRole()" class="btn btn-danger">Remove</button>
-        </div>
     </div>
 </div>
 
 <style>
 /* Page-specific styles for admin_users — shared styles are in /static/css/admin.css */
 
+.filters {
+    margin-bottom: 12px;
+}
+
+.filters summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--ink-2);
+    padding: 4px 0;
+}
+
 .filter-form {
-    background: #f5f5f5;
+    background: var(--surface-sunken);
     padding: 15px;
     border-radius: 5px;
-    margin-bottom: 20px;
+    margin-top: 8px;
 }
 
 .filter-row {
@@ -207,13 +206,13 @@
     font-size: 12px;
     font-weight: bold;
     margin-bottom: 5px;
-    color: #555;
+    color: var(--ink-2);
 }
 
 .filter-group input,
 .filter-group select {
     padding: 8px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--line-strong);
     border-radius: 4px;
     font-size: 14px;
 }
@@ -231,15 +230,29 @@
 .users-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 20px;
-    font-size: 14px;
+    font-size: 13px;
 }
 
+/* Dense on purpose: this is a scanning table. Every cell stays on one line so
+   row height is constant — a member with three roles must not be twice as tall
+   as one with none. Overflow scrolls sideways via the `main :has(> table)` rule
+   in admin.css. */
 .users-table th,
 .users-table td {
-    border: 1px solid #ddd;
-    padding: 8px;
+    border: 1px solid var(--line);
+    padding: 3px 8px;
     text-align: left;
+    line-height: 1.35;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+/* `white-space` does not reach flex children, so the buttons would still stack
+   onto a second line and undo the row height won above. Scoped to the actions
+   cell on purpose: the Roles group keeps its wrapping, which is what lets that
+   column give width back to the table instead of pushing Actions off-screen. */
+.users-table td:last-child .badge-group {
+    flex-wrap: nowrap;
 }
 
 .users-table th {
@@ -248,115 +261,21 @@
     font-weight: bold;
 }
 
-.users-table tr:nth-child(even) {
-    background-color: #f2f2f2;
+.users-table tbody tr:nth-child(even) {
+    background-color: var(--surface-sunken);
 }
 
-.users-table tr:hover {
-    background-color: #ddd;
+.users-table tbody tr:hover {
+    background-color: var(--surface-muted);
 }
 
-.role-actions {
-    margin: 20px 0;
-    padding: 15px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-.role-actions h3 {
-    margin-top: 0;
-}
-
-.role-actions select {
-    padding: 8px;
-    margin-right: 10px;
-    width: 200px;
+.users-table tfoot td {
+    background: var(--surface-sunken);
+    font-weight: 600;
 }
 </style>
 
 <script>
-function manageRoles(userId, email) {
-    document.getElementById('modalUserId').value = userId;
-    document.getElementById('modalUserEmail').textContent = email;
-    document.getElementById('roleModal').style.display = 'block';
-}
-
-function closeModal() {
-    document.getElementById('roleModal').style.display = 'none';
-}
-
-async function assignRole() {
-    const userId = document.getElementById('modalUserId').value;
-    const roleName = document.getElementById('roleSelect').value;
-
-    if (!roleName) {
-        alert('Please select a role');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/admin/roles/assign', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                user_id: userId,
-                role_name: roleName
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            alert('Role assigned successfully!');
-            location.reload();
-        } else {
-            alert('Error: ' + data.error);
-        }
-    } catch (error) {
-        alert('Failed to assign role: ' + error);
-    }
-}
-
-async function removeRole() {
-    const userId = document.getElementById('modalUserId').value;
-    const roleName = document.getElementById('removeRoleSelect').value;
-
-    if (!roleName) {
-        alert('Please select a role');
-        return;
-    }
-
-    if (!confirm('Are you sure you want to remove this role?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/admin/roles/remove', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                user_id: userId,
-                role_name: roleName
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            alert('Role removed successfully!');
-            location.reload();
-        } else {
-            alert('Error: ' + data.error);
-        }
-    } catch (error) {
-        alert('Failed to remove role: ' + error);
-    }
-}
-
 async function toggleKeys(userId, action, email) {
     const verb = action === 'grant' ? 'give keys to' : 'mark keys returned for';
     if (!confirm(`Are you sure you want to ${verb} ${email}?`)) {
@@ -379,14 +298,6 @@ async function toggleKeys(userId, action, email) {
         }
     } catch (error) {
         alert('Failed to update keys: ' + error);
-    }
-}
-
-// Close modal when clicking outside
-window.onclick = function(event) {
-    const modal = document.getElementById('roleModal');
-    if (event.target == modal) {
-        closeModal();
     }
 }
 </script>

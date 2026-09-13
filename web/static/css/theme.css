@@ -1,0 +1,355 @@
+/*
+ * Theme — Base48 Member Portal
+ * See FRONTEND.md § Theming.
+ *
+ * Two jobs, in this order:
+ *
+ *   1. Declare the palette as tokens. Light values are exactly the hexes the
+ *      portal already shipped, so switching a rule from a literal to a token
+ *      is a no-op in light mode. `admin.css` and the page-level <style> blocks
+ *      consume these; nothing else needs a dark counterpart.
+ *
+ *   2. Re-point the Tailwind colour utilities under `html.dark`. Most pages are
+ *      built from utilities rather than components, so remapping the ~80 colour
+ *      classes actually in use is what carries dark mode across the whole app —
+ *      no `dark:` variant has to be written into any template, and a new page
+ *      that sticks to the palette is themed the day it lands.
+ *
+ * Why override the utilities instead of adding `dark:` variants: there are
+ * ~1200 colour-class usages across 24 templates. Every one would need a second
+ * class kept in sync by hand, and a missed one is an unreadable white-on-white
+ * patch that only shows up in dark mode. One sheet cannot drift.
+ *
+ * Specificity note: the Play CDN injects its stylesheet into <head> at runtime,
+ * so it may land after this file. Every override here is prefixed with `.dark`
+ * and therefore outranks the utility it replaces regardless of load order.
+ * Never drop that prefix.
+ *
+ * Deliberately NOT themed: `.barcode-card` and `.bar-guide`. Both are printed
+ * on white paper and set all their own colours; no utility class reaches inside
+ * either, so no rule below can touch them.
+ */
+
+/* ==========================================================================
+   1. Palette tokens
+   ========================================================================== */
+
+:root {
+    color-scheme: light;
+
+    /* Surfaces, lightest-on-top */
+    --surface: #ffffff;          /* cards, nav, footer, modals */
+    --surface-raised: #ffffff;   /* dropdowns and popovers over a card */
+    --surface-sunken: #f9fafb;   /* page ground, table headers */
+    --surface-muted: #f3f4f6;    /* chips, tracks, hover fills, inert marks */
+
+    /* Hairlines */
+    --line-soft: #f3f4f6;        /* gridlines, dividers inside a component */
+    --line: #e5e7eb;             /* card and table borders */
+    --line-strong: #d1d5db;      /* input borders */
+
+    /* Ink, strongest first */
+    --ink: #111827;              /* headings, values, primary body */
+    --ink-2: #374151;            /* secondary body, form labels */
+    --ink-3: #6b7280;            /* meta, captions, muted rows */
+    --ink-4: #9ca3af;            /* axis ticks, placeholders, disabled */
+
+    /* Accents — for text and icons; all clear 4.5:1 on --surface */
+    --accent-red: #dc2626;
+    --accent-green: #059669;
+    --accent-blue: #2563eb;
+    --accent-indigo: #4f46e5;
+    --accent-amber: #f59e0b;
+    --accent-purple: #8b5cf6;
+
+    /* Tints — pastel fill + matching ink. Badges and alert panels. */
+    --tint-green-bg: #dcfce7;  --tint-green-fg: #166534;
+    --tint-red-bg: #fee2e2;    --tint-red-fg: #991b1b;
+    --tint-yellow-bg: #fef3c7; --tint-yellow-fg: #92400e;
+    --tint-blue-bg: #dbeafe;   --tint-blue-fg: #1e40af;
+    --tint-orange-bg: #ffedd5; --tint-orange-fg: #9a3412;
+    --tint-gray-bg: #f3f4f6;   --tint-gray-fg: #6b7280;
+    --tint-purple-bg: #ede9fe; --tint-purple-fg: #5b21b6;
+    --tint-indigo-bg: #e0e7ff; --tint-indigo-fg: #3730a3;
+
+    /* Balances — these two read as money, not as status */
+    --money-negative: #f44336;
+    --money-positive: #4caf50;
+
+    --overlay: rgba(0, 0, 0, 0.5);
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --shadow-pop: 0 10px 24px -8px rgba(0, 0, 0, 0.18);
+}
+
+html.dark {
+    color-scheme: dark;
+
+    /* Not a wholesale inversion: the ground stays a touch blue so the
+       near-black never looks like a rendering failure, and cards sit one step
+       *above* it rather than below. */
+    --surface: #171a21;
+    --surface-raised: #1e222b;
+    --surface-sunken: #0f1115;
+    --surface-muted: #222732;
+
+    --line-soft: #21262f;
+    --line: #2a303b;
+    --line-strong: #3a4150;
+
+    --ink: #e8eaee;
+    --ink-2: #cbd1db;
+    --ink-3: #99a1b0;
+    --ink-4: #7f8797;   /* 5.4:1 on --surface; the light #9ca3af would be 3.4 */
+
+    /* Lifted two or three steps: the light-mode accents sit at 1.5-2:1 here. */
+    --accent-red: #f87171;
+    --accent-green: #34d399;
+    --accent-blue: #60a5fa;
+    --accent-indigo: #a5b4fc;
+    --accent-amber: #fbbf24;
+    --accent-purple: #c084fc;
+
+    /* Tints invert: the fill becomes a wash of the hue over the surface and the
+       ink becomes the light end. Alphas, so a tint works on any surface step. */
+    --tint-green-bg: rgba(52, 211, 153, 0.14);  --tint-green-fg: #6ee7b7;
+    --tint-red-bg: rgba(248, 113, 113, 0.14);   --tint-red-fg: #fca5a5;
+    --tint-yellow-bg: rgba(251, 191, 36, 0.14); --tint-yellow-fg: #fcd34d;
+    --tint-blue-bg: rgba(96, 165, 250, 0.14);   --tint-blue-fg: #93c5fd;
+    --tint-orange-bg: rgba(251, 146, 60, 0.14); --tint-orange-fg: #fdba74;
+    --tint-gray-bg: rgba(148, 163, 184, 0.13);  --tint-gray-fg: #cbd5e1;
+    --tint-purple-bg: rgba(192, 132, 252, 0.14);--tint-purple-fg: #d8b4fe;
+    --tint-indigo-bg: rgba(165, 180, 252, 0.14);--tint-indigo-fg: #c7d2fe;
+
+    --money-negative: #f87171;
+    --money-positive: #4ade80;
+
+    --overlay: rgba(0, 0, 0, 0.7);
+    /* A drop shadow is invisible on a dark ground, so elevation is carried by
+       the surface step plus a hairline; the shadow only deepens the edge. */
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-pop: 0 12px 28px -10px rgba(0, 0, 0, 0.7);
+
+    /* Paint the root so the very first frame is dark, before any layout. */
+    background-color: var(--surface-sunken);
+}
+
+/* ==========================================================================
+   2. Tailwind utility remap — dark only
+   Light mode never enters this section, so it cannot regress there.
+   ========================================================================== */
+
+/* Plenty of text on the older pages carries no colour class at all and just
+   inherits the UA's black. Give the document a baseline ink; anything with a
+   utility or component colour still outranks this. */
+.dark body { color: var(--ink); }
+
+/* Preflight sets an unconditional #e5e7eb on every element, which is what
+   colourless `border`/`border-t` utilities inherit. Re-point it before the
+   explicit border classes below. */
+.dark *,
+.dark ::before,
+.dark ::after { border-color: var(--line); }
+
+/* --- Backgrounds ---------------------------------------------------------- */
+.dark .bg-white { background-color: var(--surface); }
+.dark .bg-gray-50 { background-color: var(--surface-sunken); }
+.dark .bg-gray-100 { background-color: var(--surface-muted); }
+.dark .bg-gray-200 { background-color: var(--line); }
+.dark .bg-gray-600 { background-color: var(--line-strong); }
+.dark .bg-gray-700 { background-color: #2f3542; }
+
+/* Hover fills go *up* a step in dark, never down — a row that darkens under
+   the cursor reads as disabled. */
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-100:hover { background-color: var(--surface-muted); }
+.dark .hover\:bg-gray-700:hover { background-color: #39404e; }
+.dark .hover\:bg-indigo-50:hover { background-color: var(--tint-indigo-bg); }
+
+/* Pastel panels — alerts, callouts, highlighted rows */
+.dark .bg-red-50,    .dark .bg-red-100 { background-color: var(--tint-red-bg); }
+.dark .bg-green-50,  .dark .bg-green-100 { background-color: var(--tint-green-bg); }
+.dark .bg-blue-50,   .dark .bg-blue-100 { background-color: var(--tint-blue-bg); }
+.dark .bg-yellow-50, .dark .bg-yellow-100 { background-color: var(--tint-yellow-bg); }
+.dark .bg-amber-50 { background-color: var(--tint-yellow-bg); }
+.dark .bg-purple-50, .dark .bg-purple-100 { background-color: var(--tint-purple-bg); }
+.dark .bg-indigo-50, .dark .bg-indigo-100 { background-color: var(--tint-indigo-bg); }
+.dark .bg-orange-100 { background-color: var(--tint-orange-bg); }
+
+/* Solid accent fills (bg-indigo-600, bg-red-600, bg-green-500, …) are left
+   alone on purpose: they carry white text and read correctly on either ground. */
+
+/* --- Ink ------------------------------------------------------------------ */
+.dark .text-gray-900 { color: var(--ink); }
+.dark .text-gray-800,
+.dark .text-gray-700 { color: var(--ink-2); }
+.dark .text-gray-600,
+.dark .text-gray-500 { color: var(--ink-3); }
+.dark .text-gray-400 { color: var(--ink-4); }
+.dark .hover\:text-gray-700:hover { color: var(--ink); }
+
+/* Coloured text. The 400-600 steps become the accent; the 700-900 steps are
+   only ever used as ink on a matching pastel panel, so they take the tint ink. */
+.dark .text-red-400,    .dark .text-red-600 { color: var(--accent-red); }
+.dark .text-red-700,    .dark .text-red-800,
+.dark .text-red-900 { color: var(--tint-red-fg); }
+.dark .hover\:text-red-800:hover { color: var(--accent-red); }
+
+.dark .text-green-600 { color: var(--accent-green); }
+.dark .text-green-700,  .dark .text-green-800,
+.dark .text-green-900 { color: var(--tint-green-fg); }
+
+.dark .text-blue-400,   .dark .text-blue-600 { color: var(--accent-blue); }
+.dark .text-blue-700,   .dark .text-blue-800,
+.dark .text-blue-900 { color: var(--tint-blue-fg); }
+.dark .hover\:text-blue-800:hover { color: var(--accent-blue); }
+
+.dark .text-indigo-300, .dark .text-indigo-400,
+.dark .text-indigo-500, .dark .text-indigo-600 { color: var(--accent-indigo); }
+.dark .text-indigo-800, .dark .text-indigo-900 { color: var(--tint-indigo-fg); }
+.dark .hover\:text-indigo-500:hover,
+.dark .hover\:text-indigo-800:hover,
+.dark .hover\:text-indigo-900:hover { color: #c7d2fe; }
+
+.dark .text-amber-600,  .dark .text-yellow-600 { color: var(--accent-amber); }
+.dark .text-amber-700,  .dark .text-amber-800,
+.dark .text-amber-900,  .dark .text-yellow-700,
+.dark .text-yellow-800, .dark .text-yellow-900 { color: var(--tint-yellow-fg); }
+
+.dark .text-orange-600 { color: #fb923c; }
+.dark .text-orange-800 { color: var(--tint-orange-fg); }
+
+.dark .text-purple-600 { color: var(--accent-purple); }
+.dark .text-purple-800, .dark .text-purple-900 { color: var(--tint-purple-fg); }
+
+/* --- Lines ---------------------------------------------------------------- */
+.dark .border-gray-100 { border-color: var(--line-soft); }
+.dark .border-gray-200 { border-color: var(--line); }
+.dark .border-gray-300 { border-color: var(--line-strong); }
+.dark .border-white { border-color: var(--line-strong); }
+.dark .border-red-200 { border-color: rgba(248, 113, 113, 0.3); }
+.dark .border-green-200 { border-color: rgba(52, 211, 153, 0.3); }
+.dark .border-blue-200,
+.dark .border-blue-400 { border-color: rgba(96, 165, 250, 0.35); }
+.dark .border-yellow-200,
+.dark .border-amber-300 { border-color: rgba(251, 191, 36, 0.3); }
+.dark .border-indigo-300 { border-color: rgba(165, 180, 252, 0.35); }
+.dark .hover\:border-indigo-300:hover { border-color: var(--accent-indigo); }
+
+/* Tailwind emits `.divide-gray-200 > :not([hidden]) ~ :not([hidden])` at
+   (0,3,0); the `.dark` prefix takes this to (0,4,0). */
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: var(--line); }
+
+/* border-indigo-500 / focus:border-indigo-500 / focus:ring-indigo-500 are left
+   alone: indigo-500 is the focus colour and stays legible on both grounds. */
+
+/* A near-black ring vanishes here; the popover edge becomes a hairline. */
+.dark .ring-black { --tw-ring-color: rgba(255, 255, 255, 0.08); }
+
+/* Elevation is mostly the surface step, but keep an edge under the shadow
+   utilities so stacked cards still separate. */
+.dark .shadow-sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+.dark .shadow,
+.dark .shadow-md { box-shadow: var(--shadow-card); }
+.dark .shadow-lg,
+.dark .shadow-xl { box-shadow: var(--shadow-pop); }
+
+/* ==========================================================================
+   3. Form controls
+   `color-scheme: dark` already hands checkboxes, radios, spinners, scrollbars
+   and the native date popup to the UA's dark rendering. Text-bearing controls
+   still need the surface, because preflight only clears the background on
+   <button>.
+   ========================================================================== */
+
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+.dark select,
+.dark textarea {
+    background-color: var(--surface-raised);
+    color: var(--ink);
+    border-color: var(--line-strong);
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder { color: var(--ink-4); }
+
+.dark option { background-color: var(--surface-raised); color: var(--ink); }
+
+/* ==========================================================================
+   4. flatpickr (workshop booking)
+   Only the surfaces and ink; the widget's geometry is untouched.
+   ========================================================================== */
+
+.dark .flatpickr-calendar {
+    background: var(--surface-raised);
+    color: var(--ink);
+    box-shadow: var(--shadow-pop);
+}
+.dark .flatpickr-calendar.arrowTop::before,
+.dark .flatpickr-calendar.arrowTop::after { border-bottom-color: var(--surface-raised); }
+.dark .flatpickr-calendar.arrowBottom::before,
+.dark .flatpickr-calendar.arrowBottom::after { border-top-color: var(--surface-raised); }
+.dark .flatpickr-months .flatpickr-month,
+.dark .flatpickr-current-month input.cur-year,
+.dark .flatpickr-monthDropdown-months { background: transparent; color: var(--ink); }
+.dark .flatpickr-monthDropdown-months option { background: var(--surface-raised); }
+.dark .flatpickr-months .flatpickr-prev-month svg,
+.dark .flatpickr-months .flatpickr-next-month svg { fill: var(--ink-2); }
+.dark span.flatpickr-weekday { color: var(--ink-3); }
+.dark .flatpickr-day { color: var(--ink-2); }
+.dark .flatpickr-day:hover { background: var(--surface-muted); border-color: var(--surface-muted); }
+.dark .flatpickr-day.today { border-color: var(--accent-indigo); }
+.dark .flatpickr-day.selected,
+.dark .flatpickr-day.selected:hover { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.dark .flatpickr-day.flatpickr-disabled,
+.dark .flatpickr-day.prevMonthDay,
+.dark .flatpickr-day.nextMonthDay { color: var(--ink-4); }
+.dark .flatpickr-time input,
+.dark .flatpickr-time .flatpickr-am-pm { color: var(--ink); background: transparent; }
+.dark .flatpickr-time input:hover,
+.dark .flatpickr-time .flatpickr-am-pm:hover { background: var(--surface-muted); }
+.dark .numInputWrapper span { border-color: var(--line); }
+
+/* ==========================================================================
+   5. Bar analytics — the sequential ramp has to be rebuilt, not re-tinted
+   In light mode the ramp runs pale → saturated for low → high. Reused as-is on
+   a dark ground it inverts the reading: the palest step (highest lightness
+   contrast against near-black) would shout loudest at the *lowest* value. So
+   dark gets its own ramp, running dark → bright over the same eight steps.
+   ========================================================================== */
+
+.dark .bar-seq-0 { background: var(--surface-muted); }  /* nothing there */
+.dark .bar-seq-1 { background: #16304f; }
+.dark .bar-seq-2 { background: #1b4477; }
+.dark .bar-seq-3 { background: #2059a0; }
+.dark .bar-seq-4 { background: #2a78d6; }
+.dark .bar-seq-5 { background: #4a93e8; }
+.dark .bar-seq-6 { background: #7ab3f0; }
+.dark .bar-seq-7 { background: #a9cef7; }
+
+.dark .bar-coh-0 { background: var(--surface-muted); }
+.dark .bar-coh-1 { background: #16304f; }
+.dark .bar-coh-2 { background: #1b4477; }
+.dark .bar-coh-3 { background: #2059a0; }
+.dark .bar-coh-4 { background: #4a93e8; }
+.dark .bar-coh-5 { background: #a9cef7; }
+
+/* The `ink-light` class is set in Go and means "this cell sits at the saturated
+   end of the ramp". Because the dark ramp is reversed, that end is now the
+   bright one — so the flip is the other way round and the class still lands on
+   exactly the right cells. No Go change. */
+.dark .bar-cohort .cell { color: var(--ink-2); }
+.dark .bar-cohort .cell.ink-light,
+.dark .bar-heat .cell.ink-light { color: #0b0f18; }
+.dark .bar-cohort .cell.empty { color: var(--ink-4); }
+
+/* The categorical five hold up on both grounds — same hue order, lifted a
+   little so they keep their separation against the darker surface. */
+.dark .bar-cat-1 { background: #4a93e8; }
+.dark .bar-cat-2 { background: #f07f4f; }
+.dark .bar-cat-3 { background: #2dc78e; }
+.dark .bar-cat-4 { background: #f5b422; }
+.dark .bar-cat-5 { background: #f094b6; }
+
+.dark .bar-col-fill { background: #4a93e8; }
+.dark .bar-col:hover .bar-col-fill { background: #a9cef7; }
+.dark .bar-inline { background: #4a93e8; }

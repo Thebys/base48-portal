@@ -36,6 +36,65 @@ type AdminUserListItem struct {
 	Balance          int64
 }
 
+// userView is a one-click preset for the users list: the state, balance cut and
+// ordering an admin actually asks for, instead of three dropdowns they have to
+// combine correctly every time. The presets are the primary UI; the full filter
+// form is the escape hatch behind them.
+type userView struct {
+	Key     string
+	Label   string
+	State   string
+	Balance string // "" | "negative" | "positive"
+	Sort    string
+	// Totals turns on the summary row. Off for applicants, whose balances are
+	// all zero — a footer reading "0 Kč" is noise, not information.
+	Totals bool
+}
+
+// Declaration order is display order.
+var userViews = []userView{
+	{Key: "awaiting", Label: "Čekající", State: "awaiting", Sort: "id_desc"},
+	{Key: "active", Label: "Aktivní", State: "accepted", Sort: "id_desc", Totals: true},
+	{Key: "debt", Label: "Dlužníci", State: "accepted", Balance: "negative", Sort: "balance_asc", Totals: true},
+	{Key: "suspended", Label: "Pozastavení", State: "suspended", Sort: "id_desc", Totals: true},
+}
+
+// What /admin/users shows with no query string.
+const defaultUserView = "debt"
+
+func lookupUserView(key string) (userView, bool) {
+	for _, v := range userViews {
+		if v.Key == key {
+			return v, true
+		}
+	}
+	return userView{}, false
+}
+
+// currentUserView names the preset whose filters are exactly the ones in effect,
+// or "" when the admin has gone off-preset. Derived from the effective filters
+// rather than from the `view` parameter, so the preset still lights up when the
+// same combination arrives from the filter form or an old bookmarked URL.
+func currentUserView(state, balance, sort, search, keycloak string) string {
+	if search != "" || keycloak != "" {
+		return ""
+	}
+	for _, v := range userViews {
+		if v.State == state && v.Balance == balance && v.Sort == sort {
+			return v.Key
+		}
+	}
+	return ""
+}
+
+// userViewLink is one rendered preset tab.
+type userViewLink struct {
+	Label  string
+	URL    string
+	Count  int
+	Active bool
+}
+
 // AdminUsersHandler shows admin overview of all users with Keycloak status and roles
 // GET /admin/users
 func (h *Handler) AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
@@ -43,16 +102,21 @@ func (h *Handler) AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Get filter and sort parameters from query string
-	// Default: show accepted members sorted by balance ascending (debt first)
-	filterState := r.URL.Query().Get("state")
-	filterKeycloak := r.URL.Query().Get("keycloak")
-	filterBalance := r.URL.Query().Get("balance")
-	filterSearch := strings.ToLower(r.URL.Query().Get("search"))
-	sortBy := r.URL.Query().Get("sort")
-	if len(r.URL.Query()) == 0 {
-		filterState = "accepted"
-		sortBy = "balance_asc"
+	query := r.URL.Query()
+	filterState := query.Get("state")
+	filterKeycloak := query.Get("keycloak")
+	filterBalance := query.Get("balance")
+	filterSearch := strings.ToLower(query.Get("search"))
+	sortBy := query.Get("sort")
+
+	// A preset overrides state/balance/sort but leaves search and Keycloak
+	// alone, so "Dlužníci" can still be narrowed by a search box.
+	viewKey := query.Get("view")
+	if len(query) == 0 {
+		viewKey = defaultUserView
+	}
+	if v, ok := lookupUserView(viewKey); ok {
+		filterState, filterBalance, sortBy = v.State, v.Balance, v.Sort
 	}
 
 	// Get all users from database
@@ -128,15 +192,71 @@ func (h *Handler) AdminUsersHandler(w http.ResponseWriter, r *http.Request) {
 	// Apply sorting
 	sortUserList(userList, sortBy)
 
+	// Preset tabs, each carrying how many users it would show. The count is what
+	// makes them worth glancing at — "Čekající 3" is the whole reason to click.
+	// Counted over every user, not the filtered list, so a tab never reports the
+	// effect of the tab you are already on.
+	counts := make(map[string]int, len(userViews))
+	for _, dbUser := range dbUsers {
+		balance := balanceMap[dbUser.ID]
+		for _, v := range userViews {
+			if v.State != dbUser.State {
+				continue
+			}
+			if (v.Balance == "negative" && balance >= 0) || (v.Balance == "positive" && balance < 0) {
+				continue
+			}
+			counts[v.Key]++
+		}
+	}
+
+	active := currentUserView(filterState, filterBalance, sortBy, filterSearch, filterKeycloak)
+	views := make([]userViewLink, 0, len(userViews))
+	for _, v := range userViews {
+		views = append(views, userViewLink{
+			Label:  v.Label,
+			URL:    "/admin/users?view=" + v.Key,
+			Count:  counts[v.Key],
+			Active: v.Key == active,
+		})
+	}
+
+	// Summary row over what is actually on screen, so it answers "how much do
+	// these people owe" for whatever list the admin has narrowed to. Net and
+	// debt are tracked separately: on a mixed list a net near zero can still
+	// hide a large amount owed.
+	var totalBalance, totalDebt int64
+	debtorCount := 0
+	for _, item := range userList {
+		totalBalance += item.Balance
+		if item.Balance < 0 {
+			totalDebt += item.Balance
+			debtorCount++
+		}
+	}
+
+	// An off-preset list gets totals too; only the applicants view opts out.
+	showTotals := true
+	if v, ok := lookupUserView(active); ok {
+		showTotals = v.Totals
+	}
+
 	// Render template
 	data := map[string]interface{}{
 		"Title":          "Admin - Users",
 		"User":           user,
 		"UserList":       userList,
+		"UserViews":      views,
+		"CustomView":     active == "",
+		"ShowTotals":     showTotals && len(userList) > 0,
+		"TotalBalance":   totalBalance,
+		"TotalDebt":      totalDebt,
+		"DebtorCount":    debtorCount,
+		"AllDebtors":     debtorCount == len(userList),
 		"FilterState":    filterState,
 		"FilterKeycloak": filterKeycloak,
 		"FilterBalance":  filterBalance,
-		"FilterSearch":   r.URL.Query().Get("search"), // Original case
+		"FilterSearch":   query.Get("search"), // Original case
 		"SortBy":         sortBy,
 	}
 

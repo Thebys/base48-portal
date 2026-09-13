@@ -543,6 +543,27 @@ func formatNumber(v interface{}) string {
 	return result.String()
 }
 
+// initials reduces a display name to the one or two letters the nav avatar
+// shows: the first letter of each of the first two words, or the first two
+// letters of a single word. Rune-based, because nicks and Czech given names
+// are not all ASCII and slicing bytes would cut a letter in half.
+func initials(name string) string {
+	fields := strings.Fields(name)
+	if len(fields) == 0 {
+		return "?"
+	}
+	first := []rune(fields[0])
+	if len(fields) > 1 {
+		if second := []rune(fields[1]); len(second) > 0 {
+			return strings.ToUpper(string(first[0]) + string(second[0]))
+		}
+	}
+	if len(first) > 1 {
+		return strings.ToUpper(string(first[:2]))
+	}
+	return strings.ToUpper(string(first[:1]))
+}
+
 // render is a helper to render templates
 func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -582,6 +603,7 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 		"fmtNum":      formatNumber,
 		"fmtCZK":      formatCentsAsCZK,
 		"fmtCZKWhole": formatCentsAsWholeCZK,
+		"initials":    initials,
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseFiles(
 		filepath.Join(h.webRoot, "templates", "layout.html"),

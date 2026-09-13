@@ -19,7 +19,7 @@
     }
 
     .subtitle {
-        color: #666;
+        color: var(--ink-3);
         font-size: 14px;
     }
 
@@ -28,8 +28,8 @@
         align-items: center;
         gap: 4px;
         font-family: 'Courier New', monospace;
-        background: #dbeafe;
-        color: #1e40af;
+        background: var(--tint-blue-bg);
+        color: var(--tint-blue-fg);
         padding: 2px 8px;
         border-radius: 12px;
         font-size: 12px;
@@ -39,16 +39,16 @@
     }
 
     .vs-tag.primary {
-        background: #d1fae5;
-        color: #065f46;
+        background: var(--tint-green-bg);
+        color: var(--tint-green-fg);
     }
 
     details {
-        background: white;
-        border: 1px solid #e5e7eb;
+        background: var(--surface);
+        border: 1px solid var(--line);
         border-radius: 8px;
         margin-bottom: 15px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        box-shadow: var(--shadow-card);
     }
 
     summary {
@@ -67,7 +67,7 @@
     }
 
     summary:hover {
-        background: #f9fafb;
+        background: var(--surface-muted);
     }
 
     .project-header {
@@ -83,27 +83,27 @@
 
     .project-title {
         font-size: 18px;
-        color: #111827;
+        color: var(--ink);
         margin-bottom: 5px;
     }
 
     .project-meta {
         font-size: 14px;
-        color: #6b7280;
+        color: var(--ink-3);
         font-weight: normal;
     }
 
     .project-balance {
         font-size: 24px;
         font-weight: 700;
-        color: #059669;
+        color: var(--accent-green);
         margin-right: 20px;
     }
 
     .project-description {
         padding: 20px;
-        border-top: 1px solid #e5e7eb;
-        color: #6b7280;
+        border-top: 1px solid var(--line);
+        color: var(--ink-3);
         font-size: 14px;
     }
 
@@ -114,27 +114,28 @@
     }
 
     .payments-table th {
-        background: #f9fafb;
+        background: var(--surface-sunken);
         padding: 12px;
         text-align: left;
         font-weight: 600;
         font-size: 12px;
-        color: #374151;
-        border-bottom: 2px solid #e5e7eb;
+        color: var(--ink-2);
+        border-bottom: 2px solid var(--line);
     }
 
     .payments-table td {
         padding: 12px;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--line);
     }
 
     .payments-table tr:hover {
-        background: #f9fafb;
+        background: var(--surface-muted);
     }
 
     .vs {
         font-family: 'Courier New', monospace;
-        background: #f3f4f6;
+        background: var(--surface-muted);
+        color: var(--ink-2);
         padding: 2px 6px;
         border-radius: 3px;
         font-weight: 600;
@@ -145,12 +146,12 @@
         align-items: flex-start;
         gap: 16px;
         padding: 20px;
-        border-top: 1px solid #e5e7eb;
+        border-top: 1px solid var(--line);
     }
 
     .qr-section img {
         border-radius: 8px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--line);
     }
 
     .qr-section a {
@@ -159,11 +160,11 @@
 
     .qr-info {
         font-size: 13px;
-        color: #6b7280;
+        color: var(--ink-3);
     }
 
     .qr-info strong {
-        color: #374151;
+        color: var(--ink-2);
     }
 
     .qr-amount-row {
@@ -177,7 +178,7 @@
     .qr-amount-row input {
         width: 100px;
         padding: 4px 8px;
-        border: 1px solid #d1d5db;
+        border: 1px solid var(--line-strong);
         border-radius: 4px;
         font-size: 13px;
     }
