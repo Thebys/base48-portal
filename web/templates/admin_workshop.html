@@ -2,6 +2,7 @@
 <link rel="stylesheet" href="/static/css/flatpickr.min.css">
 <script src="/static/js/flatpickr.min.js"></script>
 <script src="/static/js/flatpickr-cs.js"></script>
+<script src="/static/js/workshop-history.js"></script>
 <div class="px-4 sm:px-0">
     <div class="mb-6 flex items-center justify-between">
         <div>
@@ -20,6 +21,7 @@
                 <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
                     <th class="py-2 pr-4">Název</th>
                     <th class="py-2 pr-4">Stav</th>
+                    <th class="py-2 pr-4">Zvedák</th>
                     <th class="py-2 pr-4">Důvod blokace</th>
                     <th class="py-2"></th>
                 </tr>
@@ -76,6 +78,9 @@
         </table>
         <p id="no-reservations" class="hidden text-sm text-gray-400 mt-2">Žádné aktivní rezervace.</p>
     </div>
+
+    <!-- Same listing members see on /workshop — rendered by /static/js/workshop-history.js -->
+    <div id="workshop-history" class="mt-6"></div>
 </div>
 
 <script>
@@ -129,6 +134,21 @@
             stateTd.appendChild(select);
             tr.appendChild(stateTd);
 
+            // 'lift' is the only capability the portal knows, so this select owns
+            // the whole capabilities array of the bay.
+            var liftTd = el('td', 'py-2 pr-4');
+            var liftSelect = el('select', 'border border-gray-300 rounded px-2 py-1 text-sm');
+            var current = (resource.capabilities || []).indexOf('lift') !== -1 ? 'lift' : '';
+            [['', 'Bez zvedáku'], ['lift', 'Se zvedákem']].forEach(function(pair) {
+                var opt = document.createElement('option');
+                opt.value = pair[0];
+                opt.textContent = pair[1];
+                opt.selected = current === pair[0];
+                liftSelect.appendChild(opt);
+            });
+            liftTd.appendChild(liftSelect);
+            tr.appendChild(liftTd);
+
             var reasonTd = el('td', 'py-2 pr-4');
             var reason = el('input', 'border border-gray-300 rounded px-2 py-1 text-sm w-full');
             reason.type = 'text';
@@ -143,7 +163,11 @@
                 api('/api/admin/workshop/resources/' + resource.id, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ state: select.value, blocked_reason: reason.value })
+                    body: JSON.stringify({
+                        state: select.value,
+                        blocked_reason: reason.value,
+                        capabilities: liftSelect.value ? [liftSelect.value] : []
+                    })
                 }).then(load).catch(function(e) { showError(e.message); });
             });
             actionTd.appendChild(save);
@@ -219,6 +243,7 @@
             renderResources();
             renderReservations();
             renderForm();
+            renderWorkshopHistory(document.getElementById('workshop-history'), state);
         }).catch(function(e) { showError(e.message); });
     }
 

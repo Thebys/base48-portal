@@ -1,3 +1,6 @@
+# Keep internal/db/queries.sql ASCII-only: sqlc 1.31 rewrites sqlc.arg() with
+# byte offsets but rune indexes, so one accented letter or dash anywhere above a
+# sqlc.arg() silently corrupts every generated query below it.
 version: "2"
 sql:
   - engine: "sqlite"

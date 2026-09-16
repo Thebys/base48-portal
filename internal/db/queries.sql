@@ -543,10 +543,12 @@ SELECT * FROM resources ORDER BY id;
 -- name: GetResource :one
 SELECT * FROM resources WHERE id = ? LIMIT 1;
 
--- name: UpdateResourceState :one
+-- name: UpdateResource :one
+-- capabilities is a JSON array, e.g. '["lift"]'; see migration 017.
 UPDATE resources SET
     state = ?,
     blocked_reason = ?,
+    capabilities = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;
@@ -579,6 +581,20 @@ FROM reservations r
 JOIN users u ON u.id = r.user_id
 WHERE r.state = 'active' AND r.ends_at > sqlc.arg(now)
 ORDER BY r.resource_id, r.starts_at;
+
+-- name: ListReservationHistory :many
+-- Reservations that are over (already past, or force-ended by an admin)
+-- and started on/after `since`. Both args are 'YYYY-MM-DD HH:MM' local, the
+-- same format as starts_at/ends_at, so the comparison stays lexicographic.
+-- Cancelled ones are left out: that slot was never actually used.
+SELECT r.id, r.resource_id, r.user_id, r.starts_at, r.ends_at, r.note, r.state,
+       u.username, u.email
+FROM reservations r
+JOIN users u ON u.id = r.user_id
+WHERE r.state != 'cancelled'
+  AND r.starts_at >= sqlc.arg(since)
+  AND (r.state != 'active' OR r.ends_at <= sqlc.arg(now))
+ORDER BY r.starts_at DESC;
 
 -- name: CancelOwnReservation :one
 UPDATE reservations SET

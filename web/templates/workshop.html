@@ -2,6 +2,7 @@
 <link rel="stylesheet" href="/static/css/flatpickr.min.css">
 <script src="/static/js/flatpickr.min.js"></script>
 <script src="/static/js/flatpickr-cs.js"></script>
+<script src="/static/js/workshop-history.js"></script>
 <style>
 /* Page-specific styles for workshop reservations — shared styles are in /static/css/admin.css */
 
@@ -60,6 +61,11 @@
         color: #14532d;
     }
 
+    /* The bay with the lift is not just another parking spot. */
+    .resource-card.has-lift {
+        border-left: 3px solid var(--accent-purple);
+    }
+
     .timeline.blocked-overlay::after {
         content: '';
         position: absolute;
@@ -105,6 +111,9 @@
         </form>
         <p class="text-xs text-gray-400 mt-3">Rezervace nemá pevný limit délky. Nech tam ale rezervu jen jakou reálně potřebuješ — když se plány změní, konec rezervace můžeš kdykoli posunout nebo rezervaci zrušit.</p>
     </div>
+
+    <!-- Reservation history — rendered by /static/js/workshop-history.js -->
+    <div id="workshop-history" class="mt-6"></div>
 </div>
 
 <script>
@@ -157,6 +166,10 @@
                 return data;
             });
         });
+    }
+
+    function hasLift(resource) {
+        return (resource.capabilities || []).indexOf('lift') !== -1;
     }
 
     function stateBadge(resource, reservations, now) {
@@ -264,10 +277,14 @@
         state.resources.forEach(function(resource) {
             if (resource.state === 'retired') return;
 
-            var card = el('div', 'bg-white border border-gray-200 rounded-lg shadow-sm p-5 mb-4');
+            var lift = hasLift(resource);
+            var card = el('div', 'resource-card bg-white border border-gray-200 rounded-lg shadow-sm p-5 mb-4');
+            if (lift) card.classList.add('has-lift');
 
-            var header = el('div', 'flex items-center justify-between mb-1');
-            var title = el('h2', 'text-lg font-semibold text-gray-900', resource.name);
+            var header = el('div', 'flex items-center justify-between gap-2 mb-1');
+            var title = el('div', 'badge-group');
+            title.appendChild(el('h2', 'text-lg font-semibold text-gray-900', resource.name));
+            if (lift) title.appendChild(el('span', 'badge badge-purple', 'Zvedák'));
             header.appendChild(title);
             header.appendChild(stateBadge(resource, state.reservations, state.now));
             card.appendChild(header);
@@ -294,9 +311,11 @@
         state.resources.filter(function(r) { return r.state === 'available'; }).forEach(function(r) {
             var opt = document.createElement('option');
             opt.value = r.id;
-            opt.textContent = r.name;
+            opt.textContent = r.name + (hasLift(r) ? ' — se zvedákem' : '');
             select.appendChild(opt);
         });
+
+        renderWorkshopHistory(document.getElementById('workshop-history'), state);
     }
 
     function load() {

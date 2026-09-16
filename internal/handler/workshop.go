@@ -20,12 +20,13 @@ const reservationTimeLayout = "2006-01-02 15:04"
 
 // WorkshopResourceResponse is a bookable resource as seen by members.
 type WorkshopResourceResponse struct {
-	ID            int64  `json:"id"`
-	Slug          string `json:"slug"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	State         string `json:"state"`
-	BlockedReason string `json:"blocked_reason"`
+	ID            int64    `json:"id"`
+	Slug          string   `json:"slug"`
+	Name          string   `json:"name"`
+	Description   string   `json:"description"`
+	State         string   `json:"state"`
+	BlockedReason string   `json:"blocked_reason"`
+	Capabilities  []string `json:"capabilities"`
 }
 
 // WorkshopReservationResponse is an active reservation as seen by members.
@@ -38,6 +39,54 @@ type WorkshopReservationResponse struct {
 	EndsAt     string `json:"ends_at"`
 	Note       string `json:"note"`
 	Mine       bool   `json:"mine"`
+}
+
+// WorkshopHistoryResponse is a finished reservation as shown in the history
+// table. Members and admins get the same listing.
+type WorkshopHistoryResponse struct {
+	ID         int64  `json:"id"`
+	ResourceID int64  `json:"resource_id"`
+	Username   string `json:"username"`
+	StartsAt   string `json:"starts_at"`
+	EndsAt     string `json:"ends_at"`
+	Note       string `json:"note"`
+	State      string `json:"state"`
+	Mine       bool   `json:"mine"`
+}
+
+// workshopKnownCapabilities are the capability slugs the UI understands.
+// 'lift' marks the bay with the two-post lift; see migration 017.
+var workshopKnownCapabilities = map[string]bool{
+	"lift": true,
+}
+
+// workshopCapabilities decodes the resource capabilities JSON array. A malformed
+// value degrades to "no capabilities" rather than breaking the whole page.
+func workshopCapabilities(raw string) []string {
+	caps := []string{}
+	if raw == "" {
+		return caps
+	}
+	if err := json.Unmarshal([]byte(raw), &caps); err != nil || caps == nil {
+		return []string{}
+	}
+	return caps
+}
+
+// reservationUsername is the display name for a reservation row: the username,
+// falling back to the e-mail for members who have not set one.
+func reservationUsername(username sql.NullString, email string) string {
+	if username.String != "" {
+		return username.String
+	}
+	return email
+}
+
+// historyWindowStart is the oldest reservation the history table shows:
+// midnight on the first day of the previous month, i.e. "this and last month".
+func historyWindowStart(now time.Time) string {
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	return monthStart.AddDate(0, -1, 0).Format(reservationTimeLayout)
 }
 
 // parseReservationTime accepts datetime-local input ("2006-01-02T15:04")
@@ -79,7 +128,8 @@ func (h *Handler) WorkshopHandler(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "workshop.html", data)
 }
 
-// WorkshopAPIHandler returns resources and active reservations (JSON).
+// WorkshopAPIHandler returns resources, active reservations and the recent
+// reservation history (JSON).
 // GET /api/member/workshop
 func (h *Handler) WorkshopAPIHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -97,10 +147,20 @@ func (h *Handler) WorkshopAPIHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now().Format(reservationTimeLayout)
+	nowTime := time.Now()
+	now := nowTime.Format(reservationTimeLayout)
 	reservations, err := h.queries.ListActiveReservations(ctx, now)
 	if err != nil {
 		h.jsonError(w, "Failed to fetch reservations", http.StatusInternalServerError)
+		return
+	}
+
+	history, err := h.queries.ListReservationHistory(ctx, db.ListReservationHistoryParams{
+		Since: historyWindowStart(nowTime),
+		Now:   now,
+	})
+	if err != nil {
+		h.jsonError(w, "Failed to fetch reservation history", http.StatusInternalServerError)
 		return
 	}
 
@@ -113,23 +173,34 @@ func (h *Handler) WorkshopAPIHandler(w http.ResponseWriter, r *http.Request) {
 			Description:   res.Description.String,
 			State:         res.State,
 			BlockedReason: res.BlockedReason.String,
+			Capabilities:  workshopCapabilities(res.Capabilities),
 		}
 	}
 
 	reservationResponses := make([]WorkshopReservationResponse, len(reservations))
 	for i, res := range reservations {
-		username := res.Username.String
-		if username == "" {
-			username = res.Email
-		}
 		reservationResponses[i] = WorkshopReservationResponse{
 			ID:         res.ID,
 			ResourceID: res.ResourceID,
 			UserID:     res.UserID,
-			Username:   username,
+			Username:   reservationUsername(res.Username, res.Email),
 			StartsAt:   res.StartsAt,
 			EndsAt:     res.EndsAt,
 			Note:       res.Note.String,
+			Mine:       res.UserID == dbUser.ID,
+		}
+	}
+
+	historyResponses := make([]WorkshopHistoryResponse, len(history))
+	for i, res := range history {
+		historyResponses[i] = WorkshopHistoryResponse{
+			ID:         res.ID,
+			ResourceID: res.ResourceID,
+			Username:   reservationUsername(res.Username, res.Email),
+			StartsAt:   res.StartsAt,
+			EndsAt:     res.EndsAt,
+			Note:       res.Note.String,
+			State:      res.State,
 			Mine:       res.UserID == dbUser.ID,
 		}
 	}
@@ -140,6 +211,7 @@ func (h *Handler) WorkshopAPIHandler(w http.ResponseWriter, r *http.Request) {
 		"now":          now,
 		"resources":    resourceResponses,
 		"reservations": reservationResponses,
+		"history":      historyResponses,
 	})
 }
 

@@ -2120,6 +2120,71 @@ func (q *Queries) ListRecentPayments(ctx context.Context) ([]Payment, error) {
 	return items, nil
 }
 
+const listReservationHistory = `-- name: ListReservationHistory :many
+SELECT r.id, r.resource_id, r.user_id, r.starts_at, r.ends_at, r.note, r.state,
+       u.username, u.email
+FROM reservations r
+JOIN users u ON u.id = r.user_id
+WHERE r.state != 'cancelled'
+  AND r.starts_at >= ?1
+  AND (r.state != 'active' OR r.ends_at <= ?2)
+ORDER BY r.starts_at DESC
+`
+
+type ListReservationHistoryParams struct {
+	Since string `json:"since"`
+	Now   string `json:"now"`
+}
+
+type ListReservationHistoryRow struct {
+	ID         int64          `json:"id"`
+	ResourceID int64          `json:"resource_id"`
+	UserID     int64          `json:"user_id"`
+	StartsAt   string         `json:"starts_at"`
+	EndsAt     string         `json:"ends_at"`
+	Note       sql.NullString `json:"note"`
+	State      string         `json:"state"`
+	Username   sql.NullString `json:"username"`
+	Email      string         `json:"email"`
+}
+
+// Reservations that are over (already past, or force-ended by an admin)
+// and started on/after `since`. Both args are 'YYYY-MM-DD HH:MM' local, the
+// same format as starts_at/ends_at, so the comparison stays lexicographic.
+// Cancelled ones are left out: that slot was never actually used.
+func (q *Queries) ListReservationHistory(ctx context.Context, arg ListReservationHistoryParams) ([]ListReservationHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReservationHistory, arg.Since, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReservationHistoryRow{}
+	for rows.Next() {
+		var i ListReservationHistoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ResourceID,
+			&i.UserID,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Note,
+			&i.State,
+			&i.Username,
+			&i.Email,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResources = `-- name: ListResources :many
 
 SELECT id, slug, name, description, state, blocked_reason, capabilities, created_at, updated_at FROM resources ORDER BY id
@@ -2711,23 +2776,31 @@ func (q *Queries) UpdateOwnReservationEnd(ctx context.Context, arg UpdateOwnRese
 	return i, err
 }
 
-const updateResourceState = `-- name: UpdateResourceState :one
+const updateResource = `-- name: UpdateResource :one
 UPDATE resources SET
     state = ?,
     blocked_reason = ?,
+    capabilities = ?,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING id, slug, name, description, state, blocked_reason, capabilities, created_at, updated_at
 `
 
-type UpdateResourceStateParams struct {
+type UpdateResourceParams struct {
 	State         string         `json:"state"`
 	BlockedReason sql.NullString `json:"blocked_reason"`
+	Capabilities  string         `json:"capabilities"`
 	ID            int64          `json:"id"`
 }
 
-func (q *Queries) UpdateResourceState(ctx context.Context, arg UpdateResourceStateParams) (Resource, error) {
-	row := q.db.QueryRowContext(ctx, updateResourceState, arg.State, arg.BlockedReason, arg.ID)
+// capabilities is a JSON array, e.g. '["lift"]'; see migration 017.
+func (q *Queries) UpdateResource(ctx context.Context, arg UpdateResourceParams) (Resource, error) {
+	row := q.db.QueryRowContext(ctx, updateResource,
+		arg.State,
+		arg.BlockedReason,
+		arg.Capabilities,
+		arg.ID,
+	)
 	var i Resource
 	err := row.Scan(
 		&i.ID,

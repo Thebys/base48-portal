@@ -32,7 +32,8 @@ func (h *Handler) AdminWorkshopHandler(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "admin_workshop.html", data)
 }
 
-// AdminUpdateResourceHandler updates resource state (available/blocked/retired).
+// AdminUpdateResourceHandler updates resource state (available/blocked/retired)
+// and its capabilities (the lift marker).
 // POST /api/admin/workshop/resources/{id}
 func (h *Handler) AdminUpdateResourceHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -51,8 +52,9 @@ func (h *Handler) AdminUpdateResourceHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	var req struct {
-		State         string `json:"state"`
-		BlockedReason string `json:"blocked_reason"`
+		State         string   `json:"state"`
+		BlockedReason string   `json:"blocked_reason"`
+		Capabilities  []string `json:"capabilities"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
@@ -64,9 +66,24 @@ func (h *Handler) AdminUpdateResourceHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resource, err := h.queries.UpdateResourceState(ctx, db.UpdateResourceStateParams{
+	capabilities := []string{}
+	for _, c := range req.Capabilities {
+		if !workshopKnownCapabilities[c] {
+			h.jsonError(w, "Neznámá vlastnost stání: "+c, http.StatusBadRequest)
+			return
+		}
+		capabilities = append(capabilities, c)
+	}
+	capabilitiesJSON, err := json.Marshal(capabilities)
+	if err != nil {
+		h.jsonError(w, "Invalid capabilities", http.StatusBadRequest)
+		return
+	}
+
+	resource, err := h.queries.UpdateResource(ctx, db.UpdateResourceParams{
 		State:         req.State,
 		BlockedReason: sql.NullString{String: req.BlockedReason, Valid: req.BlockedReason != ""},
+		Capabilities:  string(capabilitiesJSON),
 		ID:            id,
 	})
 	if err == sql.ErrNoRows {
@@ -82,8 +99,8 @@ func (h *Handler) AdminUpdateResourceHandler(w http.ResponseWriter, r *http.Requ
 		Subsystem: "workshop",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
-		Message:   fmt.Sprintf("Resource '%s' state changed to %s", resource.Name, resource.State),
-		Metadata:  logMetadata(map[string]interface{}{"resource_id": resource.ID, "state": resource.State, "blocked_reason": req.BlockedReason}),
+		Message:   fmt.Sprintf("Resource '%s' updated: state %s, capabilities %s", resource.Name, resource.State, resource.Capabilities),
+		Metadata:  logMetadata(map[string]interface{}{"resource_id": resource.ID, "state": resource.State, "blocked_reason": req.BlockedReason, "capabilities": capabilities}),
 	})
 
 	w.Header().Set("Content-Type", "application/json")
