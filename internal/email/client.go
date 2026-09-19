@@ -30,6 +30,12 @@ type Client struct {
 	queries      *db.Queries
 	qrpayService *qrpay.Service
 	DefaultDelay time.Duration // If set, emails are scheduled instead of sent immediately
+
+	// alwaysSchedule parks every email in the outbox even when DefaultDelay is
+	// zero, so a caller can ask for "deliver as soon as the worker picks it up"
+	// without that being indistinguishable from "deliver inline right now".
+	// Set via Scheduled().
+	alwaysSchedule bool
 }
 
 // SendParams contains parameters for sending a templated email
@@ -48,6 +54,18 @@ func New(cfg *config.Config, queries *db.Queries, qrService *qrpay.Service) *Cli
 		queries:      queries,
 		qrpayService: qrService,
 	}
+}
+
+// Scheduled returns a shallow copy of the client that always parks emails in the
+// outbox instead of delivering them inline, due after the given delay. A zero
+// delay is legal and means "due immediately" — the entry still lands in the
+// outbox with a real status, it is just picked up on the next worker pass.
+// Used by the manual debt-reminder sender, where the admin picks the timer.
+func (c *Client) Scheduled(delay time.Duration) *Client {
+	clone := *c
+	clone.DefaultDelay = delay
+	clone.alwaysSchedule = true
+	return &clone
 }
 
 // Czech typography: non-breaking space after prepositions/conjunctions and before "Kč".
@@ -280,10 +298,15 @@ func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 	// Serialize template data to JSON for re-rendering capability
 	dataJSON, _ := json.Marshal(params.Data)
 
-	// Schedule for later if delay is set
+	// Schedule for later delivery instead of sending inline.
+	// UTC matters: the driver serializes a time.Time with its own location's
+	// wall clock, while every due-check in SQL compares against datetime('now'),
+	// which is UTC. Storing local time made every scheduled email fire TZ-offset
+	// hours late (2h in CEST).
+	scheduled := c.alwaysSchedule || c.DefaultDelay > 0
 	var nextRetryAt sql.NullTime
-	if c.DefaultDelay > 0 {
-		nextRetryAt = sql.NullTime{Time: time.Now().Add(c.DefaultDelay), Valid: true}
+	if scheduled {
+		nextRetryAt = sql.NullTime{Time: time.Now().UTC().Add(c.DefaultDelay), Valid: true}
 	}
 
 	// Insert into outbox
@@ -303,8 +326,8 @@ func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 		return fmt.Errorf("failed to create outbox entry: %w", err)
 	}
 
-	// If delayed, don't send now — will be picked up by ProcessPendingEmails
-	if c.DefaultDelay > 0 {
+	// If scheduled, don't send now — will be picked up by ProcessPendingEmails
+	if scheduled {
 		log.Printf("[Email] Scheduled for delivery in %v (outbox #%d): %s -> %s",
 			c.DefaultDelay, outboxEntry.ID, params.TemplateName, params.Recipient)
 		return nil
@@ -425,15 +448,20 @@ func (c *Client) SendNow(ctx context.Context, outboxID int64) error {
 }
 
 // ProcessPendingEmails sends scheduled emails whose delivery time has arrived.
-// Called from sync_fio_payments (runs every 2 min) to deliver delayed emails.
+// Called from sync_fio_payments (runs every 2 min) and right after the admin
+// queues manual reminders with a zero timer.
+//
+// Entries are claimed with a lease rather than merely listed: the server and the
+// cron daemon are separate processes against the same SQLite file, so a plain
+// list-then-send would let both grab the same row and mail a member twice.
 func (c *Client) ProcessPendingEmails(ctx context.Context) int {
 	if c.config.SMTPHost == "" {
 		return 0
 	}
 
-	entries, err := c.queries.ListPendingScheduledEmails(ctx)
+	entries, err := c.queries.ClaimScheduledEmails(ctx)
 	if err != nil {
-		log.Printf("[Email] Failed to list scheduled emails: %v", err)
+		log.Printf("[Email] Failed to claim scheduled emails: %v", err)
 		return 0
 	}
 
@@ -475,8 +503,9 @@ func (c *Client) attemptDelivery(ctx context.Context, entry db.EmailOutbox, para
 		lastErr = c.sendSMTP(entry.Recipient, entry.Subject, entry.RenderedHtml.String)
 
 		if lastErr == nil {
-			// Success
-			now := time.Now()
+			// Success. UTC for the same reason as next_retry_at — the "sent today"
+			// count compares substr(sent_at,1,10) against SQLite's DATE('now').
+			now := time.Now().UTC()
 			c.queries.UpdateEmailOutboxStatus(dbCtx, db.UpdateEmailOutboxStatusParams{
 				Status:   "sent",
 				Attempts: int64(attempt + 1),
@@ -841,6 +870,54 @@ func (c *Client) SendDebtWarning(ctx context.Context, user *db.User, balance flo
 		TemplateName: "debt_warning.html",
 		Data:         data,
 	})
+}
+
+// Debt reminder tiers. These are the template keys (no .html) shared by the
+// nightly cron, the admin fee-run preview and the manual reminder sender, so all
+// three agree on who gets which email.
+const (
+	TierDebtWarning     = "debt_warning"
+	TierNegativeBalance = "negative_balance"
+)
+
+// DebtTier classifies a balance against the member's monthly fee:
+// at or below minus two monthly fees is a debt warning, at or below minus one
+// is a plain negative balance, anything else warrants no email (empty string).
+// A non-positive monthly fee (free/honorary membership) never triggers one.
+func DebtTier(balance, monthlyFee float64) string {
+	if monthlyFee <= 0 {
+		return ""
+	}
+	switch {
+	case balance <= -(2 * monthlyFee):
+		return TierDebtWarning
+	case balance <= -monthlyFee:
+		return TierNegativeBalance
+	default:
+		return ""
+	}
+}
+
+// TemplateFileForTier maps a debt tier to its outbox template_name.
+func TemplateFileForTier(tier string) string {
+	if tier == "" {
+		return ""
+	}
+	return tier + ".html"
+}
+
+// SendDebtReminder queues the email for the given debt tier. Dispatching here
+// keeps the tier-to-email mapping in one place for both the cron job and the
+// admin's manual resend.
+func (c *Client) SendDebtReminder(ctx context.Context, user *db.User, tier string, balance, monthlyFee float64) error {
+	switch tier {
+	case TierDebtWarning:
+		return c.SendDebtWarning(ctx, user, balance, monthlyFee)
+	case TierNegativeBalance:
+		return c.SendNegativeBalance(ctx, user, balance, monthlyFee)
+	default:
+		return fmt.Errorf("unknown debt tier: %q", tier)
+	}
 }
 
 // SendMembershipSuspended sends notification about membership suspension

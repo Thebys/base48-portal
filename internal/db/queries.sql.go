@@ -169,6 +169,58 @@ func (q *Queries) CancelOwnReservation(ctx context.Context, arg CancelOwnReserva
 	return i, err
 }
 
+const claimScheduledEmails = `-- name: ClaimScheduledEmails :many
+UPDATE email_outbox SET
+    next_retry_at = datetime('now', '+5 minutes')
+WHERE status = 'pending'
+  AND next_retry_at IS NOT NULL
+  AND datetime(next_retry_at) <= datetime('now')
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
+`
+
+// Atomically lease every due email to the calling worker by pushing
+// next_retry_at five minutes out, then hand the rows over. The server and the
+// cron daemon are separate processes on the same database file, so a plain
+// SELECT would let both pick up the same row and mail a member twice. A worker
+// that dies mid-send simply lets its lease expire and the row is retried.
+func (q *Queries) ClaimScheduledEmails(ctx context.Context) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, claimScheduledEmails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmailOutbox{}
+	for rows.Next() {
+		var i EmailOutbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Recipient,
+			&i.Subject,
+			&i.TemplateName,
+			&i.TemplateData,
+			&i.RenderedHtml,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.SentAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countEmailOutboxByStatus = `-- name: CountEmailOutboxByStatus :many
 SELECT status, COUNT(*) as count FROM email_outbox GROUP BY status
 `
@@ -1914,50 +1966,6 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) 
 	return items, nil
 }
 
-const listPendingScheduledEmails = `-- name: ListPendingScheduledEmails :many
-SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox
-WHERE status = 'pending' AND next_retry_at IS NOT NULL AND datetime(next_retry_at) <= datetime('now')
-ORDER BY created_at
-`
-
-func (q *Queries) ListPendingScheduledEmails(ctx context.Context) ([]EmailOutbox, error) {
-	rows, err := q.db.QueryContext(ctx, listPendingScheduledEmails)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []EmailOutbox{}
-	for rows.Next() {
-		var i EmailOutbox
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Recipient,
-			&i.Subject,
-			&i.TemplateName,
-			&i.TemplateData,
-			&i.RenderedHtml,
-			&i.Status,
-			&i.Attempts,
-			&i.MaxAttempts,
-			&i.LastError,
-			&i.NextRetryAt,
-			&i.SentAt,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listProjectVS = `-- name: ListProjectVS :many
 
 SELECT id, project_id, vs, note, created_at FROM project_vs WHERE project_id = ? ORDER BY created_at
@@ -2017,6 +2025,56 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.Name,
 			&i.PaymentsID,
 			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentDebtEmails = `-- name: ListRecentDebtEmails :many
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox
+WHERE user_id IS NOT NULL
+  AND template_name IN ('negative_balance.html', 'debt_warning.html')
+  AND status IN ('pending', 'sent')
+  AND created_at > datetime('now', '-180 days')
+ORDER BY created_at DESC
+`
+
+// Debt reminders already queued or sent, newest first. The manual reminder
+// picker folds these per user to show "last reminded N days ago" and to spot a
+// reminder still waiting in the outbox.
+func (q *Queries) ListRecentDebtEmails(ctx context.Context) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentDebtEmails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmailOutbox{}
+	for rows.Next() {
+		var i EmailOutbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Recipient,
+			&i.Subject,
+			&i.TemplateName,
+			&i.TemplateData,
+			&i.RenderedHtml,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.SentAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

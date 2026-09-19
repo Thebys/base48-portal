@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/email"
 )
 
 type FeePreviewItem struct {
@@ -89,23 +90,18 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 			feeAmount = user.LevelAmount
 		}
 
-		var feeFloat float64
-		fmt.Sscanf(feeAmount, "%f", &feeFloat)
+		feeFloat := monthlyFeeOf(user.LevelActualAmount, user.LevelAmount)
 
 		balance := balanceMap[user.ID]
 
 		balanceAfterFee := balance - int64(feeFloat)
-		balanceAfterFloat := float64(balanceAfterFee)
 
-		emailTier := ""
-		if feeFloat > 0 {
-			if balanceAfterFloat <= -(2 * feeFloat) {
-				emailTier = "debt_warning"
-				previewDebtWarning++
-			} else if balanceAfterFloat <= -feeFloat {
-				emailTier = "negative_balance"
-				previewNegBalance++
-			}
+		emailTier := email.DebtTier(float64(balanceAfterFee), feeFloat)
+		switch emailTier {
+		case email.TierDebtWarning:
+			previewDebtWarning++
+		case email.TierNegativeBalance:
+			previewNegBalance++
 		}
 
 		previewTotalFees += int64(feeFloat)
@@ -134,6 +130,21 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(feePreview, func(i, j int) bool {
 		return feePreview[i].BalanceAfterFee < feePreview[j].BalanceAfterFee
 	})
+
+	// === Admin-only: manual debt reminder picker ===
+	// Separate from the fee-run preview above: that one projects balances after
+	// the upcoming fee, while a reminder quotes what the member owes right now.
+	debtCandidates, err := h.buildDebtCandidates(ctx)
+	if err != nil {
+		http.Error(w, "Failed to load debt candidates", http.StatusInternalServerError)
+		return
+	}
+	debtSendable := 0
+	for _, c := range debtCandidates {
+		if !c.Blocked {
+			debtSendable++
+		}
+	}
 
 	// === Admin-only: Unmatched payments ===
 	unmatched, _ := h.queries.ListUnassignedPayments(ctx)
@@ -183,6 +194,11 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		"PreviewTotalFees":   previewTotalFees,
 		"PreviewNegBalance":  previewNegBalance,
 		"PreviewDebtWarning": previewDebtWarning,
+
+		// Manual debt reminders (admin-only)
+		"DebtCandidates": debtCandidates,
+		"DebtSendable":   debtSendable,
+		"EmailEnabled":   h.config.EmailEnabled,
 
 		// Monthly overview (from shared helper)
 		"MonthlyRows": summary.MonthlyRows,

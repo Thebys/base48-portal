@@ -65,15 +65,12 @@ func runDebtEmails(ctx context.Context, cfg *config.Config, queries *db.Queries)
 		balanceFloat := float64(balance)
 
 		// Determine which email to send (if any)
-		var templateName string
-		if balanceFloat <= -(2 * monthlyFee) {
-			templateName = "debt_warning.html"
-		} else if balanceFloat <= -monthlyFee {
-			templateName = "negative_balance.html"
-		} else {
+		tier := email.DebtTier(balanceFloat, monthlyFee)
+		if tier == "" {
 			noDebt++
 			continue
 		}
+		templateName := email.TemplateFileForTier(tier)
 
 		// Anti-spam: skip if this email type was already sent/queued in last 30 days
 		recent, err := queries.GetRecentEmailByUserAndTemplate(ctx, db.GetRecentEmailByUserAndTemplateParams{
@@ -95,22 +92,12 @@ func runDebtEmails(ctx context.Context, cfg *config.Config, queries *db.Queries)
 		}
 
 		// Queue the email into outbox
-		if templateName == "debt_warning.html" {
-			if err := emailClient.SendDebtWarning(ctx, &fullUser, balanceFloat, monthlyFee); err != nil {
-				log.Printf("  ⚠ Failed to queue debt warning for %s: %v", user.Email, err)
-				errors++
-			} else {
-				log.Printf("  ✉ Queued debt warning for %s (balance: %.0f Kč)", user.Email, balanceFloat)
-				queued++
-			}
+		if err := emailClient.SendDebtReminder(ctx, &fullUser, tier, balanceFloat, monthlyFee); err != nil {
+			log.Printf("  ⚠ Failed to queue %s for %s: %v", tier, user.Email, err)
+			errors++
 		} else {
-			if err := emailClient.SendNegativeBalance(ctx, &fullUser, balanceFloat, monthlyFee); err != nil {
-				log.Printf("  ⚠ Failed to queue negative balance email for %s: %v", user.Email, err)
-				errors++
-			} else {
-				log.Printf("  ✉ Queued negative balance email for %s (balance: %.0f Kč)", user.Email, balanceFloat)
-				queued++
-			}
+			log.Printf("  ✉ Queued %s for %s (balance: %.0f Kč)", tier, user.Email, balanceFloat)
+			queued++
 		}
 	}
 

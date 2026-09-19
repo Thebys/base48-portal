@@ -352,10 +352,29 @@ SELECT status, COUNT(*) as count FROM email_outbox GROUP BY status;
 SELECT COUNT(*) as count FROM email_outbox
 WHERE status = 'sent' AND substr(sent_at, 1, 10) = DATE('now');
 
--- name: ListPendingScheduledEmails :many
+-- name: ClaimScheduledEmails :many
+-- Atomically lease every due email to the calling worker by pushing
+-- next_retry_at five minutes out, then hand the rows over. The server and the
+-- cron daemon are separate processes on the same database file, so a plain
+-- SELECT would let both pick up the same row and mail a member twice. A worker
+-- that dies mid-send simply lets its lease expire and the row is retried.
+UPDATE email_outbox SET
+    next_retry_at = datetime('now', '+5 minutes')
+WHERE status = 'pending'
+  AND next_retry_at IS NOT NULL
+  AND datetime(next_retry_at) <= datetime('now')
+RETURNING *;
+
+-- name: ListRecentDebtEmails :many
+-- Debt reminders already queued or sent, newest first. The manual reminder
+-- picker folds these per user to show "last reminded N days ago" and to spot a
+-- reminder still waiting in the outbox.
 SELECT * FROM email_outbox
-WHERE status = 'pending' AND next_retry_at IS NOT NULL AND datetime(next_retry_at) <= datetime('now')
-ORDER BY created_at;
+WHERE user_id IS NOT NULL
+  AND template_name IN ('negative_balance.html', 'debt_warning.html')
+  AND status IN ('pending', 'sent')
+  AND created_at > datetime('now', '-180 days')
+ORDER BY created_at DESC;
 
 -- name: CancelEmailOutbox :one
 UPDATE email_outbox SET

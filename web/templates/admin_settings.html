@@ -173,7 +173,7 @@
                         <tbody class="bg-white divide-y divide-gray-200">
                             {{range .RecentEmails}}
                             <tr>
-                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{{.CreatedAt.Format "02.01. 15:04"}}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{{.CreatedAt.Local.Format "02.01. 15:04"}}</td>
                                 <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{.Recipient}}</td>
                                 <td class="px-4 py-2 text-sm text-gray-900 max-w-xs truncate">{{.Subject}}</td>
                                 <td class="px-4 py-2 whitespace-nowrap">

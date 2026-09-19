@@ -93,6 +93,116 @@
         </div>
     </details>
 
+    <!-- Manual debt reminders -->
+    <details class="bg-white shadow rounded-lg mb-8" id="debt-reminders">
+        <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 inline">Ruční upozornění na dluh</h2>
+                <span class="ml-2 text-sm text-gray-500">zařadí e-mail do outboxu s timerem</span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                {{ if .DebtCandidates }}
+                <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 whitespace-nowrap">{{len .DebtCandidates}} s dluhem</span>
+                {{ end }}
+                {{ if gt .DebtSendable 0 }}
+                <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 whitespace-nowrap">{{.DebtSendable}} k odeslání</span>
+                {{ end }}
+            </div>
+        </summary>
+        <div class="border-t border-gray-200">
+            {{ if not .EmailEnabled }}
+            <div class="px-6 py-4 border-b border-gray-200 bg-yellow-50">
+                <p class="text-sm text-yellow-800">
+                    E-maily jsou vypnuté (<code class="bg-yellow-100 px-1 rounded">EMAIL_ENABLED=false</code>).
+                    Zařazení do outboxu je zakázané, dokud se nezapnou.
+                </p>
+            </div>
+            {{ end }}
+            {{ if .DebtCandidates }}
+            <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end gap-4">
+                <div>
+                    <label for="debt-delay" class="block text-xs font-medium text-gray-700 mb-1">Timer</label>
+                    <select id="debt-delay" class="block w-40 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="0">Ihned</option>
+                        <option value="1">za 1 hodinu</option>
+                        <option value="6">za 6 hodin</option>
+                        <option value="24" selected>za 24 hodin</option>
+                        <option value="48">za 48 hodin</option>
+                        <option value="72">za 72 hodin</option>
+                        <option value="custom">vlastní…</option>
+                    </select>
+                </div>
+                <div id="debt-delay-custom-wrap" class="hidden">
+                    <label for="debt-delay-custom" class="block text-xs font-medium text-gray-700 mb-1">Hodin (max 168)</label>
+                    <input type="number" id="debt-delay-custom" min="0" max="168" step="1" value="24"
+                           class="block w-28 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+                <label class="flex items-center gap-2 text-sm text-gray-700 pb-2">
+                    <input type="checkbox" id="debt-force" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    Poslat i těm, kteří už upozornění dostali
+                </label>
+                <div class="flex items-center gap-3 ml-auto">
+                    <span id="debt-selection-count" class="text-sm text-gray-500">vybráno 0</span>
+                    <button onclick="queueDebtEmails()" id="debt-submit" class="btn btn-sm btn-primary" disabled
+                            {{ if not .EmailEnabled }}data-email-disabled="true" title="E-maily jsou vypnuté"{{ end }}>Zařadit do outboxu</button>
+                </div>
+            </div>
+            <div id="debt-status" class="hidden px-6 py-3 border-b border-gray-200"></div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left">
+                                <input type="checkbox" id="debt-select-all" onchange="toggleAllDebt(this)"
+                                       class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            </th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Člen</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Bilance</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Měs. fee</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Šablona</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Naposledy</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {{ range .DebtCandidates }}
+                        <tr class="{{ if eq .Tier "debt_warning" }}bg-red-50{{ else }}bg-yellow-50{{ end }}">
+                            <td class="px-4 py-2">
+                                <input type="checkbox" class="debt-check rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                       value="{{.UserID}}" data-blocked="{{.Blocked}}" onchange="updateDebtSelection()">
+                            </td>
+                            <td class="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">
+                                <a href="/admin/users/{{.UserID}}" class="hover:underline">{{.UserID}} - {{.Name}}</a>
+                                <span class="text-xs text-gray-400 ml-1">{{.Email}}{{ if eq .Locale "en" }} · EN{{ end }}</span>
+                            </td>
+                            <td class="px-4 py-2 text-sm text-right whitespace-nowrap text-red-600 font-medium">{{.Balance}} Kč</td>
+                            <td class="px-4 py-2 text-sm text-right text-gray-500 whitespace-nowrap">{{.MonthlyFee}} Kč</td>
+                            <td class="px-4 py-2 text-sm whitespace-nowrap">
+                                {{ if eq .Tier "debt_warning" }}
+                                <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">debt warning</span>
+                                {{ else }}
+                                <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">negative balance</span>
+                                {{ end }}
+                            </td>
+                            <td class="px-4 py-2 text-sm whitespace-nowrap">
+                                {{ if .Blocked }}
+                                <span class="text-amber-700">⚠ {{.BlockReason}}</span>
+                                {{ else if .LastRemindedAt.IsZero }}
+                                <span class="text-gray-400">—</span>
+                                {{ else }}
+                                <span class="text-gray-500">před {{.LastRemindedDays}} dny</span>
+                                {{ end }}
+                            </td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            {{ else }}
+            <p class="px-6 py-4 text-sm text-gray-500">Žádný člen nemá dluh, který by opravňoval upozornění.</p>
+            {{ end }}
+        </div>
+    </details>
+
     <!-- Monthly overview -->
     <details class="bg-white shadow rounded-lg mb-8">
         <summary class="px-6 py-4 cursor-pointer">
@@ -203,4 +313,129 @@
         </div>
     </details>
 </div>
+
+<script>
+// Manual debt reminders: pick members, pick a timer, park the emails in the outbox.
+// Rows flagged as already reminded (or with a reminder still pending) stay
+// unchecked unless the admin ticks the override switch.
+function debtChecks() {
+    return Array.from(document.querySelectorAll('.debt-check'));
+}
+
+function debtSelectedIds() {
+    return debtChecks().filter(c => c.checked).map(c => parseInt(c.value, 10));
+}
+
+function forceEnabled() {
+    const el = document.getElementById('debt-force');
+    return !!(el && el.checked);
+}
+
+function updateDebtSelection() {
+    const selected = debtSelectedIds();
+    const countEl = document.getElementById('debt-selection-count');
+    const submitEl = document.getElementById('debt-submit');
+    if (countEl) countEl.textContent = 'vybráno ' + selected.length;
+    if (submitEl) {
+        const emailOff = submitEl.dataset.emailDisabled === 'true';
+        submitEl.disabled = emailOff || selected.length === 0;
+        submitEl.textContent = selected.length > 0
+            ? 'Zařadit ' + selected.length + ' do outboxu'
+            : 'Zařadit do outboxu';
+    }
+}
+
+// Select-all skips blocked rows unless the force switch is on, so the common
+// "remind everyone who is due" case cannot accidentally double-mail anyone.
+function toggleAllDebt(master) {
+    const force = forceEnabled();
+    debtChecks().forEach(c => {
+        const blocked = c.dataset.blocked === 'true';
+        c.checked = master.checked && (force || !blocked);
+    });
+    updateDebtSelection();
+}
+
+document.getElementById('debt-force')?.addEventListener('change', () => {
+    const master = document.getElementById('debt-select-all');
+    if (master && master.checked) toggleAllDebt(master);
+    else updateDebtSelection();
+});
+
+document.getElementById('debt-delay')?.addEventListener('change', (e) => {
+    const wrap = document.getElementById('debt-delay-custom-wrap');
+    if (wrap) wrap.classList.toggle('hidden', e.target.value !== 'custom');
+});
+
+function debtDelayHours() {
+    const select = document.getElementById('debt-delay');
+    if (select.value !== 'custom') return parseFloat(select.value);
+    const custom = parseFloat(document.getElementById('debt-delay-custom').value);
+    return isNaN(custom) ? 24 : custom;
+}
+
+function showDebtStatus(type, html) {
+    const el = document.getElementById('debt-status');
+    if (!el) return;
+    const colors = {
+        success: 'bg-green-50 text-green-800',
+        error: 'bg-red-50 text-red-800',
+        info: 'bg-blue-50 text-blue-800',
+    };
+    el.className = 'px-6 py-3 border-b border-gray-200 text-sm rounded-none ' + (colors[type] || colors.info);
+    el.innerHTML = html;
+    el.classList.remove('hidden');
+}
+
+function queueDebtEmails() {
+    const ids = debtSelectedIds();
+    if (ids.length === 0) return;
+
+    const hours = debtDelayHours();
+    if (hours < 0 || hours > 168) {
+        showDebtStatus('error', 'Timer musí být mezi 0 a 168 hodinami.');
+        return;
+    }
+
+    const when = hours === 0 ? 'ihned' : 'za ' + hours + ' h';
+    if (!confirm('Zařadit ' + ids.length + ' upozornění na dluh do outboxu (' + when + ')?')) return;
+
+    const btn = document.getElementById('debt-submit');
+    btn.disabled = true;
+    btn.textContent = 'Zařazuji…';
+    showDebtStatus('info', 'Zařazuji e-maily…');
+
+    fetch('/api/admin/email/debt-notify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_ids: ids, delay_hours: hours, force: forceEnabled()})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            showDebtStatus('error', 'Chyba: ' + (data.error || 'Neznámá chyba'));
+            updateDebtSelection();
+            return;
+        }
+        let html = '<strong>' + data.message + '</strong>';
+        if (data.skipped && data.skipped.length > 0) {
+            html += '<ul class="mt-2 list-disc list-inside">';
+            data.skipped.forEach(s => {
+                html += '<li>' + (s.email || ('#' + s.user_id)) + ' — ' + s.reason + '</li>';
+            });
+            html += '</ul>';
+        }
+        html += '<p class="mt-2"><a class="underline" href="/admin/settings">Zkontrolovat outbox →</a></p>';
+        showDebtStatus((data.queued && data.queued.length > 0) ? 'success' : 'error', html);
+        // Re-render so the "Naposledy" column and the blocked flags reflect the send.
+        setTimeout(() => location.reload(), 2500);
+    })
+    .catch(err => {
+        showDebtStatus('error', 'Chyba: ' + err.message);
+        updateDebtSelection();
+    });
+}
+
+updateDebtSelection();
+</script>
 {{ end }}
