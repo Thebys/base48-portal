@@ -103,6 +103,13 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		bannerColor = b.Value
 	}
 
+	// Bar debt reminder settings, plus how many members they would hit today
+	barDebt := email.LoadBarDebtSettings(ctx, h.queries)
+	barDebtors, err := h.queries.ListAcceptedBarDebtors(ctx, barDebt.MaxBalanceCents())
+	if err != nil {
+		log.Printf("[Handler] failed to list bar debtors: %v", err)
+	}
+
 	data := map[string]interface{}{
 		"Title":          "Nastavení",
 		"User":           user,
@@ -119,6 +126,8 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"CurrentBannerEnabled":    bannerEnabled,
 		"CurrentBannerColor":      bannerColor,
 		"CurrentAwaitingMessage":  awaitingMessage,
+		"BarDebt":                 barDebt,
+		"BarDebtorsNow":           len(barDebtors),
 	}
 
 	h.render(w, "admin_settings.html", data)
@@ -235,7 +244,7 @@ func (h *Handler) AdminGetTemplateContentHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	current := h.emailClient.LoadContentBlocks(ctx, templateName, lang)
+	current := h.emailClient.LoadRawContentBlocks(ctx, templateName, lang)
 
 	type blockInfo struct {
 		Name       string `json:"name"`
@@ -268,7 +277,6 @@ func (h *Handler) AdminGetTemplateContentHandler(w http.ResponseWriter, r *http.
 // POST /api/admin/email/templates
 func (h *Handler) AdminSaveTemplateContentHandler(w http.ResponseWriter, r *http.Request) {
 	user := h.auth.GetUser(r)
-	ctx := r.Context()
 
 	var req struct {
 		TemplateName string            `json:"template_name"`
@@ -280,36 +288,63 @@ func (h *Handler) AdminSaveTemplateContentHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	if req.Lang == "" {
-		req.Lang = "cs"
-	}
-
-	defaults := email.GetDefaultContentBlocks(req.Lang)
-	if _, ok := defaults[req.TemplateName]; !ok {
-		h.jsonError(w, "unknown template: "+req.TemplateName, http.StatusBadRequest)
-		return
-	}
-
 	adminEmail := ""
 	if user != nil {
 		adminEmail = user.Email
 	}
 
-	for blockName, content := range req.Blocks {
+	if err := h.saveTemplateBlocks(r.Context(), req.TemplateName, req.Lang, req.Blocks, adminEmail); err != nil {
+		h.jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	h.jsonSuccess(w, "Šablona uložena")
+}
+
+// saveTemplateBlocks stores the editor's blocks as overrides. A block equal to
+// the default is stored as no override at all (and any old one removed), so a
+// later change to the default in code still reaches it.
+func (h *Handler) saveTemplateBlocks(ctx context.Context, templateName, lang string, blocks map[string]string, adminEmail string) error {
+	if lang == "" {
+		lang = "cs"
+	}
+	templateDefaults, ok := email.GetDefaultContentBlocks(lang)[templateName]
+	if !ok {
+		return fmt.Errorf("unknown template: %s", templateName)
+	}
+	for blockName := range blocks {
+		if _, ok := templateDefaults[blockName]; !ok {
+			return fmt.Errorf("unknown block: %s", blockName)
+		}
+	}
+
+	for blockName, content := range blocks {
+		content = email.NormalizeBlockText(content)
+
+		if content == templateDefaults[blockName] {
+			err := h.queries.DeleteEmailTemplateContent(ctx, db.DeleteEmailTemplateContentParams{
+				TemplateName: templateName,
+				BlockName:    blockName,
+				Lang:         lang,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to reset block %s: %w", blockName, err)
+			}
+			continue
+		}
+
 		_, err := h.queries.UpsertEmailTemplateContent(ctx, db.UpsertEmailTemplateContentParams{
-			TemplateName: req.TemplateName,
+			TemplateName: templateName,
 			BlockName:    blockName,
-			Lang:         req.Lang,
+			Lang:         lang,
 			Content:      content,
 			UpdatedBy:    sql.NullString{String: adminEmail, Valid: adminEmail != ""},
 		})
 		if err != nil {
-			h.jsonError(w, fmt.Sprintf("Failed to save block %s: %v", blockName, err), http.StatusInternalServerError)
-			return
+			return fmt.Errorf("failed to save block %s: %w", blockName, err)
 		}
 	}
-
-	h.jsonSuccess(w, "Šablona uložena")
+	return nil
 }
 
 // AdminRetryEmailHandler retries a failed outbox email.
@@ -446,6 +481,12 @@ func (h *Handler) buildEmailTestData(ctx context.Context, emailType, lang, name,
 	case "membership_suspended":
 		templateFile = "membership_suspended.html"
 		data["Reason"] = "Dluh na členském příspěvku přesahuje povolený limit."
+	case email.TemplateBarDebt:
+		templateFile = email.TemplateFileBarDebt
+		threshold := email.LoadBarDebtSettings(ctx, h.queries).ThresholdCZK
+		data["BalanceCents"] = int64(-35050)
+		data["BalanceText"] = email.FormatCZKCents(-35050)
+		data["ThresholdText"] = strconv.FormatInt(threshold, 10)
 	default:
 		return "", nil, fmt.Errorf("unknown template: %s", emailType)
 	}
@@ -550,4 +591,62 @@ func (h *Handler) AdminSaveBannerHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.jsonSuccess(w, "Banner uložen")
+}
+
+// AdminSaveBarDebtSettingsHandler saves the bar debt reminder settings.
+// POST /api/admin/bar-debt-settings
+func (h *Handler) AdminSaveBarDebtSettingsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		Enabled      bool  `json:"enabled"`
+		ThresholdCZK int64 `json:"threshold_czk"`
+		IntervalDays int   `json:"interval_days"`
+		DelayHours   int   `json:"delay_hours"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	settings := email.BarDebtSettings{
+		Enabled:      req.Enabled,
+		ThresholdCZK: req.ThresholdCZK,
+		IntervalDays: req.IntervalDays,
+		DelayHours:   req.DelayHours,
+	}
+	if err := settings.Validate(); err != nil {
+		h.jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := email.SaveBarDebtSettings(ctx, h.queries, settings); err != nil {
+		h.jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	adminEmail := ""
+	if admin := h.auth.GetUser(r); admin != nil {
+		adminEmail = admin.Email
+	}
+	state := "disabled"
+	if settings.Enabled {
+		state = "enabled"
+	}
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "email",
+		Level:     "info",
+		Message: fmt.Sprintf("Bar debt reminders %s: debt above %d Kč, every %d days, delay %dh (by %s)",
+			state, settings.ThresholdCZK, settings.IntervalDays, settings.DelayHours, adminEmail),
+	})
+
+	debtors, err := h.queries.ListAcceptedBarDebtors(ctx, settings.MaxBalanceCents())
+	if err != nil {
+		log.Printf("[Handler] failed to list bar debtors: %v", err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Nastavení uloženo",
+		"debtors": len(debtors),
+	})
 }

@@ -41,9 +41,11 @@ make help       # Všechny příkazy
 ## Cron úlohy
 
 ```bash
-portal-cron daemon   # Vše na jednom místě (sync á 2 min, poplatky 1. v měsíci)
+portal-cron daemon   # Vše na jednom místě (sync á 2 min, poplatky 1. v měsíci, barové dluhy denně od 10:00)
 portal-cron sync     # Synchronizace plateb + role sync (každé 2 min)
 portal-cron fees     # Měsíční poplatky (1. den v měsíci)
+portal-cron debt-emails      # Upomínky dluhu na členských příspěvcích
+portal-cron bar-debt-emails  # Upomínky dluhu na baru (zapíná se a nastavuje v Admin → Nastavení)
 portal-cron report   # Report nespárovaných plateb (ad-hoc)
 ```
 

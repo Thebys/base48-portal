@@ -36,7 +36,7 @@ Dvě služby, **jeden image**, liší se jen příkazem:
 | služba   | proces                    | co dělá                                            |
 |----------|---------------------------|----------------------------------------------------|
 | `portal` | `/app/portal`             | HTTP server, **pouští migrace při startu**          |
-| `cron`   | `/app/portal-cron daemon` | FIO sync á 2 min, poplatky 1. v měsíci, maily      |
+| `cron`   | `/app/portal-cron daemon` | FIO sync á 2 min, poplatky 1. v měsíci, maily, barové upomínky denně |
 
 `cron` startuje až když je `portal` **healthy** — migrace musí proběhnout dřív,
 než na databázi sáhne daemon.
@@ -336,10 +336,10 @@ Overlay **nikdy nepoužívej na produkčním hostu** — vypnul by tam sync i ma
 **`portal` je `unhealthy`, v logu `unable to open database file`**
 Nesedí UID. Zkontroluj `stat -c '%u:%g' $PORTAL_DATA_DIR` proti `PORTAL_UID/GID`.
 
-**`cron` se restartuje dokola / `BANK_FIO_TOKEN is required`**
+**V logu cronu `Skipping FIO sync (no BANK_FIO_TOKEN)`**
 Prázdný FIO token. Buď je to záměr (test overlay), nebo chybí v `.env`.
-Pozor: `runSync` se při chybějícím tokenu ukončí hned, takže se přeskočí
-i aktualizace dluhů a odesílání mailů.
+Přeskočí se jen stahování plateb; role dluhu i odesílání naplánovaných mailů
+běží dál.
 
 **Maily se neodesílají / `smtp dial: connection refused`**
 `SMTP_HOST` je `localhost` nebo `127.0.0.1`. Uvnitř kontejneru to je kontejner

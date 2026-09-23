@@ -78,7 +78,7 @@
 <div class="px-4 sm:px-0">
     <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Autodílna</h1>
-        <p class="text-sm text-gray-500 mt-1">Rezervace stání v autodílně. Buďte ohleduplní — po skončení práce stání uvolněte a rezervaci ukončete.</p>
+        <p class="text-sm text-gray-500 mt-1">Rezervace stání v autodílně. Buďte ohleduplní: po skončení práce stání uvolněte a rezervaci ukončete.</p>
     </div>
 
     <div id="workshop-error" class="hidden mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm"></div>
@@ -109,7 +109,7 @@
                 <button type="submit" class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">Rezervovat</button>
             </div>
         </form>
-        <p class="text-xs text-gray-400 mt-3">Rezervace nemá pevný limit délky. Nech tam ale rezervu jen jakou reálně potřebuješ — když se plány změní, konec rezervace můžeš kdykoli posunout nebo rezervaci zrušit.</p>
+        <p class="text-xs text-gray-400 mt-3">Rezervace nemá pevný limit délky. Nech tam ale rezervu jen jakou reálně potřebuješ. Když se plány změní, konec rezervace můžeš kdykoli posunout nebo rezervaci zrušit.</p>
     </div>
 
     <!-- Reservation history — rendered by /static/js/workshop-history.js -->
@@ -299,7 +299,7 @@
                 list.forEach(function(r) { listBox.appendChild(reservationRow(r)); });
                 card.appendChild(listBox);
             } else if (resource.state === 'available') {
-                card.appendChild(el('p', 'text-sm text-gray-400 mt-3', 'Žádné rezervace — stání je volné.'));
+                card.appendChild(el('p', 'text-sm text-gray-400 mt-3', 'Žádné rezervace, stání je volné.'));
             }
 
             container.appendChild(card);
@@ -311,7 +311,7 @@
         state.resources.filter(function(r) { return r.state === 'available'; }).forEach(function(r) {
             var opt = document.createElement('option');
             opt.value = r.id;
-            opt.textContent = r.name + (hasLift(r) ? ' — se zvedákem' : '');
+            opt.textContent = r.name + (hasLift(r) ? ' (se zvedákem)' : '');
             select.appendChild(opt);
         });
 

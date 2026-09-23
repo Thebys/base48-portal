@@ -194,7 +194,7 @@
             var actionTd = el('td', 'py-2 text-right');
             var bump = el('button', 'bg-red-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-red-700', 'Ukončit (bump)');
             bump.addEventListener('click', function() {
-                if (!confirm('Opravdu ukončit rezervaci člena ' + r.username + '? Člen o tom zatím nedostane notifikaci — domluvte se s ním.')) return;
+                if (!confirm('Opravdu ukončit rezervaci člena ' + r.username + '? Člen o tom zatím nedostane notifikaci, domluvte se s ním.')) return;
                 api('/api/admin/workshop/reservations/' + r.id + '/bump', { method: 'POST' })
                     .then(load).catch(function(e) { showError(e.message); });
             });

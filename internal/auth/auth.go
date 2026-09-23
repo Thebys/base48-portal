@@ -152,7 +152,7 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 
 	if err := a.connect(ctx); err != nil {
 		fmt.Printf("⚠ WARNING: Keycloak unavailable at %s: %v\n", cfg.KeycloakIssuerURL(), err)
-		fmt.Println("⚠ Starting in LIMITED MODE — will reconnect automatically once Keycloak is reachable")
+		fmt.Println("⚠ Starting in LIMITED MODE, will reconnect automatically once Keycloak is reachable")
 		go a.reconnectLoop(ctx)
 	} else {
 		fmt.Println("✓ Keycloak connection established")

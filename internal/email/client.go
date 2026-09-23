@@ -103,14 +103,14 @@ var defaultContentBlocks = map[string]map[string]string{
 		"heading":         "Tvůj účet je připraven",
 		"preheader":       "Tvůj účet na portálu Base48 je připraven.",
 		"intro_text":      "Tvůj účet na členském portálu Base48 je vytvořen.",
-		"next_steps_text": "Co bude dál: tvé členství bude schváleno na nejbližším setkání komunity. Jakmile budeš přijat/a, pošleme ti uvítací e-mail s dalšími informacemi — obvykle to trvá týden nebo dva.",
+		"next_steps_text": "Co bude dál: tvé členství bude schváleno na nejbližším setkání komunity. Jakmile budeš přijat/a, pošleme ti uvítací e-mail s dalšími informacemi. Obvykle to trvá týden nebo dva.",
 		"wiki_text":       "Mezitím se můžeš podívat na naši wiki:\n→ https://wiki.base48.cz",
 		"sign_off":        "Base48 hackerspace",
 		"footer":          "Máš otázky? Stačí odpovědět na tento e-mail.",
 	},
 	"welcome": {
-		"subject":         "Vítej v Base48 — jsi členem!",
-		"heading":         "Vítej v Base48 — jsi členem! 🎉",
+		"subject":         "Vítej v Base48, jsi členem!",
+		"heading":         "Vítej v Base48, jsi členem! 🎉",
 		"preheader":       "Jsi členem Base48! Vítej na palubě.",
 		"intro_text":      "Tvé členství v Base48 je aktivní. Vítej na palubě.",
 		"resources_text":  "1. PŘIPOJ SE KE KONVERZACI\n   Matrix: https://matrix.to/#/#base48:matrix.org\n\n2. PŘEČTI SI PRAVIDLA\n   → https://wiki.base48.cz/wiki/Rules\n\n3. PROZKOUMEJ WIKI\n   Návody k nástrojům, dokumentace projektů a vše ostatní:\n   → https://wiki.base48.cz",
@@ -147,6 +147,15 @@ var defaultContentBlocks = map[string]map[string]string{
 		"sign_off":          "Base48 hackerspace",
 		"footer":            "Pokud si myslíš, že došlo k omylu, neváhej nás kontaktovat.",
 	},
+	"bar_debt": {
+		"subject":     "Dluh na baru v Base48",
+		"heading":     "Máš dluh na baru",
+		"preheader":   "Tvůj barový účet v Base48 je v minusu.",
+		"intro_text":  "Tvůj účet na barovém kiosku je v minusu:",
+		"action_text": "Dluh si prosím vyrovnej při příští návštěvě: na kiosku naskenuj částku dobití, pak pípni svou kartičku (nebo napiš přezdívku) a vlož hotovost do pokladny.",
+		"sign_off":    "Base48 hackerspace",
+		"footer":      "Pokud ti zůstatek nesedí, dej nám vědět. Stačí odpovědět na tento e-mail.",
+	},
 }
 
 // Default content blocks — English
@@ -156,14 +165,14 @@ var defaultContentBlocksEN = map[string]map[string]string{
 		"heading":         "Your account is ready",
 		"preheader":       "Your Base48 portal account is ready.",
 		"intro_text":      "Your account on the Base48 member portal is set up.",
-		"next_steps_text": "What happens next: your membership will be reviewed at our next community meeting. We'll email you as soon as you're approved — usually within a week or two.",
+		"next_steps_text": "What happens next: your membership will be reviewed at our next community meeting. We'll email you as soon as you're approved, usually within a week or two.",
 		"wiki_text":       "While you wait, check out our wiki:\n→ https://wiki.base48.cz",
 		"sign_off":        "Base48 hackerspace",
 		"footer":          "Questions? Just reply to this email.",
 	},
 	"welcome": {
-		"subject":         "Welcome to Base48 — you're a member!",
-		"heading":         "Welcome to Base48 — you're a member! 🎉",
+		"subject":         "Welcome to Base48, you're a member!",
+		"heading":         "Welcome to Base48, you're a member! 🎉",
 		"preheader":       "You're a Base48 member! Welcome aboard.",
 		"intro_text":      "Your Base48 membership is now active. Welcome aboard.",
 		"resources_text":  "1. JOIN THE CONVERSATION\n   Matrix: https://matrix.to/#/#base48:matrix.org\n\n2. KNOW THE RULES\n   → https://wiki.base48.cz/wiki/Rules\n\n3. EXPLORE THE WIKI\n   Tool guides, project docs, and everything else:\n   → https://wiki.base48.cz",
@@ -186,7 +195,7 @@ var defaultContentBlocksEN = map[string]map[string]string{
 		"preheader":         "Your debt has exceeded twice your monthly fee.",
 		"warning_text":      "Your membership fee debt has exceeded twice your monthly fee.",
 		"consequences_text": "If the debt is not settled soon, your membership may be suspended and access to the space restricted.",
-		"steps_text":        "1. Pay the debt as soon as possible using the payment details below\n2. If you have financial difficulties, contact us — we can arrange installments or a fee reduction\n3. Check the portal to make sure all your payments have been correctly assigned",
+		"steps_text":        "1. Pay the debt as soon as possible using the payment details below\n2. If you have financial difficulties, contact us. We can arrange installments or a fee reduction\n3. Check the portal to make sure all your payments have been correctly assigned",
 		"sign_off":          "Base48 hackerspace",
 		"footer":            "Need help? If you have questions or need to arrange an individual solution, don't hesitate to contact us. We're here to help.",
 	},
@@ -199,6 +208,15 @@ var defaultContentBlocksEN = map[string]map[string]string{
 		"recovery_text":     "Check your balance in the portal. If the reason is unpaid debt, please pay the amount as soon as possible.",
 		"sign_off":          "Base48 hackerspace",
 		"footer":            "If you believe this is a mistake, don't hesitate to contact us.",
+	},
+	"bar_debt": {
+		"subject":     "Your Base48 bar tab is in debt",
+		"heading":     "Your bar tab is in debt",
+		"preheader":   "Your Base48 bar account is below zero.",
+		"intro_text":  "Your account at the bar kiosk is below zero:",
+		"action_text": "Please settle it on your next visit: at the kiosk, scan a top-up amount, then scan your card (or type your nickname) and put the cash in the till.",
+		"sign_off":    "Base48 hackerspace",
+		"footer":      "If the balance looks wrong, let us know. Just reply to this email.",
 	},
 }
 
@@ -234,6 +252,8 @@ func EmailLabels(lang string) map[string]string {
 			"bank_name":            "Fio bank",
 			"vs_reminder":          "Important: Use your variable symbol (%s) so we can automatically match the payment to your account.",
 			"debt_payment_ref":     "Membership fee payment",
+			"bar_balance_label":    "Bar balance:",
+			"bar_threshold_note":   "We send this reminder once your bar debt goes above %s CZK.",
 		}
 	}
 	// Czech (default)
@@ -259,6 +279,8 @@ func EmailLabels(lang string) map[string]string {
 		"bank_name":            "Fio banka",
 		"vs_reminder":          "Důležité: Použij svůj variabilní symbol (%s), ať můžeme platbu automaticky přiřadit k\u00a0tvému účtu.",
 		"debt_payment_ref":     "Úhrada členského příspěvku",
+		"bar_balance_label":    "Zůstatek na baru:",
+		"bar_threshold_note":   "Tuto upomínku posíláme, když dluh na baru stoupne nad %s\u00a0Kč.",
 	}
 }
 
@@ -467,6 +489,9 @@ func (c *Client) ProcessPendingEmails(ctx context.Context) int {
 
 	sent := 0
 	for _, entry := range entries {
+		if !c.refreshBeforeSend(ctx, &entry) {
+			continue
+		}
 		params := SendParams{
 			UserID:       entry.UserID,
 			Recipient:    entry.Recipient,
@@ -710,19 +735,37 @@ func (c *Client) GenerateQRForEmail(vs string, amount float64) string {
 	return fmt.Sprintf("%s/api/qr?vs=%s&amount=%.0f", c.config.BaseURL, vs, amount)
 }
 
-// LoadContentBlocks loads template content overrides from DB, falling back to defaults.
-// lang should be "cs" or "en".
+// LoadContentBlocks loads template content overrides from DB, falling back to
+// defaults, ready for rendering (Czech typography applied). lang should be
+// "cs" or "en".
 func (c *Client) LoadContentBlocks(ctx context.Context, templateName string, lang string) map[string]string {
 	if lang == "" {
 		lang = "cs"
 	}
-	defs := GetDefaultContentBlocks(lang)
-	defaults, ok := defs[templateName]
+	result := c.LoadRawContentBlocks(ctx, templateName, lang)
+
+	// Apply Czech typographic rules only for Czech
+	if lang == "cs" {
+		for k, v := range result {
+			result[k] = fixCzechTypography(v)
+		}
+	}
+
+	return result
+}
+
+// LoadRawContentBlocks is LoadContentBlocks without the typography pass: the
+// text as an admin wrote it, which is what the template editor shows and
+// compares against the defaults. Non-breaking spaces are folded back to plain
+// ones — they are typography, re-added at render time, and older saves stored
+// them, which made untouched blocks look edited.
+func (c *Client) LoadRawContentBlocks(ctx context.Context, templateName string, lang string) map[string]string {
+	defaults, ok := GetDefaultContentBlocks(lang)[templateName]
 	if !ok {
 		return map[string]string{}
 	}
 
-	result := make(map[string]string)
+	result := make(map[string]string, len(defaults))
 	for k, v := range defaults {
 		result[k] = v
 	}
@@ -737,17 +780,15 @@ func (c *Client) LoadContentBlocks(ctx context.Context, templateName string, lan
 	}
 
 	for _, override := range overrides {
-		result[override.BlockName] = override.Content
+		result[override.BlockName] = NormalizeBlockText(override.Content)
 	}
-
-	// Apply Czech typographic rules only for Czech
-	if lang == "cs" {
-		for k, v := range result {
-			result[k] = fixCzechTypography(v)
-		}
-	}
-
 	return result
+}
+
+// NormalizeBlockText folds non-breaking spaces to plain spaces, so editor
+// input compares cleanly against the defaults.
+func NormalizeBlockText(s string) string {
+	return strings.ReplaceAll(s, "\u00a0", " ")
 }
 
 // displayName returns the user's nickname (Username) with fallback to Realname, then email.
@@ -807,73 +848,8 @@ func (c *Client) SendRegistration(ctx context.Context, user *db.User) error {
 	})
 }
 
-// SendNegativeBalance sends notification about negative membership balance.
-// minQRAmount sets the floor for the QR code amount (typically the user's monthly fee).
-func (c *Client) SendNegativeBalance(ctx context.Context, user *db.User, balance float64, minQRAmount float64) error {
-	lang := userLang(user)
-	content := c.LoadContentBlocks(ctx, "negative_balance", lang)
-	labels := EmailLabels(lang)
-
-	data := map[string]interface{}{
-		"Name":          displayName(user),
-		"Balance":       balance,
-		"AbsBalance":    math.Abs(balance),
-		"PaymentsID":    user.PaymentsID.String,
-		"PortalURL":     c.config.BaseURL,
-		"BankAccountCZ": c.config.BankAccountCZ,
-		"Content":       content,
-		"Labels":        labels,
-	}
-
-	if qr := c.generateEmailQR(user, balance, minQRAmount); qr != "" {
-		data["PaymentQRCode"] = qr
-		data["QRAmount"] = math.Max(math.Abs(balance), minQRAmount)
-	}
-
-	return c.QueueEmail(ctx, SendParams{
-		UserID:       sql.NullInt64{Int64: user.ID, Valid: true},
-		Recipient:    user.Email,
-		Subject:      content["subject"],
-		TemplateName: "negative_balance.html",
-		Data:         data,
-	})
-}
-
-// SendDebtWarning sends warning about significant debt (>2x monthly fee).
-// QR amount is max(abs(balance), monthlyFee) — never less than one month's fee.
-func (c *Client) SendDebtWarning(ctx context.Context, user *db.User, balance float64, monthlyFee float64) error {
-	lang := userLang(user)
-	content := c.LoadContentBlocks(ctx, "debt_warning", lang)
-	labels := EmailLabels(lang)
-
-	data := map[string]interface{}{
-		"Name":          displayName(user),
-		"Balance":       balance,
-		"AbsBalance":    math.Abs(balance),
-		"MonthlyFee":    monthlyFee,
-		"PaymentsID":    user.PaymentsID.String,
-		"PortalURL":     c.config.BaseURL,
-		"BankAccountCZ": c.config.BankAccountCZ,
-		"Content":       content,
-		"Labels":        labels,
-	}
-
-	if qr := c.generateEmailQR(user, balance, monthlyFee); qr != "" {
-		data["PaymentQRCode"] = qr
-		data["QRAmount"] = math.Max(math.Abs(balance), monthlyFee)
-	}
-
-	return c.QueueEmail(ctx, SendParams{
-		UserID:       sql.NullInt64{Int64: user.ID, Valid: true},
-		Recipient:    user.Email,
-		Subject:      content["subject"],
-		TemplateName: "debt_warning.html",
-		Data:         data,
-	})
-}
-
 // Debt reminder tiers. These are the template keys (no .html) shared by the
-// nightly cron, the admin fee-run preview and the manual reminder sender, so all
+// monthly cron, the admin fee-run preview and the manual reminder sender, so all
 // three agree on who gets which email.
 const (
 	TierDebtWarning     = "debt_warning"
@@ -906,18 +882,56 @@ func TemplateFileForTier(tier string) string {
 	return tier + ".html"
 }
 
-// SendDebtReminder queues the email for the given debt tier. Dispatching here
-// keeps the tier-to-email mapping in one place for both the cron job and the
-// admin's manual resend.
+// MonthlyFee resolves a member's monthly fee: their individual override when
+// set, otherwise their level's amount.
+func MonthlyFee(actualAmount, levelAmount string) float64 {
+	amount := actualAmount
+	if amount == "0" || amount == "" {
+		amount = levelAmount
+	}
+	var fee float64
+	fmt.Sscanf(amount, "%f", &fee)
+	return fee
+}
+
+// debtReminderData builds the template data for a membership debt reminder.
+// The QR amount is max(abs(balance), monthlyFee) — never less than one
+// month's fee.
+func (c *Client) debtReminderData(ctx context.Context, user *db.User, tier string, balance, monthlyFee float64) map[string]interface{} {
+	lang := userLang(user)
+	data := map[string]interface{}{
+		"Name":          displayName(user),
+		"Balance":       balance,
+		"AbsBalance":    math.Abs(balance),
+		"MonthlyFee":    monthlyFee,
+		"PaymentsID":    user.PaymentsID.String,
+		"PortalURL":     c.config.BaseURL,
+		"BankAccountCZ": c.config.BankAccountCZ,
+		"Content":       c.LoadContentBlocks(ctx, tier, lang),
+		"Labels":        EmailLabels(lang),
+	}
+	if qr := c.generateEmailQR(user, balance, monthlyFee); qr != "" {
+		data["PaymentQRCode"] = qr
+		data["QRAmount"] = math.Max(math.Abs(balance), monthlyFee)
+	}
+	return data
+}
+
+// SendDebtReminder queues the email for the given debt tier. The cron job and
+// the admin's manual sender both go through here, and the send-time check
+// re-renders through the same debtReminderData.
 func (c *Client) SendDebtReminder(ctx context.Context, user *db.User, tier string, balance, monthlyFee float64) error {
-	switch tier {
-	case TierDebtWarning:
-		return c.SendDebtWarning(ctx, user, balance, monthlyFee)
-	case TierNegativeBalance:
-		return c.SendNegativeBalance(ctx, user, balance, monthlyFee)
-	default:
+	if tier != TierDebtWarning && tier != TierNegativeBalance {
 		return fmt.Errorf("unknown debt tier: %q", tier)
 	}
+	data := c.debtReminderData(ctx, user, tier, balance, monthlyFee)
+	return c.QueueEmail(ctx, SendParams{
+		UserID:       sql.NullInt64{Int64: user.ID, Valid: true},
+		Recipient:    user.Email,
+		Subject:      data["Content"].(map[string]string)["subject"],
+		TemplateName: TemplateFileForTier(tier),
+		Data:         data,
+	})
 }
 
 // SendMembershipSuspended sends notification about membership suspension

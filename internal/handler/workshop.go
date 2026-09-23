@@ -284,7 +284,7 @@ func (h *Handler) CreateReservationHandler(w http.ResponseWriter, r *http.Reques
 		Subsystem: "workshop",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
-		Message:   fmt.Sprintf("Reservation created: resource %d, %s — %s", reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
+		Message:   fmt.Sprintf("Reservation created: resource %d, %s to %s", reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
 		Metadata:  logMetadata(map[string]interface{}{"reservation_id": reservation.ID, "resource_id": reservation.ResourceID, "note": req.Note}),
 	})
 
@@ -327,7 +327,7 @@ func (h *Handler) CancelReservationHandler(w http.ResponseWriter, r *http.Reques
 		Subsystem: "workshop",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
-		Message:   fmt.Sprintf("Reservation cancelled: resource %d, %s — %s", reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
+		Message:   fmt.Sprintf("Reservation cancelled: resource %d, %s to %s", reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
 		Metadata:  logMetadata(map[string]interface{}{"reservation_id": reservation.ID}),
 	})
 
@@ -373,7 +373,7 @@ func (h *Handler) UpdateReservationEndHandler(w http.ResponseWriter, r *http.Req
 		UserID: dbUser.ID,
 	})
 	if err == sql.ErrNoRows {
-		h.jsonError(w, "Nelze změnit konec — rezervace není vaše aktivní, nebo se nový termín překrývá s jinou rezervací", http.StatusConflict)
+		h.jsonError(w, "Nelze změnit konec: rezervace není vaše aktivní, nebo se nový termín překrývá s jinou rezervací", http.StatusConflict)
 		return
 	}
 	if err != nil {
@@ -385,7 +385,7 @@ func (h *Handler) UpdateReservationEndHandler(w http.ResponseWriter, r *http.Req
 		Subsystem: "workshop",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
-		Message:   fmt.Sprintf("Reservation end updated: resource %d, %s — %s", reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
+		Message:   fmt.Sprintf("Reservation end updated: resource %d, %s to %s", reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
 		Metadata:  logMetadata(map[string]interface{}{"reservation_id": reservation.ID, "new_end": endsAt}),
 	})
 

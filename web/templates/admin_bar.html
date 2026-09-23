@@ -148,7 +148,7 @@
             <div class="mt-3 flex items-center justify-between flex-wrap gap-2">
                 <p class="text-xs text-gray-400">
                     Počet prodaných kusů za hodinu, místní čas, celá historie.
-                    Odstín je relativní (podle pořadí hodnot), aby byly vidět i slabší hodiny — přesná čísla jsou v popisku buňky a v tabulce níž.
+                    Odstín je relativní (podle pořadí hodnot), aby byly vidět i slabší hodiny. Přesná čísla jsou v popisku buňky a v tabulce níž.
                 </p>
                 <div class="flex items-center gap-2 text-xs text-gray-400">
                     <span>méně</span>
@@ -197,7 +197,7 @@
             <h3 class="text-sm font-medium text-gray-700 mb-2">Podíl kategorií na tržbách</h3>
             <div class="bar-stack">
                 {{range .An.Categories}}
-                <div class="bar-cat-{{.Slot}}" style="width:{{printf "%.2f" .Pct}}%" title="{{.Name}} — {{fmtCZKWhole .Revenue}} Kč, {{.Units}} ks"></div>
+                <div class="bar-cat-{{.Slot}}" style="width:{{printf "%.2f" .Pct}}%" title="{{.Name}}: {{fmtCZKWhole .Revenue}} Kč, {{.Units}} ks"></div>
                 {{end}}
             </div>
             <div class="bar-legend">
@@ -341,7 +341,7 @@
                             </td>
                             <td class="px-4 py-2 text-right font-mono text-red-600">{{fmtCZK .Balance}} Kč</td>
                             <td class="px-4 py-2 text-gray-500">
-                                {{if .HasLast}}{{.Last.Format "02.01.2006"}} <span class="text-gray-400">({{.LastLabel}})</span>{{else}}—{{end}}
+                                {{if .HasLast}}{{.Last.Format "02.01.2006"}} <span class="text-gray-400">({{.LastLabel}})</span>{{else}}–{{end}}
                             </td>
                             <td class="px-4 py-2">
                                 {{if .Stale}}

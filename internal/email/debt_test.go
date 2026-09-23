@@ -5,6 +5,28 @@ import (
 	"time"
 )
 
+func TestMonthlyFee(t *testing.T) {
+	tests := []struct {
+		name                      string
+		actualAmount, levelAmount string
+		want                      float64
+	}{
+		{"individual override wins", "750", "1000", 750},
+		{"zero override falls back to the level", "0", "1000", 1000},
+		{"empty override falls back to the level", "", "1000", 1000},
+		{"decimal amount", "500.5", "1000", 500.5},
+		{"free level", "0", "0", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := MonthlyFee(tt.actualAmount, tt.levelAmount); got != tt.want {
+				t.Errorf("MonthlyFee(%q, %q) = %v, want %v",
+					tt.actualAmount, tt.levelAmount, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDebtTier(t *testing.T) {
 	tests := []struct {
 		name       string

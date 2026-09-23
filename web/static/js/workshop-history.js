@@ -157,7 +157,7 @@
         tr.appendChild(who);
 
         tr.appendChild(el('td', 'py-1.5 pr-4 text-gray-500 whitespace-nowrap', fmtRange(entry.starts_at, entry.ends_at)));
-        tr.appendChild(el('td', 'py-1.5 text-gray-400 italic whitespace-nowrap', entry.note || '—'));
+        tr.appendChild(el('td', 'py-1.5 text-gray-400 italic whitespace-nowrap', entry.note || '–'));
         return tr;
     }
 

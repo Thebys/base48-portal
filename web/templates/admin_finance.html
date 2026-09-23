@@ -37,7 +37,7 @@
     <details class="bg-white shadow rounded-lg mb-8">
         <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">
             <div>
-                <h2 class="text-lg font-semibold text-gray-900 inline">Simulace fee runu — {{.PreviewPeriod}}</h2>
+                <h2 class="text-lg font-semibold text-gray-900 inline">Simulace fee runu: {{.PreviewPeriod}}</h2>
                 <span class="ml-2 text-sm text-gray-500">({{len .FeePreview}} fees, celkem {{.PreviewTotalFees}} Kč)</span>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -82,7 +82,7 @@
                                 {{ else if eq .EmailTier "negative_balance" }}
                                 <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">negative balance</span>
                                 {{ else }}
-                                <span class="text-gray-400">—</span>
+                                <span class="text-gray-400">–</span>
                                 {{ end }}
                             </td>
                         </tr>
@@ -187,7 +187,7 @@
                                 {{ if .Blocked }}
                                 <span class="text-amber-700">⚠ {{.BlockReason}}</span>
                                 {{ else if .LastRemindedAt.IsZero }}
-                                <span class="text-gray-400">—</span>
+                                <span class="text-gray-400">–</span>
                                 {{ else }}
                                 <span class="text-gray-500">před {{.LastRemindedDays}} dny</span>
                                 {{ end }}
@@ -227,7 +227,7 @@
                             <td class="px-4 py-2 text-sm font-medium text-blue-900 whitespace-nowrap">
                                 {{.Prediction.Period}} <span class="text-xs text-blue-600">(predikce)</span>
                             </td>
-                            <td class="px-4 py-2 text-sm text-right text-blue-700">—</td>
+                            <td class="px-4 py-2 text-sm text-right text-blue-700">–</td>
                             <td class="px-4 py-2 text-sm text-right text-blue-700 italic">~{{.Prediction.PaymentTotal}} Kč</td>
                             <td class="px-4 py-2 text-sm text-right text-blue-700">{{.Prediction.FeeCount}}</td>
                             <td class="px-4 py-2 text-sm text-right text-blue-700">{{.Prediction.FeeTotal}} Kč</td>
@@ -288,7 +288,7 @@
                             <td class="px-4 py-2 text-sm text-gray-500">{{.ID}}</td>
                             <td class="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">{{.Date.Format "02.01.2006"}}</td>
                             <td class="px-4 py-2 text-sm text-right text-green-600 font-medium whitespace-nowrap">+{{.Amount}} Kč</td>
-                            <td class="px-4 py-2 text-sm">{{ if .Identification }}<span class="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">{{.Identification}}</span>{{ else }}<span class="text-gray-400">—</span>{{ end }}</td>
+                            <td class="px-4 py-2 text-sm">{{ if .Identification }}<span class="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-xs">{{.Identification}}</span>{{ else }}<span class="text-gray-400">–</span>{{ end }}</td>
                             <td class="px-4 py-2 text-sm text-gray-500">{{.RemoteAccount}}</td>
                         </tr>
                         {{ end }}
@@ -421,7 +421,7 @@ function queueDebtEmails() {
         if (data.skipped && data.skipped.length > 0) {
             html += '<ul class="mt-2 list-disc list-inside">';
             data.skipped.forEach(s => {
-                html += '<li>' + (s.email || ('#' + s.user_id)) + ' — ' + s.reason + '</li>';
+                html += '<li>' + (s.email || ('#' + s.user_id)) + ': ' + s.reason + '</li>';
             });
             html += '</ul>';
         }

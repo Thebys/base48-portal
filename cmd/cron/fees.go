@@ -9,12 +9,11 @@ import (
 
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
-	"github.com/base48/member-portal/internal/email"
-	"github.com/base48/member-portal/internal/qrpay"
 )
 
-// runFees creates monthly membership fee records for all accepted members
-// and sends debt warning emails where appropriate.
+// runFees creates monthly membership fee records for all accepted members.
+// It sends no email: debt reminders are runDebtEmails' job, which the daemon
+// runs right after this.
 //
 // Usage:
 //
@@ -24,10 +23,6 @@ import (
 //
 //	0 0 1 * * cd /path/to/portal && ./portal-cron fees >> logs/fees.log 2>&1
 func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
-	qrService := qrpay.NewService(cfg.BankIBAN, cfg.BankBIC)
-	emailClient := email.New(cfg, queries, qrService)
-	emailClient.DefaultDelay = 72 * time.Hour // Delay debt emails so admin can review/cancel
-
 	// Získáme první den aktuálního měsíce
 	now := time.Now()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
@@ -45,7 +40,6 @@ func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	created := 0
 	skipped := 0
 	errors := 0
-	emailsSent := 0
 
 	for _, user := range users {
 		// Zkontrolujeme, jestli už fee pro tento měsíc neexistuje
@@ -83,47 +77,6 @@ func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 
 		log.Printf("  ✓ Created fee for %s: %s Kč (fee_id: %d)", user.Email, fee.Amount, fee.ID)
 		created++
-
-		// Po vytvoření fee zkontrolujeme balance a případně pošleme upozornění
-		balance, err := queries.GetUserBalance(ctx, db.GetUserBalanceParams{
-			UserID:   sql.NullInt64{Int64: user.ID, Valid: true},
-			UserID_2: user.ID,
-		})
-		if err != nil {
-			log.Printf("  ⚠ Failed to get balance for %s: %v", user.Email, err)
-			continue
-		}
-
-		// Zkontrolujeme dluh a pošleme příslušný e-mail
-		var monthlyFee float64
-		fmt.Sscanf(feeAmount, "%f", &monthlyFee)
-		balanceFloat := float64(balance)
-
-		if monthlyFee > 0 && (balanceFloat <= -(2*monthlyFee) || balanceFloat <= -monthlyFee) {
-			fullUser, err := queries.GetUserByID(ctx, user.ID)
-			if err != nil {
-				log.Printf("  ⚠ Failed to get user record for email: %v", err)
-				continue
-			}
-
-			if balanceFloat <= -(2 * monthlyFee) {
-				// Tier 2: dluh >= 2× fee — závažné upozornění
-				if err := emailClient.SendDebtWarning(ctx, &fullUser, balanceFloat, monthlyFee); err != nil {
-					log.Printf("  ⚠ Failed to send debt warning email: %v", err)
-				} else {
-					log.Printf("  ✉ Sent debt warning email (balance: %.0f Kč)", balanceFloat)
-					emailsSent++
-				}
-			} else {
-				// Tier 1: dluh >= 1× fee — mírné upozornění
-				if err := emailClient.SendNegativeBalance(ctx, &fullUser, balanceFloat, monthlyFee); err != nil {
-					log.Printf("  ⚠ Failed to send negative balance email: %v", err)
-				} else {
-					log.Printf("  ✉ Sent negative balance email (balance: %.0f Kč)", balanceFloat)
-					emailsSent++
-				}
-			}
-		}
 	}
 
 	log.Printf("\nSummary:")
@@ -131,7 +84,6 @@ func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	log.Printf("  Total users: %d", len(users))
 	log.Printf("  Created: %d", created)
 	log.Printf("  Skipped (already exists): %d", skipped)
-	log.Printf("  Debt warning emails sent: %d", emailsSent)
 	log.Printf("  Errors: %d", errors)
 
 	// Log cron job completion
@@ -143,8 +95,8 @@ func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 		Subsystem: "cron",
 		Level:     level,
 		UserID:    sql.NullInt64{},
-		Message:   fmt.Sprintf("Monthly fees created for %s: %d fees, %d emails sent", periodStart.Format("2006-01"), created, emailsSent),
-		Metadata:  sql.NullString{String: fmt.Sprintf(`{"period":"%s","created":%d,"skipped":%d,"emails":%d,"errors":%d}`, periodStart.Format("2006-01"), created, skipped, emailsSent, errors), Valid: true},
+		Message:   fmt.Sprintf("Monthly fees created for %s: %d fees", periodStart.Format("2006-01"), created),
+		Metadata:  sql.NullString{String: fmt.Sprintf(`{"period":"%s","created":%d,"skipped":%d,"errors":%d}`, periodStart.Format("2006-01"), created, skipped, errors), Valid: true},
 	})
 
 	if errors > 0 {

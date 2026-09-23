@@ -57,7 +57,7 @@ func Run(db *sql.DB, fsys fs.FS) error {
 		}
 
 		if isApplied(db, version) {
-			log.Printf("[Migrate] %s — already applied", f.Name())
+			log.Printf("[Migrate] %s: already applied", f.Name())
 			continue
 		}
 
@@ -71,7 +71,7 @@ func Run(db *sql.DB, fsys fs.FS) error {
 		}
 
 		db.Exec("INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", version)
-		log.Printf("[Migrate] %s — applied", f.Name())
+		log.Printf("[Migrate] %s: applied", f.Name())
 	}
 
 	return nil

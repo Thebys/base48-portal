@@ -180,7 +180,7 @@ func (h *Handler) AdminCreateReservationHandler(w http.ResponseWriter, r *http.R
 		Subsystem: "workshop",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: targetUser.ID, Valid: true},
-		Message:   fmt.Sprintf("Reservation created by admin for %s: resource %d, %s — %s", targetUser.Email, reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
+		Message:   fmt.Sprintf("Reservation created by admin for %s: resource %d, %s to %s", targetUser.Email, reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
 		Metadata:  logMetadata(map[string]interface{}{"reservation_id": reservation.ID, "resource_id": reservation.ResourceID, "created_by": adminUser.ID, "note": req.Note}),
 	})
 
@@ -223,7 +223,7 @@ func (h *Handler) AdminBumpReservationHandler(w http.ResponseWriter, r *http.Req
 		Subsystem: "workshop",
 		Level:     "warning",
 		UserID:    sql.NullInt64{Int64: reservation.UserID, Valid: true},
-		Message:   fmt.Sprintf("Reservation bumped by admin: resource %d, %s — %s", reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
+		Message:   fmt.Sprintf("Reservation bumped by admin: resource %d, %s to %s", reservation.ResourceID, reservation.StartsAt, reservation.EndsAt),
 		Metadata:  logMetadata(map[string]interface{}{"reservation_id": reservation.ID, "bumped_by": dbUser.ID}),
 	})
 

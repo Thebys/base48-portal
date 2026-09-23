@@ -90,7 +90,7 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 			feeAmount = user.LevelAmount
 		}
 
-		feeFloat := monthlyFeeOf(user.LevelActualAmount, user.LevelAmount)
+		feeFloat := email.MonthlyFee(user.LevelActualAmount, user.LevelAmount)
 
 		balance := balanceMap[user.ID]
 

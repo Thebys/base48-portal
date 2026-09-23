@@ -392,6 +392,28 @@ WHERE user_id = ? AND template_name = ?
 ORDER BY created_at DESC
 LIMIT 1;
 
+-- name: GetRecentEmailByUserAndTemplateWithin :one
+-- Anti-spam with a caller-chosen window, given as an SQLite modifier such as
+-- '-14 days'. Used by reminders whose interval is an admin setting.
+SELECT * FROM email_outbox
+WHERE user_id = sqlc.arg(user_id) AND template_name = sqlc.arg(template_name)
+  AND status IN ('pending', 'sent')
+  AND created_at > datetime('now', sqlc.arg(window))
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: UpdateEmailOutboxContent :exec
+-- Re-render a still-pending email just before it leaves, so it quotes the
+-- figure as it stands at send time rather than at queue time. Subject and
+-- template may change too, e.g. a debt warning that has shrunk to a plain
+-- negative-balance reminder.
+UPDATE email_outbox SET
+    subject = sqlc.arg(subject),
+    template_name = sqlc.arg(template_name),
+    template_data = sqlc.arg(template_data),
+    rendered_html = sqlc.arg(rendered_html)
+WHERE id = sqlc.arg(id) AND status = 'pending';
+
 -- ============================================================================
 -- EMAIL TEMPLATE CONTENT (editable text blocks)
 -- ============================================================================
@@ -414,6 +436,11 @@ ON CONFLICT(key) DO UPDATE SET
     value = excluded.value,
     updated_at = CURRENT_TIMESTAMP
 RETURNING *;
+
+-- name: DeleteEmailTemplateContent :exec
+-- Drop an override so the block falls back to the default text in code.
+DELETE FROM email_template_content
+WHERE template_name = ? AND block_name = ? AND lang = ?;
 
 -- name: UpsertEmailTemplateContent :one
 INSERT INTO email_template_content (template_name, block_name, lang, content, updated_by)
@@ -547,6 +574,16 @@ SELECT * FROM revbank_transactions ORDER BY created_at DESC LIMIT ?;
 -- cannot be expressed here at all. Deliberately unordered -- computeBarAnalytics
 -- sorts, because it is the code that depends on the order.
 SELECT * FROM revbank_transactions;
+
+-- name: ListAcceptedBarDebtors :many
+-- Accepted members whose linked bar account is at or below the given balance
+-- (a negative number of cents, see BarDebtSettings.MaxBalanceCents). Deepest debt first.
+SELECT u.id AS user_id, u.email, ra.username AS bar_username, ra.balance_cents
+FROM revbank_accounts ra
+JOIN users u ON u.id = ra.user_id
+WHERE u.state = 'accepted'
+  AND ra.balance_cents <= sqlc.arg(max_balance_cents)
+ORDER BY ra.balance_cents ASC;
 
 -- name: ListAcceptedUsersWithUsername :many
 SELECT id, username, realname, email, state

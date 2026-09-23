@@ -342,7 +342,7 @@ func (h *Handler) AdminBarCardsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"Title":   "Bar — Kartičky",
+		"Title":   "Bar: Kartičky",
 		"User":    user,
 		"DBUser":  adminDBUser,
 		"Members": members,
@@ -361,7 +361,7 @@ func (h *Handler) AdminBarGuidesHandler(w http.ResponseWriter, r *http.Request) 
 	})
 
 	data := map[string]interface{}{
-		"Title":  "Bar — Návody",
+		"Title":  "Bar: Návody",
 		"User":   user,
 		"DBUser": adminDBUser,
 	}

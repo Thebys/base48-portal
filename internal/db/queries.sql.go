@@ -620,6 +620,23 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deleteEmailTemplateContent = `-- name: DeleteEmailTemplateContent :exec
+DELETE FROM email_template_content
+WHERE template_name = ? AND block_name = ? AND lang = ?
+`
+
+type DeleteEmailTemplateContentParams struct {
+	TemplateName string `json:"template_name"`
+	BlockName    string `json:"block_name"`
+	Lang         string `json:"lang"`
+}
+
+// Drop an override so the block falls back to the default text in code.
+func (q *Queries) DeleteEmailTemplateContent(ctx context.Context, arg DeleteEmailTemplateContentParams) error {
+	_, err := q.db.ExecContext(ctx, deleteEmailTemplateContent, arg.TemplateName, arg.BlockName, arg.Lang)
+	return err
+}
+
 const deleteFee = `-- name: DeleteFee :exec
 DELETE FROM fees WHERE id = ?
 `
@@ -1064,6 +1081,45 @@ func (q *Queries) GetRecentEmailByUserAndTemplate(ctx context.Context, arg GetRe
 	return i, err
 }
 
+const getRecentEmailByUserAndTemplateWithin = `-- name: GetRecentEmailByUserAndTemplateWithin :one
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox
+WHERE user_id = ?1 AND template_name = ?2
+  AND status IN ('pending', 'sent')
+  AND created_at > datetime('now', ?3)
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetRecentEmailByUserAndTemplateWithinParams struct {
+	UserID       sql.NullInt64 `json:"user_id"`
+	TemplateName string        `json:"template_name"`
+	Window       interface{}   `json:"window"`
+}
+
+// Anti-spam with a caller-chosen window, given as an SQLite modifier such as
+// '-14 days'. Used by reminders whose interval is an admin setting.
+func (q *Queries) GetRecentEmailByUserAndTemplateWithin(ctx context.Context, arg GetRecentEmailByUserAndTemplateWithinParams) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, getRecentEmailByUserAndTemplateWithin, arg.UserID, arg.TemplateName, arg.Window)
+	var i EmailOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getReservation = `-- name: GetReservation :one
 SELECT id, resource_id, user_id, starts_at, ends_at, note, state, ended_by, created_at, updated_at FROM reservations WHERE id = ? LIMIT 1
 `
@@ -1418,6 +1474,52 @@ func (q *Queries) LinkKeycloakID(ctx context.Context, arg LinkKeycloakIDParams) 
 		&i.Locale,
 	)
 	return i, err
+}
+
+const listAcceptedBarDebtors = `-- name: ListAcceptedBarDebtors :many
+SELECT u.id AS user_id, u.email, ra.username AS bar_username, ra.balance_cents
+FROM revbank_accounts ra
+JOIN users u ON u.id = ra.user_id
+WHERE u.state = 'accepted'
+  AND ra.balance_cents <= ?1
+ORDER BY ra.balance_cents ASC
+`
+
+type ListAcceptedBarDebtorsRow struct {
+	UserID       int64  `json:"user_id"`
+	Email        string `json:"email"`
+	BarUsername  string `json:"bar_username"`
+	BalanceCents int64  `json:"balance_cents"`
+}
+
+// Accepted members whose linked bar account is at or below the given balance
+// (a negative number of cents). Deepest debt first.
+func (q *Queries) ListAcceptedBarDebtors(ctx context.Context, maxBalanceCents int64) ([]ListAcceptedBarDebtorsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAcceptedBarDebtors, maxBalanceCents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAcceptedBarDebtorsRow{}
+	for rows.Next() {
+		var i ListAcceptedBarDebtorsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Email,
+			&i.BarUsername,
+			&i.BalanceCents,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAcceptedUsersForFees = `-- name: ListAcceptedUsersForFees :many
@@ -2693,6 +2795,38 @@ func (q *Queries) UndismissPayment(ctx context.Context, id int64) (Payment, erro
 		&i.DismissedReason,
 	)
 	return i, err
+}
+
+const updateEmailOutboxContent = `-- name: UpdateEmailOutboxContent :exec
+UPDATE email_outbox SET
+    subject = ?1,
+    template_name = ?2,
+    template_data = ?3,
+    rendered_html = ?4
+WHERE id = ?5 AND status = 'pending'
+`
+
+type UpdateEmailOutboxContentParams struct {
+	Subject      string         `json:"subject"`
+	TemplateName string         `json:"template_name"`
+	TemplateData sql.NullString `json:"template_data"`
+	RenderedHtml sql.NullString `json:"rendered_html"`
+	ID           int64          `json:"id"`
+}
+
+// Re-render a still-pending email just before it leaves, so it quotes the
+// figure as it stands at send time rather than at queue time. Subject and
+// template may change too, e.g. a debt warning that has shrunk to a plain
+// negative-balance reminder.
+func (q *Queries) UpdateEmailOutboxContent(ctx context.Context, arg UpdateEmailOutboxContentParams) error {
+	_, err := q.db.ExecContext(ctx, updateEmailOutboxContent,
+		arg.Subject,
+		arg.TemplateName,
+		arg.TemplateData,
+		arg.RenderedHtml,
+		arg.ID,
+	)
+	return err
 }
 
 const updateEmailOutboxStatus = `-- name: UpdateEmailOutboxStatus :one

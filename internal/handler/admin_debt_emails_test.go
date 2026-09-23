@@ -16,28 +16,6 @@ import (
 	"github.com/base48/member-portal/internal/qrpay"
 )
 
-func TestMonthlyFeeOf(t *testing.T) {
-	tests := []struct {
-		name                      string
-		actualAmount, levelAmount string
-		want                      float64
-	}{
-		{"individual override wins", "750", "1000", 750},
-		{"zero override falls back to the level", "0", "1000", 1000},
-		{"empty override falls back to the level", "", "1000", 1000},
-		{"decimal amount", "500.5", "1000", 500.5},
-		{"free level", "0", "0", 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := monthlyFeeOf(tt.actualAmount, tt.levelAmount); got != tt.want {
-				t.Errorf("monthlyFeeOf(%q, %q) = %v, want %v",
-					tt.actualAmount, tt.levelAmount, got, tt.want)
-			}
-		})
-	}
-}
-
 // seedMember creates an accepted member on a fee level, optionally with a
 // payment, and returns their id. Fees are what push a balance negative.
 func seedMember(t *testing.T, database *sql.DB, email, vs string, fee int, paid int) int64 {

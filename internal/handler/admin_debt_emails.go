@@ -103,7 +103,7 @@ func (h *Handler) buildDebtCandidates(ctx context.Context) ([]DebtCandidate, err
 
 	var candidates []DebtCandidate
 	for _, user := range users {
-		monthlyFee := monthlyFeeOf(user.LevelActualAmount, user.LevelAmount)
+		monthlyFee := email.MonthlyFee(user.LevelActualAmount, user.LevelAmount)
 		balance := balances[user.ID]
 
 		tier := email.DebtTier(float64(balance), monthlyFee)
@@ -158,18 +158,6 @@ func (h *Handler) buildDebtCandidates(ctx context.Context) ([]DebtCandidate, err
 	return candidates, nil
 }
 
-// monthlyFeeOf resolves a member's monthly fee: their individual override when
-// set, otherwise their level's amount.
-func monthlyFeeOf(actualAmount, levelAmount string) float64 {
-	amount := actualAmount
-	if amount == "0" || amount == "" {
-		amount = levelAmount
-	}
-	var fee float64
-	fmt.Sscanf(amount, "%f", &fee)
-	return fee
-}
-
 // debtNotifyResult reports what happened to one selected member.
 type debtNotifyResult struct {
 	UserID int64  `json:"user_id"`
@@ -206,7 +194,7 @@ func (h *Handler) AdminQueueDebtEmailsHandler(w http.ResponseWriter, r *http.Req
 	// QueueEmail drops everything silently when email is switched off, which
 	// would report a queued batch the admin would then never find in the outbox.
 	if !h.config.EmailEnabled {
-		h.jsonError(w, "E-maily jsou vypnuté (EMAIL_ENABLED=false) — nic se nezařadilo", http.StatusConflict)
+		h.jsonError(w, "E-maily jsou vypnuté (EMAIL_ENABLED=false), nic se nezařadilo", http.StatusConflict)
 		return
 	}
 	if req.DelayHours < 0 {

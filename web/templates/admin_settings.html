@@ -92,6 +92,70 @@
         </details>
     </div>
 
+    <!-- Bar Debt Reminder Section -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex flex-wrap justify-between items-center gap-2 p-6 hover:bg-gray-50 transition-colors">
+                    <div>
+                        <h2 class="text-lg font-medium text-gray-900">Upozornění na dluh na baru</h2>
+                        <p class="mt-1 text-sm text-gray-500">Automatický e-mail členům, jejichž dluh na barovém kiosku přesáhne nastavenou hranici</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{if .BarDebt.Enabled}}
+                        <span class="badge badge-success">Zapnuto</span>
+                        {{else}}
+                        <span class="badge badge-gray">Vypnuto</span>
+                        {{end}}
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="bar-debt-enabled" class="sr-only peer" {{if .BarDebt.Enabled}}checked{{end}}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                        <span class="text-sm text-gray-700">Posílat upozornění</span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div>
+                            <label for="bar-debt-threshold" class="block text-sm font-medium text-gray-700 mb-1">Hranice dluhu (Kč)</label>
+                            <input type="number" id="bar-debt-threshold" min="1" max="100000" step="1" value="{{.BarDebt.ThresholdCZK}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">Upozornit, když dluh přesáhne {{.BarDebt.ThresholdCZK}}&nbsp;Kč</p>
+                        </div>
+                        <div>
+                            <label for="bar-debt-interval" class="block text-sm font-medium text-gray-700 mb-1">Opakovat nejdříve po (dnech)</label>
+                            <input type="number" id="bar-debt-interval" min="1" max="365" step="1" value="{{.BarDebt.IntervalDays}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">Dokud dluh trvá</p>
+                        </div>
+                        <div>
+                            <label for="bar-debt-delay" class="block text-sm font-medium text-gray-700 mb-1">Čekání v outboxu (hodin)</label>
+                            <input type="number" id="bar-debt-delay" min="0" max="168" step="1" value="{{.BarDebt.DelayHours}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">Čas na zrušení před odesláním</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Kontrola běží jednou denně od 10:00. Těsně před odesláním se zůstatek ověří znovu: kdo mezitím dobil, tomu se e-mail zruší, ostatním odejde s aktuální částkou.
+                        Posílá se jen aktivním členům s propojeným barovým účtem. Text e-mailu se upravuje níže v sekci <em>Šablony e-mailů</em> (šablona „Dluh na baru“).
+                    </p>
+                    <p class="text-sm text-gray-600">
+                        Nad aktuální hranicí je teď <strong id="bar-debt-count">{{.BarDebtorsNow}}</strong> členů.
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <button onclick="saveBarDebtSettings()" class="btn btn-sm btn-primary">Uložit</button>
+                        <span id="bar-debt-status" class="text-sm hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </details>
+    </div>
+
     <!-- Email Outbox Section (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group" open>
@@ -303,6 +367,14 @@ BANK_ACCOUNT_CZ=2800691518/2010</pre>
                                     <p class="mt-1 text-xs text-gray-500">Kritický dluh, členství pozastaveno</p>
                                 </div>
                             </button>
+
+                            <button type="button" onclick="sendTestEmail('bar_debt')"
+                                    class="test-email-btn relative flex items-start p-4 border border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-medium text-gray-900">Dluh na baru</h3>
+                                    <p class="mt-1 text-xs text-gray-500">Dluh na barovém kiosku nad nastavenou hranicí</p>
+                                </div>
+                            </button>
                         </div>
                     </div>
 
@@ -335,6 +407,7 @@ BANK_ACCOUNT_CZ=2800691518/2010</pre>
                             <option value="negative_balance">Záporný zůstatek</option>
                             <option value="debt_warning">Varování před dluhem</option>
                             <option value="membership_suspended">Členství pozastaveno</option>
+                            <option value="bar_debt">Dluh na baru</option>
                         </select>
                     </div>
                     <div>
@@ -410,6 +483,12 @@ const blockLabels = {
     'footer': 'Patička',
 };
 
+// Template text goes into innerHTML; without escaping, a "<" or "&" in it
+// would be parsed as markup and the block would come back mangled on save.
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function loadTemplateContent() {
     const templateName = document.getElementById('template-type').value;
     const fieldsDiv = document.getElementById('template-fields');
@@ -453,7 +532,7 @@ function loadTemplateContent() {
             html += `
                 <div>
                     <label>${label}${modifiedMark}</label>
-                    <textarea id="block-${block.name}" rows="${rows}" data-default="${encodeURIComponent(block.default)}">${block.current}</textarea>
+                    <textarea id="block-${block.name}" rows="${rows}" data-default="${encodeURIComponent(block.default)}">${escapeHtml(block.current)}</textarea>
                 </div>
             `;
         });
@@ -508,6 +587,37 @@ function previewTemplate() {
         }
     })
     .catch(err => showTemplateStatus('error', 'Chyba: ' + err.message));
+}
+
+function saveBarDebtSettings() {
+    const status = document.getElementById('bar-debt-status');
+    fetch('/api/admin/bar-debt-settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            enabled: document.getElementById('bar-debt-enabled').checked,
+            threshold_czk: parseInt(document.getElementById('bar-debt-threshold').value, 10) || 0,
+            interval_days: parseInt(document.getElementById('bar-debt-interval').value, 10) || 0,
+            delay_hours: parseInt(document.getElementById('bar-debt-delay').value, 10),
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        status.classList.remove('hidden', 'text-green-600', 'text-red-600');
+        if (data.success) {
+            status.classList.add('text-green-600');
+            status.textContent = data.message || 'Uloženo';
+            document.getElementById('bar-debt-count').textContent = data.debtors;
+        } else {
+            status.classList.add('text-red-600');
+            status.textContent = data.error || 'Chyba';
+        }
+    })
+    .catch(err => {
+        status.classList.remove('hidden', 'text-green-600');
+        status.classList.add('text-red-600');
+        status.textContent = 'Chyba: ' + err.message;
+    });
 }
 
 function retryEmail(id) {

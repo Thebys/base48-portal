@@ -14,8 +14,11 @@ import (
 )
 
 // runDebtEmails checks all accepted members' balances and queues debt warning
-// emails for those with negative balances. Safe to run repeatedly — anti-spam
-// check prevents sending the same email type to the same user within 30 days.
+// emails for those with negative balances. The daemon runs it on the 1st, right
+// after the monthly fees. Safe to run repeatedly — anti-spam check prevents
+// sending the same email type to the same user within 30 days. Each reminder
+// waits 72h in the outbox and is re-checked against the live balance just
+// before it leaves (see email.refreshBeforeSend).
 //
 // Usage:
 //
@@ -40,13 +43,7 @@ func runDebtEmails(ctx context.Context, cfg *config.Config, queries *db.Queries)
 	errors := 0
 
 	for _, user := range users {
-		// Determine monthly fee
-		feeAmount := user.LevelActualAmount
-		if feeAmount == "0" || feeAmount == "" {
-			feeAmount = user.LevelAmount
-		}
-		var monthlyFee float64
-		fmt.Sscanf(feeAmount, "%f", &monthlyFee)
+		monthlyFee := email.MonthlyFee(user.LevelActualAmount, user.LevelAmount)
 		if monthlyFee <= 0 {
 			continue
 		}
@@ -78,7 +75,7 @@ func runDebtEmails(ctx context.Context, cfg *config.Config, queries *db.Queries)
 			TemplateName: templateName,
 		})
 		if err == nil && recent.ID > 0 {
-			log.Printf("  ⊘ Skipping %s — %s already queued on %s", user.Email, templateName, recent.CreatedAt.Format("2006-01-02"))
+			log.Printf("  ⊘ Skipping %s: %s already queued on %s", user.Email, templateName, recent.CreatedAt.Format("2006-01-02"))
 			skipped++
 			continue
 		}

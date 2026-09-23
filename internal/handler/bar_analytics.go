@@ -667,7 +667,7 @@ func computeBarAnalytics(rows []db.RevbankTransaction, accounts []db.RevbankAcco
 			Revenue: b.rev,
 			Count:   b.count,
 			Buyers:  len(b.users),
-			Title: fmt.Sprintf("Týden od %s — %s Kč, %d ks, %d lidí",
+			Title: fmt.Sprintf("Týden od %s: %s Kč, %d ks, %d lidí",
 				wk.Format("2.1.2006"), formatCentsAsWholeCZK(b.rev), b.count, len(b.users)),
 		}
 		if axisMax > 0 {
@@ -781,10 +781,10 @@ func computeBarAnalytics(rows []db.RevbankTransaction, accounts []db.RevbankAcco
 			cell := BarHeatCell{Hour: hi, Count: grid[di][hi]}
 			if cell.Count > 0 {
 				cell.Step = heatStep(cell.Count)
-				cell.Title = fmt.Sprintf("%s %02d:00 — %d ks, %s Kč",
+				cell.Title = fmt.Sprintf("%s %02d:00: %d ks, %s Kč",
 					dayNames[di], hi, cell.Count, formatCentsAsWholeCZK(gridRev[di][hi]))
 			} else {
-				cell.Title = fmt.Sprintf("%s %02d:00 — nic", dayNames[di], hi)
+				cell.Title = fmt.Sprintf("%s %02d:00: nic", dayNames[di], hi)
 			}
 			row.Cells = append(row.Cells, cell)
 		}

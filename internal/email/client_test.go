@@ -12,16 +12,18 @@ import (
 // character cannot pass unnoticed.
 var templateSubjects = []string{
 	"Tvůj účet v Base48 je připraven",
-	"Vítej v Base48 — jsi členem!",
+	"Vítej v Base48, jsi členem!",
 	"Záporná bilance členského příspěvku",
 	"⚠️ Upozornění na dluh za členství",
 	"Pozastavení členství v Base48",
 	"Nezaplacené členské příspěvky v Base48",
 	"Your Base48 account is ready",
-	"Welcome to Base48 — you're a member!",
+	"Welcome to Base48, you're a member!",
 	"Negative membership fee balance",
 	"⚠️ Membership debt warning",
 	"Base48 membership suspended",
+	"Dluh na baru v Base48",
+	"Your Base48 bar tab is in debt",
 }
 
 func testClient(fromName string) *Client {

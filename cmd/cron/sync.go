@@ -28,12 +28,15 @@ import (
 //
 //	*/2 * * * * cd /path/to/portal && ./portal-cron sync >> logs/fio-sync.log 2>&1
 func runSync(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
+	// Without a token only the bank fetch is skipped: debt roles and the
+	// outbox worker do not depend on it, and a scheduled email must not sit
+	// forever just because FIO is unconfigured (the test overlay blanks it).
+	fioErrors := 0
 	if cfg.BankFIOToken == "" {
-		log.Println("BANK_FIO_TOKEN is required")
-		return 1
+		log.Println("ℹ Skipping FIO sync (no BANK_FIO_TOKEN)")
+	} else {
+		fioErrors = syncFIO(ctx, cfg, queries)
 	}
-
-	fioErrors := syncFIO(ctx, cfg, queries)
 	debtErrors := updateDebtStatus(ctx, cfg, queries)
 	processScheduledEmails(ctx, cfg, queries)
 

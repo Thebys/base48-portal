@@ -181,6 +181,7 @@ func main() {
 		r.Post("/email/cancel", h.RequireAdmin(h.AdminCancelEmailHandler))
 		r.Post("/email/send-now", h.RequireAdmin(h.AdminSendNowEmailHandler))
 		r.Post("/email/debt-notify", h.RequireAdmin(h.AdminQueueDebtEmailsHandler))
+		r.Post("/bar-debt-settings", h.RequireAdmin(h.AdminSaveBarDebtSettingsHandler))
 		r.Post("/email/preview", h.RequireAdmin(h.AdminPreviewEmailHandler))
 		r.Post("/banner", h.RequireAdmin(h.AdminSaveBannerHandler))
 		r.Post("/awaiting-message", h.RequireAdmin(h.AdminSaveAwaitingMessageHandler))

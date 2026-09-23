@@ -620,7 +620,7 @@ func (h *Handler) AdminAllocateUserVSHandler(w http.ResponseWriter, r *http.Requ
 	existingUser, err := h.queries.GetUserByPaymentsID(ctx, sql.NullString{String: vs, Valid: true})
 	if err == nil && existingUser.ID != userID {
 		msg := fmt.Sprintf("VS '%s' je již přiřazen uživateli %s (ID %d)", vs, existingUser.Email, existingUser.ID)
-		log.Printf("[VS] CONFLICT: %s — attempted by admin for user ID %d", msg, userID)
+		log.Printf("[VS] CONFLICT: %s (attempted by admin for user ID %d)", msg, userID)
 		h.queries.CreateLog(ctx, db.CreateLogParams{
 			Subsystem: "admin",
 			Level:     "error",
@@ -635,7 +635,7 @@ func (h *Handler) AdminAllocateUserVSHandler(w http.ResponseWriter, r *http.Requ
 	existingProjectVS, err := h.queries.GetProjectVSByVS(ctx, vs)
 	if err == nil {
 		msg := fmt.Sprintf("VS '%s' je již použit projektem (project_id %d)", vs, existingProjectVS.ProjectID)
-		log.Printf("[VS] CONFLICT: %s — attempted by admin for user ID %d", msg, userID)
+		log.Printf("[VS] CONFLICT: %s (attempted by admin for user ID %d)", msg, userID)
 		h.queries.CreateLog(ctx, db.CreateLogParams{
 			Subsystem: "admin",
 			Level:     "error",

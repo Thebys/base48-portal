@@ -44,7 +44,7 @@
                             {{ if .Identification }}
                             <span class="font-mono bg-gray-100 px-2 py-1 rounded text-xs">{{.Identification}}</span>
                             {{ else }}
-                            <span class="text-gray-400">—</span>
+                            <span class="text-gray-400">–</span>
                             {{ end }}
                         </td>
                         <td class="px-3 py-3 whitespace-nowrap text-sm">
@@ -57,10 +57,10 @@
                             {{ end }}
                         </td>
                         <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{.LocalAccount}}">
-                            {{ if .LocalAccount }}{{.LocalAccount}}{{ else }}<span class="text-gray-400">—</span>{{ end }}
+                            {{ if .LocalAccount }}{{.LocalAccount}}{{ else }}<span class="text-gray-400">–</span>{{ end }}
                         </td>
                         <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{.RemoteAccount}}">
-                            {{ if .RemoteAccount }}{{.RemoteAccount}}{{ else }}<span class="text-gray-400">—</span>{{ end }}
+                            {{ if .RemoteAccount }}{{.RemoteAccount}}{{ else }}<span class="text-gray-400">–</span>{{ end }}
                         </td>
                         <td class="px-3 py-3 whitespace-nowrap text-sm">
                             {{ if .UserName }}
@@ -68,11 +68,11 @@
                             {{ else if .ProjectName }}
                             <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">{{.ProjectName}}</span>
                             {{ else }}
-                            <span class="text-gray-400">—</span>
+                            <span class="text-gray-400">–</span>
                             {{ end }}
                         </td>
                         <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{ if .StaffComment.Valid }}{{.StaffComment.String}}{{ end }}">
-                            {{ if .StaffComment.Valid }}{{.StaffComment.String}}{{ else }}<span class="text-gray-400">—</span>{{ end }}
+                            {{ if .StaffComment.Valid }}{{.StaffComment.String}}{{ else }}<span class="text-gray-400">–</span>{{ end }}
                         </td>
                         <td class="px-3 py-3 text-sm">
                             {{ if .RawData.Valid }}
@@ -81,7 +81,7 @@
                                 <pre class="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto max-w-[300px] max-h-[200px]">{{.RawData.String}}</pre>
                             </details>
                             {{ else }}
-                            <span class="text-gray-400">—</span>
+                            <span class="text-gray-400">–</span>
                             {{ end }}
                         </td>
                     </tr>
