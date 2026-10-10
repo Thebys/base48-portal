@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/keycloak"
 )
 
 const (
@@ -119,19 +119,8 @@ func init() {
 // goroutine keeps retrying until it succeeds (or ctx is cancelled), at which
 // point the authenticator becomes fully functional without a process restart.
 func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authenticator, error) {
-	// Force IPv4 — Keycloak's IPv6 endpoint resets TLS connections in our
-	// VPS environment.
-	dialer := &net.Dialer{Timeout: 3 * time.Second}
-	httpClient := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.DialContext(ctx, "tcp4", addr)
-			},
-			TLSHandshakeTimeout:   3 * time.Second,
-			ResponseHeaderTimeout: 3 * time.Second,
-		},
-	}
+	// IPv4 only, see keycloak.HTTPClient.
+	httpClient := keycloak.HTTPClient
 
 	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
 	store.Options = &sessions.Options{

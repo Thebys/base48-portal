@@ -3,14 +3,12 @@ package auth
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/http"
-	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/base48/member-portal/internal/config"
+	"github.com/base48/member-portal/internal/keycloak"
 )
 
 // ServiceAccountClient handles Keycloak service account authentication
@@ -32,17 +30,8 @@ func NewServiceAccountClient(ctx context.Context, cfg *config.Config, clientID, 
 	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token",
 		cfg.KeycloakURL, cfg.KeycloakRealm)
 
-	// Create HTTP client with aggressive timeouts
-	httpClient := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout: 3 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   3 * time.Second,
-			ResponseHeaderTimeout: 3 * time.Second,
-		},
-	}
+	// IPv4 only with short timeouts, see keycloak.HTTPClient.
+	httpClient := keycloak.HTTPClient
 
 	oauth2Config := clientcredentials.Config{
 		ClientID:     clientID,

@@ -33,7 +33,7 @@ func NewClient(cfg *config.Config, adminToken string) *Client {
 	return &Client{
 		config:     cfg,
 		adminToken: adminToken,
-		httpClient: &http.Client{},
+		httpClient: HTTPClient,
 	}
 }
 

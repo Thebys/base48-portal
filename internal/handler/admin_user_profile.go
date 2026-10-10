@@ -259,7 +259,7 @@ func (h *Handler) fetchKeycloakUserByID(ctx context.Context, accessToken, keyclo
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := keycloak.HTTPClient.Do(req)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -299,7 +299,7 @@ func (h *Handler) fetchUserRolesFromKeycloak(ctx context.Context, accessToken, k
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := keycloak.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
