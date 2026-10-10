@@ -16,6 +16,8 @@
 - Profil uživatele (zobrazení, editace)
 - Stav členství a plateb
 - Admin: přehled uživatelů, správa rolí
+- Externí uživatelé (stav `external`): nečlenové s účtem
+- Oprávnění k částem portálu nezávisle na stavu (`access_grants`, zatím autodílna); pravidla v `internal/access`
 
 ### Platby
 - FIO Bank automatická synchronizace
@@ -38,7 +40,8 @@
 
 ```
 levels          - Úrovně členství (Student, Full, Sponsor...)
-users           - Členové hackerspace
+users           - Členové hackerspace (a externí uživatelé)
+access_grants   - Oprávnění nezávislá na stavu členství
 payments        - Platby (FIO sync + manuální)
 fees            - Měsíční poplatky
 projects        - Fundraising projekty
@@ -64,6 +67,7 @@ cmd/
 └── test/       # Test skripty
 
 internal/
+├── access/     # Kdo smí co: stav členství + oprávnění
 ├── auth/       # Keycloak OIDC + Service Account
 ├── config/     # Environment konfigurace
 ├── db/         # Database queries (sqlc)

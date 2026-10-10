@@ -354,7 +354,7 @@ async function loadProjectPayments(projectId) {
                     <tr>
                         <td>${payment.date}</td>
                         <td style="color: #059669; font-weight: 600;">+${payment.amount} Kč</td>
-                        <td>${payment.remote_account}</td>
+                        <td>${payment.remote_account || '-'}</td>
                         <td><span class="vs">${payment.identification || '-'}</span></td>
                     </tr>
                 `;

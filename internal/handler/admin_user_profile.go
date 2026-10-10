@@ -85,6 +85,14 @@ func (h *Handler) AdminUserProfileHandler(w http.ResponseWriter, r *http.Request
 	data["Title"] = fmt.Sprintf("Profil uživatele: %s", targetDBUser.Email)
 	data["KeycloakInfo"] = kcInfo             // Full Keycloak profile (may be nil)
 
+	grants, availableScopes, err := h.adminAccessData(ctx, targetDBUser.ID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error loading access grants: %v", err), http.StatusInternalServerError)
+		return
+	}
+	data["AccessGrants"] = grants
+	data["AvailableScopes"] = availableScopes
+
 	// Log admin action (track who viewed whose profile)
 	adminUsername := "unknown"
 	if adminDBUser.Username.Valid {
@@ -400,7 +408,7 @@ func (h *Handler) AdminUpdateUserStateHandler(w http.ResponseWriter, r *http.Req
 
 	validStates := map[string]bool{
 		"awaiting": true, "accepted": true, "rejected": true,
-		"exmember": true, "suspended": true,
+		"exmember": true, "suspended": true, "external": true,
 	}
 	if !validStates[req.State] {
 		h.jsonError(w, "Invalid state value", http.StatusBadRequest)

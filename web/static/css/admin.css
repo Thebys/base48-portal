@@ -172,6 +172,11 @@ main :has(> table) {
     color: var(--tint-gray-fg);
 }
 
+.badge-external {
+    background-color: var(--tint-blue-bg);
+    color: var(--tint-blue-fg);
+}
+
 /* Role variants — per-role colors */
 .badge-role {
     background-color: var(--tint-blue-bg);

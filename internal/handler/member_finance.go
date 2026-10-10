@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/db"
 )
 
@@ -204,21 +205,8 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 // MemberFinanceHandler shows the financial overview for authenticated members (read-only, aggregate data only).
 // GET /finance
 func (h *Handler) MemberFinanceHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	// Awaiting members don't have access to financial overview
-	if dbUser.State == "awaiting" {
-		http.Redirect(w, r, "/profile", http.StatusTemporaryRedirect)
+	user, dbUser, acc, ok := h.memberPage(w, r, access.Subject.MemberArea)
+	if !ok {
 		return
 	}
 
@@ -232,6 +220,7 @@ func (h *Handler) MemberFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		"Title":  "Finanční přehled",
 		"User":   user,
 		"DBUser": dbUser,
+		"Access": acc,
 
 		"TotalMembers":           summary.TotalMembers,
 		"TotalMonthlyFees":       summary.TotalMonthlyFees,

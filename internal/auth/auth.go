@@ -31,6 +31,14 @@ const (
 	sessionStateKey = "oauth_state"
 )
 
+// SessionName and SessionUserKey say where GetUser looks: the session cookie
+// and the key under which it stores the *User. Handler tests use them to sign
+// a user in through a store passed to NewWithStore.
+const (
+	SessionName    = sessionName
+	SessionUserKey = sessionUserKey
+)
+
 // KeycloakApplication represents a client/service visible in Keycloak
 type KeycloakApplication struct {
 	ClientID     string `json:"clientId"`
@@ -111,6 +119,17 @@ type Authenticator struct {
 func init() {
 	// Register User type for session serialization
 	gob.Register(&User{})
+}
+
+// NewWithStore returns an Authenticator that reads sessions from store and
+// never talks to Keycloak: login does not work, GetUser and RequireAuth do.
+// For handler tests, which write the session cookie with the same store.
+func NewWithStore(cfg *config.Config, store *sessions.CookieStore) *Authenticator {
+	return &Authenticator{
+		store:    store,
+		config:   cfg,
+		appCache: make(map[string][]KeycloakApplication),
+	}
 }
 
 // New creates a new Authenticator. It tries once to reach Keycloak so the

@@ -35,6 +35,24 @@
             </div>
         </div>
     </div>
+    {{else if eq .DBUser.State "external"}}
+    <!-- External User Banner -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+        <div class="flex items-start gap-3">
+            <svg class="h-6 w-6 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div>
+                <h2 class="text-lg font-semibold text-blue-900">Nejsi členem Base48</h2>
+                <p class="mt-2 text-sm text-blue-800">
+                    Máš u nás externí účet{{with .Access.Granted}} s přístupem do: {{range $i, $g := .}}{{if $i}}, {{end}}{{$g.Label}}{{end}}{{end}}.
+                </p>
+                <p class="mt-2 text-sm text-blue-700">
+                    Pokud tě láká zapojit se víc, přijď se podívat do hackerspace a poznej komunitu. Jak vypadá členství, najdeš níže.
+                </p>
+            </div>
+        </div>
+    </div>
     {{end}}
 
     <!-- Keycloak Account Section (Read-only) -->
@@ -149,6 +167,26 @@
         </div>
         {{end}}
         {{end}}
+        {{else if eq .DBUser.State "external"}}
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Tvůj účet</h2>
+        <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div class="bg-purple-50 px-4 py-3 rounded-md text-center">
+                <div class="text-2xl font-bold text-purple-900">{{.DBUser.DateJoined.Format "02.01.2006"}}</div>
+                <div class="text-xs text-purple-600">V portálu od</div>
+            </div>
+            <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
+                <div class="mt-1"><span class="badge badge-{{ .DBUser.State }}">{{ .DBUser.State }}</span></div>
+                <div class="text-xs text-blue-600 mt-1">Stav účtu</div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 rounded-md text-center">
+                {{with .Access.Granted}}
+                <div class="text-lg font-bold text-gray-900">{{range $i, $g := .}}{{if $i}}, {{end}}{{$g.Label}}{{end}}</div>
+                {{else}}
+                <div class="text-2xl font-bold text-gray-400">–</div>
+                {{end}}
+                <div class="text-xs text-gray-500">Přístup</div>
+            </div>
+        </dl>
         {{else}}
         <h2 class="text-lg font-medium text-gray-900 mb-4">Členství a platby</h2>
 
@@ -226,13 +264,17 @@
         {{end}}
     </div>
 
-    {{if eq .DBUser.State "awaiting"}}
+    {{if or (eq .DBUser.State "awaiting") (eq .DBUser.State "external")}}
     {{if .AllActiveLevels}}
-    <!-- Membership Levels (informational for awaiting members) -->
+    <!-- Membership Levels (informational for applicants and external users) -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
         <h2 class="text-lg font-medium text-gray-900 mb-2">Úrovně členství</h2>
         <p class="text-sm text-gray-500 mb-4">
+            {{if eq .DBUser.State "external"}}
+            Členové Base48 přispívají měsíčně podle zvolené úrovně a mohou přispívat i víc.
+            {{else}}
             Po schválení členství si budeš moct zvolit úroveň a nastavit výši příspěvku.
+            {{end}}
         </p>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {{range .AllActiveLevels}}
@@ -244,7 +286,7 @@
         </div>
     </div>
     {{end}}
-    {{else}}
+    {{else if .Access.MembershipSettings}}
     {{if .UpgradeLevels}}
     <!-- Membership Level Upgrade -->
     <div class="bg-white shadow rounded-lg p-6 mb-6">
@@ -273,7 +315,7 @@
     {{end}}
     {{end}}
 
-    {{if ne .DBUser.State "awaiting"}}
+    {{if .Access.MembershipSettings}}
     <!-- Custom Membership Fee Amount (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group">
@@ -425,7 +467,8 @@
     </div>
     {{end}}
 
-    {{if or (ne .DBUser.State "awaiting") .DBUser.PaymentsID.Valid}}
+    {{/* External users pay nothing through Base48, so no payments or fees. */}}
+    {{if and (ne .DBUser.State "external") (or (ne .DBUser.State "awaiting") .DBUser.PaymentsID.Valid)}}
     <!-- Incoming Payments (Collapsible) -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group">

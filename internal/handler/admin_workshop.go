@@ -140,8 +140,10 @@ func (h *Handler) AdminCreateReservationHandler(w http.ResponseWriter, r *http.R
 		h.jsonError(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	if targetUser.State != "accepted" {
-		h.jsonError(w, "Rezervovat lze pouze pro přijaté členy", http.StatusBadRequest)
+	// The target's own admin role is unknown here (it lives in Keycloak), so
+	// only their state and grants count.
+	if !h.accessFor(ctx, nil, &targetUser).Workshop() {
+		h.jsonError(w, "Rezervovat lze jen pro členy a pro ty, kdo mají přístup do autodílny", http.StatusBadRequest)
 		return
 	}
 

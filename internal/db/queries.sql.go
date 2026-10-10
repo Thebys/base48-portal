@@ -329,6 +329,40 @@ func (q *Queries) CountUsersByLevel(ctx context.Context) ([]CountUsersByLevelRow
 	return items, nil
 }
 
+const createAccessGrant = `-- name: CreateAccessGrant :one
+INSERT INTO access_grants (user_id, scope, note, granted_by)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (user_id, scope) DO NOTHING
+RETURNING id, user_id, scope, note, granted_by, created_at
+`
+
+type CreateAccessGrantParams struct {
+	UserID    int64          `json:"user_id"`
+	Scope     string         `json:"scope"`
+	Note      sql.NullString `json:"note"`
+	GrantedBy sql.NullInt64  `json:"granted_by"`
+}
+
+// Returns sql.ErrNoRows when the user already holds the grant.
+func (q *Queries) CreateAccessGrant(ctx context.Context, arg CreateAccessGrantParams) (AccessGrant, error) {
+	row := q.db.QueryRowContext(ctx, createAccessGrant,
+		arg.UserID,
+		arg.Scope,
+		arg.Note,
+		arg.GrantedBy,
+	)
+	var i AccessGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Scope,
+		&i.Note,
+		&i.GrantedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createEmailOutbox = `-- name: CreateEmailOutbox :one
 
 INSERT INTO email_outbox (
@@ -616,6 +650,31 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Locale,
+	)
+	return i, err
+}
+
+const deleteAccessGrant = `-- name: DeleteAccessGrant :one
+DELETE FROM access_grants WHERE user_id = ? AND scope = ?
+RETURNING id, user_id, scope, note, granted_by, created_at
+`
+
+type DeleteAccessGrantParams struct {
+	UserID int64  `json:"user_id"`
+	Scope  string `json:"scope"`
+}
+
+// Returns sql.ErrNoRows when there was no such grant.
+func (q *Queries) DeleteAccessGrant(ctx context.Context, arg DeleteAccessGrantParams) (AccessGrant, error) {
+	row := q.db.QueryRowContext(ctx, deleteAccessGrant, arg.UserID, arg.Scope)
+	var i AccessGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Scope,
+		&i.Note,
+		&i.GrantedBy,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -1493,7 +1552,7 @@ type ListAcceptedBarDebtorsRow struct {
 }
 
 // Accepted members whose linked bar account is at or below the given balance
-// (a negative number of cents). Deepest debt first.
+// (a negative number of cents, see BarDebtSettings.MaxBalanceCents). Deepest debt first.
 func (q *Queries) ListAcceptedBarDebtors(ctx context.Context, maxBalanceCents int64) ([]ListAcceptedBarDebtorsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAcceptedBarDebtors, maxBalanceCents)
 	if err != nil {
@@ -1627,6 +1686,90 @@ func (q *Queries) ListAcceptedUsersWithUsername(ctx context.Context) ([]ListAcce
 			&i.Realname,
 			&i.Email,
 			&i.State,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessGrantScopes = `-- name: ListAccessGrantScopes :many
+
+SELECT scope FROM access_grants WHERE user_id = ? ORDER BY scope
+`
+
+// ============================================================================
+// Access grants: access to parts of the portal regardless of membership state.
+// Known scopes live in internal/access.
+// ============================================================================
+// Scopes granted to one user; read on every page that checks access.
+func (q *Queries) ListAccessGrantScopes(ctx context.Context, userID int64) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listAccessGrantScopes, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var scope string
+		if err := rows.Scan(&scope); err != nil {
+			return nil, err
+		}
+		items = append(items, scope)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessGrants = `-- name: ListAccessGrants :many
+SELECT g.id, g.user_id, g.scope, g.note, g.granted_by, g.created_at,
+       gb.email AS granted_by_email
+FROM access_grants g
+LEFT JOIN users gb ON gb.id = g.granted_by
+WHERE g.user_id = ?
+ORDER BY g.scope
+`
+
+type ListAccessGrantsRow struct {
+	ID             int64          `json:"id"`
+	UserID         int64          `json:"user_id"`
+	Scope          string         `json:"scope"`
+	Note           sql.NullString `json:"note"`
+	GrantedBy      sql.NullInt64  `json:"granted_by"`
+	CreatedAt      time.Time      `json:"created_at"`
+	GrantedByEmail sql.NullString `json:"granted_by_email"`
+}
+
+// Grants of one user with the admin who gave them, for the admin profile.
+func (q *Queries) ListAccessGrants(ctx context.Context, userID int64) ([]ListAccessGrantsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAccessGrants, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAccessGrantsRow{}
+	for rows.Next() {
+		var i ListAccessGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Scope,
+			&i.Note,
+			&i.GrantedBy,
+			&i.CreatedAt,
+			&i.GrantedByEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -2658,6 +2801,33 @@ func (q *Queries) ListUserBalances(ctx context.Context) ([]ListUserBalancesRow, 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserIDsWithAccessGrant = `-- name: ListUserIDsWithAccessGrant :many
+SELECT user_id FROM access_grants WHERE scope = ?
+`
+
+func (q *Queries) ListUserIDsWithAccessGrant(ctx context.Context, scope string) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listUserIDsWithAccessGrant, scope)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var user_id int64
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

@@ -688,3 +688,36 @@ UPDATE reservations SET
     updated_at = CURRENT_TIMESTAMP
 WHERE id = sqlc.arg(id) AND state = 'active'
 RETURNING *;
+
+-- ============================================================================
+-- Access grants: access to parts of the portal regardless of membership state.
+-- Known scopes live in internal/access.
+-- ============================================================================
+
+-- name: ListAccessGrantScopes :many
+-- Scopes granted to one user; read on every page that checks access.
+SELECT scope FROM access_grants WHERE user_id = ? ORDER BY scope;
+
+-- name: ListAccessGrants :many
+-- Grants of one user with the admin who gave them, for the admin profile.
+SELECT g.id, g.user_id, g.scope, g.note, g.granted_by, g.created_at,
+       gb.email AS granted_by_email
+FROM access_grants g
+LEFT JOIN users gb ON gb.id = g.granted_by
+WHERE g.user_id = ?
+ORDER BY g.scope;
+
+-- name: ListUserIDsWithAccessGrant :many
+SELECT user_id FROM access_grants WHERE scope = ?;
+
+-- name: CreateAccessGrant :one
+-- Returns sql.ErrNoRows when the user already holds the grant.
+INSERT INTO access_grants (user_id, scope, note, granted_by)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (user_id, scope) DO NOTHING
+RETURNING *;
+
+-- name: DeleteAccessGrant :one
+-- Returns sql.ErrNoRows when there was no such grant.
+DELETE FROM access_grants WHERE user_id = ? AND scope = ?
+RETURNING *;

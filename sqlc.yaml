@@ -16,6 +16,7 @@ sql:
       - "migrations/013_settings.sql"
       - "migrations/015_revbank.sql"
       - "migrations/016_workshop_reservations.sql"
+      - "migrations/019_access_grants.sql"
     gen:
       go:
         package: "db"

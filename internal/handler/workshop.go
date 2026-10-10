@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/db"
 )
 
@@ -74,12 +75,16 @@ func workshopCapabilities(raw string) []string {
 }
 
 // reservationUsername is the display name for a reservation row: the username,
-// falling back to the e-mail for members who have not set one.
-func reservationUsername(username sql.NullString, email string) string {
+// falling back to the e-mail for members who have not set one. Only members
+// get that fallback; non-members see no member's e-mail.
+func reservationUsername(username sql.NullString, email string, showEmail bool) string {
 	if username.String != "" {
 		return username.String
 	}
-	return email
+	if showEmail {
+		return email
+	}
+	return "(bez přezdívky)"
 }
 
 // historyWindowStart is the oldest reservation the history table shows:
@@ -99,23 +104,12 @@ func parseReservationTime(s string) (string, error) {
 	return t.Format(reservationTimeLayout), nil
 }
 
-// WorkshopHandler shows the workshop reservations page for authenticated members.
+// WorkshopHandler shows the workshop reservations page to members and to
+// anyone granted the workshop.
 // GET /workshop
 func (h *Handler) WorkshopHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	if dbUser.State == "awaiting" {
-		http.Redirect(w, r, "/profile", http.StatusTemporaryRedirect)
+	user, dbUser, acc, ok := h.memberPage(w, r, access.Subject.Workshop)
+	if !ok {
 		return
 	}
 
@@ -123,6 +117,7 @@ func (h *Handler) WorkshopHandler(w http.ResponseWriter, r *http.Request) {
 		"Title":  "Autodílna",
 		"User":   user,
 		"DBUser": dbUser,
+		"Access": acc,
 	}
 
 	h.render(w, "workshop.html", data)
@@ -134,12 +129,11 @@ func (h *Handler) WorkshopHandler(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WorkshopAPIHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	user := h.auth.GetUser(r)
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		h.jsonError(w, "Database error", http.StatusInternalServerError)
+	dbUser, acc, ok := h.memberAPI(w, r, access.Subject.Workshop)
+	if !ok {
 		return
 	}
+	showEmail := acc.MemberArea()
 
 	resources, err := h.queries.ListResources(ctx)
 	if err != nil {
@@ -183,7 +177,7 @@ func (h *Handler) WorkshopAPIHandler(w http.ResponseWriter, r *http.Request) {
 			ID:         res.ID,
 			ResourceID: res.ResourceID,
 			UserID:     res.UserID,
-			Username:   reservationUsername(res.Username, res.Email),
+			Username:   reservationUsername(res.Username, res.Email, showEmail),
 			StartsAt:   res.StartsAt,
 			EndsAt:     res.EndsAt,
 			Note:       res.Note.String,
@@ -196,7 +190,7 @@ func (h *Handler) WorkshopAPIHandler(w http.ResponseWriter, r *http.Request) {
 		historyResponses[i] = WorkshopHistoryResponse{
 			ID:         res.ID,
 			ResourceID: res.ResourceID,
-			Username:   reservationUsername(res.Username, res.Email),
+			Username:   reservationUsername(res.Username, res.Email, showEmail),
 			StartsAt:   res.StartsAt,
 			EndsAt:     res.EndsAt,
 			Note:       res.Note.String,
@@ -215,20 +209,13 @@ func (h *Handler) WorkshopAPIHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CreateReservationHandler creates a new reservation for the current member.
+// CreateReservationHandler creates a new reservation for the current user.
 // POST /api/member/workshop/reservations
 func (h *Handler) CreateReservationHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	user := h.auth.GetUser(r)
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		h.jsonError(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	if dbUser.State != "accepted" {
-		h.jsonError(w, "Rezervace jsou dostupné pouze přijatým členům", http.StatusForbidden)
+	dbUser, _, ok := h.memberAPI(w, r, access.Subject.Workshop)
+	if !ok {
 		return
 	}
 
@@ -292,7 +279,8 @@ func (h *Handler) CreateReservationHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "id": reservation.ID})
 }
 
-// CancelReservationHandler cancels member's own active reservation.
+// CancelReservationHandler cancels member's own active reservation. Not gated
+// on workshop access: giving a slot back is fine even after losing access.
 // POST /api/member/workshop/reservations/{id}/cancel
 func (h *Handler) CancelReservationHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -340,10 +328,8 @@ func (h *Handler) CancelReservationHandler(w http.ResponseWriter, r *http.Reques
 func (h *Handler) UpdateReservationEndHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	user := h.auth.GetUser(r)
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		h.jsonError(w, "Database error", http.StatusInternalServerError)
+	dbUser, _, ok := h.memberAPI(w, r, access.Subject.Workshop)
+	if !ok {
 		return
 	}
 

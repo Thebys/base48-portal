@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/db"
 )
 
@@ -19,15 +20,9 @@ type RecentPaymentView struct {
 // Displays simplified view: date, amount, variable symbol.
 // GET /payments/recent
 func (h *Handler) MemberRecentPaymentsHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+	// A sub-page of the finance overview, so the same members-only rule.
+	user, dbUser, acc, ok := h.memberPage(w, r, access.Subject.MemberArea)
+	if !ok {
 		return
 	}
 
@@ -53,6 +48,7 @@ func (h *Handler) MemberRecentPaymentsHandler(w http.ResponseWriter, r *http.Req
 		"Title":    "Poslední platby",
 		"User":     user,
 		"DBUser":   dbUser,
+		"Access":   acc,
 		"Payments": incomingPayments,
 	}
 

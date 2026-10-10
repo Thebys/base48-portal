@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/base48/member-portal/internal/access"
 )
 
 // MemberProjectResponse is the read-only JSON response for a project visible to members.
@@ -29,21 +31,8 @@ type MemberPaymentResponse struct {
 // MemberProjectsHandler shows the read-only projects/fundraising page for authenticated members.
 // GET /projects
 func (h *Handler) MemberProjectsHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	// Awaiting members don't have access to fundraising
-	if dbUser.State == "awaiting" {
-		http.Redirect(w, r, "/profile", http.StatusTemporaryRedirect)
+	user, dbUser, acc, ok := h.memberPage(w, r, access.Subject.Fundraising)
+	if !ok {
 		return
 	}
 
@@ -51,6 +40,7 @@ func (h *Handler) MemberProjectsHandler(w http.ResponseWriter, r *http.Request) 
 		"Title":  "Fundraising",
 		"User":   user,
 		"DBUser": dbUser,
+		"Access": acc,
 	}
 
 	h.render(w, "member_projects.html", data)
@@ -58,9 +48,13 @@ func (h *Handler) MemberProjectsHandler(w http.ResponseWriter, r *http.Request) 
 
 // MemberProjectsAPIHandler returns a read-only list of projects (JSON).
 // No payment details, no CRUD operations.
-// GET /api/projects
+// GET /api/member/projects
 func (h *Handler) MemberProjectsAPIHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	if _, _, ok := h.memberAPI(w, r, access.Subject.Fundraising); !ok {
+		return
+	}
 
 	projects, err := h.queries.ListProjects(ctx)
 	if err != nil {
@@ -110,8 +104,15 @@ func (h *Handler) MemberProjectsAPIHandler(w http.ResponseWriter, r *http.Reques
 }
 
 // MemberProjectPaymentsHandler returns payments for a project (read-only, no staff comments).
+// Donors' account numbers are for members only; external users get the list
+// without them.
 // GET /api/member/projects/payments?project_id=X
 func (h *Handler) MemberProjectPaymentsHandler(w http.ResponseWriter, r *http.Request) {
+	_, acc, ok := h.memberAPI(w, r, access.Subject.Fundraising)
+	if !ok {
+		return
+	}
+
 	projectIDStr := r.URL.Query().Get("project_id")
 	if projectIDStr == "" {
 		h.jsonError(w, "Missing project_id parameter", http.StatusBadRequest)
@@ -138,8 +139,10 @@ func (h *Handler) MemberProjectPaymentsHandler(w http.ResponseWriter, r *http.Re
 			ID:             p.ID,
 			Date:           p.Date.Format("02.01.2006"),
 			Amount:         p.Amount,
-			RemoteAccount:  p.RemoteAccount,
 			Identification: p.Identification,
+		}
+		if acc.MemberArea() {
+			paymentResponses[i].RemoteAccount = p.RemoteAccount
 		}
 	}
 

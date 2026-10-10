@@ -237,7 +237,7 @@
         ]).then(function(results) {
             state = results[0];
             if (results[1]) {
-                members = results[1].users.filter(function(u) { return u.state === 'accepted'; })
+                members = results[1].users.filter(function(u) { return u.workshop_access; })
                     .sort(function(a, b) { return (a.username || a.email).localeCompare(b.username || b.email, 'cs'); });
             }
             renderResources();

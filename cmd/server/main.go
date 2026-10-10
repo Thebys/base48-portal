@@ -174,6 +174,8 @@ func main() {
 		r.Post("/users/{id}/keys", h.RequireAdmin(h.AdminUpdateUserKeysHandler))
 		r.Post("/users/{id}/fees", h.RequireAdmin(h.AdminCreateFeeHandler))
 		r.Delete("/users/{id}/fees/{feeId}", h.RequireAdmin(h.AdminDeleteFeeHandler))
+		r.Post("/users/{id}/access", h.RequireAdmin(h.AdminGrantAccessHandler))
+		r.Delete("/users/{id}/access/{scope}", h.RequireAdmin(h.AdminRevokeAccessHandler))
 		r.Post("/levels", h.RequireAdmin(h.AdminCreateLevelHandler))
 		r.Post("/levels/update", h.RequireAdmin(h.AdminUpdateLevelHandler))
 		r.Post("/levels/toggle", h.RequireAdmin(h.AdminToggleLevelActiveHandler))

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
@@ -267,20 +268,8 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 
 // ServicesHandler displays Keycloak-linked services/applications
 func (h *Handler) ServicesHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
-	dbUser, err := h.getOrCreateUser(r, user)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	if dbUser.State == "awaiting" && !user.IsAdmin() {
-		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+	user, dbUser, acc, ok := h.memberPage(w, r, access.Subject.MemberArea)
+	if !ok {
 		return
 	}
 
@@ -288,6 +277,7 @@ func (h *Handler) ServicesHandler(w http.ResponseWriter, r *http.Request) {
 		"Title":  "Služby",
 		"User":   user,
 		"DBUser": dbUser,
+		"Access": acc,
 	}
 
 	h.render(w, "services.html", data)
@@ -307,14 +297,20 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	acc := h.accessFor(r.Context(), user, dbUser)
+
 	if r.Method == http.MethodPost {
 		// Check which form was submitted
-		if r.FormValue("action") == "update_custom_fee" {
-			h.handleCustomFeeUpdate(w, r, dbUser)
-			return
-		}
-		if r.FormValue("action") == "upgrade_level" {
-			h.handleLevelUpgrade(w, r, dbUser)
+		if action := r.FormValue("action"); action == "update_custom_fee" || action == "upgrade_level" {
+			if !acc.MembershipSettings() {
+				http.Error(w, "Úroveň a výši příspěvku si nastavují jen aktivní členové", http.StatusForbidden)
+				return
+			}
+			if action == "update_custom_fee" {
+				h.handleCustomFeeUpdate(w, r, dbUser)
+			} else {
+				h.handleLevelUpgrade(w, r, dbUser)
+			}
 			return
 		}
 
@@ -343,6 +339,7 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	data["Title"] = "My Profile"
 	data["User"] = data["ViewedUser"]  // For own profile, ViewedUser = current user
 	data["DBUser"] = dbUser             // For layout compatibility (current user)
+	data["Access"] = acc
 	data["Success"] = r.URL.Query().Get("success") == "1"
 
 	h.render(w, "profile.html", data)
@@ -595,6 +592,21 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 		// Inject Keycloak applications for navigation
 		if user, ok := dataMap["User"].(*auth.User); ok && user != nil {
 			dataMap["UserApplications"] = h.auth.GetUserApplications(user.ID)
+
+			// What the user may use drives the navigation. Member pages
+			// pass in what they already checked; for the rest (admin pages,
+			// the home page) it is worked out here, from DBUser handed over
+			// as a pointer or a value.
+			if _, ok := dataMap["Access"]; !ok {
+				var dbUser *db.User
+				switch u := dataMap["DBUser"].(type) {
+				case *db.User:
+					dbUser = u
+				case db.User:
+					dbUser = &u
+				}
+				dataMap["Access"] = h.accessFor(context.Background(), user, dbUser)
+			}
 		}
 	}
 

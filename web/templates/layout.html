@@ -51,8 +51,14 @@
         {{$name = .User.PreferredName}}
         {{if and .DBUser .DBUser.Username.Valid}}{{$name = .DBUser.Username.String}}{{end}}
     {{end}}
-    {{$showMemberNav := and .User (or .User.IsAdmin (and .DBUser (ne .DBUser.State "awaiting")))}}
-    {{$showServices := and .UserApplications $showMemberNav}}
+    {{/* What the user may use: render() fills .Access, the rules are in internal/access. */}}
+    {{$showMemberArea := false}}{{$showFundraising := false}}{{$showWorkshop := false}}
+    {{if and .User .Access}}
+        {{$showMemberArea = .Access.MemberArea}}
+        {{$showFundraising = .Access.Fundraising}}
+        {{$showWorkshop = .Access.Workshop}}
+    {{end}}
+    {{$showServices := and .UserApplications $showMemberArea}}
 
     <nav class="nav-bar">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -64,9 +70,13 @@
                     {{if .User}}
                     <div data-nav-links class="hidden sm:flex sm:items-center sm:ml-8 sm:gap-6">
                         <a href="/profile" class="nav-link">Profil</a>
-                        {{if $showMemberNav}}
+                        {{if $showMemberArea}}
                         <a href="{{if .User.IsAdmin}}/admin/finance{{else}}/finance{{end}}" class="nav-link">Finanční přehled</a>
+                        {{end}}
+                        {{if $showFundraising}}
                         <a href="{{if .User.IsAdmin}}/admin/projects{{else}}/projects{{end}}" class="nav-link">Fundraising</a>
+                        {{end}}
+                        {{if $showWorkshop}}
                         <a href="/workshop" class="nav-link">Autodílna</a>
                         {{end}}
                         {{if $showServices}}
@@ -194,9 +204,13 @@
 
                 <div data-nav-links class="space-y-1">
                     <a href="/profile" class="nav-mobile-item">Profil</a>
-                    {{if $showMemberNav}}
+                    {{if $showMemberArea}}
                     <a href="{{if .User.IsAdmin}}/admin/finance{{else}}/finance{{end}}" class="nav-mobile-item">Finanční přehled</a>
+                    {{end}}
+                    {{if $showFundraising}}
                     <a href="{{if .User.IsAdmin}}/admin/projects{{else}}/projects{{end}}" class="nav-mobile-item">Fundraising</a>
+                    {{end}}
+                    {{if $showWorkshop}}
                     <a href="/workshop" class="nav-mobile-item">Autodílna</a>
                     {{end}}
                     {{if $showServices}}

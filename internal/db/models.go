@@ -9,6 +9,15 @@ import (
 	"time"
 )
 
+type AccessGrant struct {
+	ID        int64          `json:"id"`
+	UserID    int64          `json:"user_id"`
+	Scope     string         `json:"scope"`
+	Note      sql.NullString `json:"note"`
+	GrantedBy sql.NullInt64  `json:"granted_by"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
 type EmailOutbox struct {
 	ID           int64          `json:"id"`
 	UserID       sql.NullInt64  `json:"user_id"`

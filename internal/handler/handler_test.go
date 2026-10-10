@@ -60,6 +60,7 @@ func TestCurrentUserView(t *testing.T) {
 		{name: "active preset", state: "accepted", sort: "id_desc", want: "active"},
 		{name: "awaiting preset", state: "awaiting", sort: "id_desc", want: "awaiting"},
 		{name: "suspended preset", state: "suspended", sort: "id_desc", want: "suspended"},
+		{name: "external preset", state: "external", sort: "id_desc", want: "external"},
 
 		// Same combination arriving from the filter form still lights the tab.
 		{name: "form-built debt", state: "accepted", balance: "negative", sort: "balance_asc", want: "debt"},

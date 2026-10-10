@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/keycloak"
 )
@@ -57,6 +58,8 @@ var userViews = []userView{
 	{Key: "active", Label: "Aktivní", State: "accepted", Sort: "id_desc", Totals: true},
 	{Key: "debt", Label: "Dlužníci", State: "accepted", Balance: "negative", Sort: "balance_asc", Totals: true},
 	{Key: "suspended", Label: "Pozastavení", State: "suspended", Sort: "id_desc", Totals: true},
+	// Not members, so no fees and nothing to total.
+	{Key: "external", Label: "Externí", State: "external", Sort: "id_desc"},
 }
 
 // What /admin/users shows with no query string.
@@ -365,6 +368,19 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 		KeycloakLinked   bool     `json:"keycloak_linked"`
 		KeycloakUsername string   `json:"keycloak_username"`
 		Roles            []string `json:"roles"`
+		// WorkshopAccess: may book the workshop (member, or granted it).
+		// The admin workshop page offers only these users.
+		WorkshopAccess bool `json:"workshop_access"`
+	}
+
+	workshopGrantees, err := h.queries.ListUserIDsWithAccessGrant(ctx, string(access.Workshop))
+	if err != nil {
+		h.jsonError(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
+		return
+	}
+	hasWorkshopGrant := make(map[int64]bool, len(workshopGrantees))
+	for _, id := range workshopGrantees {
+		hasWorkshopGrant[id] = true
 	}
 
 	response := make([]UserResponse, 0)
@@ -387,6 +403,10 @@ func (h *Handler) AdminUsersAPIHandler(w http.ResponseWriter, r *http.Request) {
 			Username: dbUser.Username.String,
 			Realname: dbUser.Realname.String,
 			State:    dbUser.State,
+			WorkshopAccess: access.Subject{
+				State:  dbUser.State,
+				Grants: map[access.Scope]bool{access.Workshop: hasWorkshopGrant[dbUser.ID]},
+			}.Workshop(),
 		}
 
 		if dbUser.PaymentsID.Valid {
