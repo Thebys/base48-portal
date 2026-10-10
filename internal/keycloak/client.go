@@ -3,6 +3,7 @@ package keycloak
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,11 @@ import (
 
 	"github.com/base48/member-portal/internal/config"
 )
+
+// ErrReadOnly is returned instead of changing anything when KEYCLOAK_READ_ONLY
+// is set. Callers already log a failed role sync, so the refusal shows up in
+// the log where the change would have been.
+var ErrReadOnly = errors.New("keycloak is read-only here (KEYCLOAK_READ_ONLY), role not changed")
 
 // Client wraps Keycloak Admin API calls
 type Client struct {
@@ -133,6 +139,10 @@ func (c *Client) GetUserRoles(ctx context.Context, userID string) ([]Role, error
 
 // AssignRoleToUser assigns a realm role to a user
 func (c *Client) AssignRoleToUser(ctx context.Context, userID, roleName string) error {
+	if c.config.KeycloakReadOnly {
+		return ErrReadOnly
+	}
+
 	// First get the role details
 	role, err := c.GetRoleByName(ctx, roleName)
 	if err != nil {
@@ -173,6 +183,10 @@ func (c *Client) AssignRoleToUser(ctx context.Context, userID, roleName string) 
 
 // RemoveRoleFromUser removes a realm role from a user
 func (c *Client) RemoveRoleFromUser(ctx context.Context, userID, roleName string) error {
+	if c.config.KeycloakReadOnly {
+		return ErrReadOnly
+	}
+
 	// First get the role details
 	role, err := c.GetRoleByName(ctx, roleName)
 	if err != nil {

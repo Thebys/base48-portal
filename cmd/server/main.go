@@ -38,6 +38,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+	if cfg.KeycloakReadOnly {
+		log.Printf("ℹ KEYCLOAK_READ_ONLY: Keycloak is read-only, role changes are not written")
+	}
 
 	// Connect to database
 	database, err := sql.Open("sqlite", cfg.DatabaseURL)

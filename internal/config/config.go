@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 type Config struct {
@@ -22,6 +23,10 @@ type Config struct {
 	// Keycloak Service Account (for automated tasks)
 	KeycloakServiceAccountClientID     string
 	KeycloakServiceAccountClientSecret string
+	// KeycloakReadOnly lets a local or staging copy read the live realm
+	// (users, roles) through the service account but never change it: role
+	// assignments are refused instead of sent.
+	KeycloakReadOnly bool
 
 	// FIO Bank
 	BankFIOToken string
@@ -101,6 +106,16 @@ func Load() (*Config, error) {
 	}
 	if cfg.SessionSecret == "" {
 		return nil, fmt.Errorf("SESSION_SECRET is required")
+	}
+
+	// A safety switch must not turn itself off on a typo ("TRUE", "on"), so
+	// anything but a clear true/false refuses to start.
+	if value := os.Getenv("KEYCLOAK_READ_ONLY"); value != "" {
+		readOnly, err := strconv.ParseBool(value)
+		if err != nil {
+			return nil, fmt.Errorf("KEYCLOAK_READ_ONLY=%q: use true or false", value)
+		}
+		cfg.KeycloakReadOnly = readOnly
 	}
 
 	return cfg, nil
