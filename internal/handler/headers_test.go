@@ -85,3 +85,22 @@ func TestCSPAllowsTheScriptsTemplatesLoad(t *testing.T) {
 		}
 	}
 }
+
+// A script from a CDN runs with the admin's session on the bar pages. The
+// integrity hash makes the browser refuse it if the CDN ever serves
+// something else.
+func TestExternalScriptsArePinned(t *testing.T) {
+	tag := regexp.MustCompile(`<script[^>]+src="https?://[^>]*>`)
+	files, _ := filepath.Glob("../../web/templates/*.html")
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range tag.FindAllString(string(src), -1) {
+			if !strings.Contains(m, `integrity="sha384-`) || !strings.Contains(m, `crossorigin="anonymous"`) {
+				t.Errorf("%s: %s has no integrity hash", filepath.Base(f), m)
+			}
+		}
+	}
+}
