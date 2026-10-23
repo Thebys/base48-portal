@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -83,6 +84,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(handler.SecurityHeaders(strings.HasPrefix(cfg.BaseURL, "https://")))
 
 	// Static files
 	fileServer := http.FileServer(http.Dir(filepath.Join(cfg.WebRoot, "static")))
