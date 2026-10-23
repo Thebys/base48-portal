@@ -696,6 +696,15 @@ func (q *Queries) DeleteEmailTemplateContent(ctx context.Context, arg DeleteEmai
 	return err
 }
 
+const deleteExpiredRevokedSessions = `-- name: DeleteExpiredRevokedSessions :exec
+DELETE FROM revoked_sessions WHERE expires_at < ?
+`
+
+func (q *Queries) DeleteExpiredRevokedSessions(ctx context.Context, expiresAt int64) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredRevokedSessions, expiresAt)
+	return err
+}
+
 const deleteFee = `-- name: DeleteFee :exec
 DELETE FROM fees WHERE id = ?
 `
@@ -1493,6 +1502,17 @@ func (q *Queries) GrantUserKeys(ctx context.Context, id int64) (User, error) {
 		&i.Locale,
 	)
 	return i, err
+}
+
+const isSessionRevoked = `-- name: IsSessionRevoked :one
+SELECT EXISTS (SELECT 1 FROM revoked_sessions WHERE id = ?)
+`
+
+func (q *Queries) IsSessionRevoked(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, isSessionRevoked, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const linkKeycloakID = `-- name: LinkKeycloakID :one
@@ -2932,6 +2952,25 @@ func (q *Queries) ReturnUserKeys(ctx context.Context, id int64) (User, error) {
 		&i.Locale,
 	)
 	return i, err
+}
+
+const revokeSession = `-- name: RevokeSession :exec
+
+INSERT INTO revoked_sessions (id, expires_at) VALUES (?, ?)
+ON CONFLICT (id) DO NOTHING
+`
+
+type RevokeSessionParams struct {
+	ID        string `json:"id"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
+// ============================================================================
+// Revoked sessions: logged out before they expired. See migration 020.
+// ============================================================================
+func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) error {
+	_, err := q.db.ExecContext(ctx, revokeSession, arg.ID, arg.ExpiresAt)
+	return err
 }
 
 const undismissPayment = `-- name: UndismissPayment :one

@@ -1,18 +1,32 @@
 package auth
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	_ "modernc.org/sqlite"
+
 	"github.com/base48/member-portal/internal/config"
+	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/migrate"
+	"github.com/base48/member-portal/migrations"
 )
 
-func testAuthenticator(t *testing.T) *Authenticator {
+func testAuthenticator(t *testing.T) (*Authenticator, *sql.DB) {
 	t.Helper()
+	database, err := sql.Open("sqlite", "file:"+t.TempDir()+"/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+	if err := migrate.Run(database, migrations.FS); err != nil {
+		t.Fatal(err)
+	}
 	cfg := &config.Config{SessionSecret: "session-test-secret", BaseURL: "https://portal.base48.cz"}
-	return NewWithStore(cfg, NewSessionStore(cfg))
+	return NewWithStore(cfg, NewSessionStore(cfg), db.New(database)), database
 }
 
 // cookieFor runs save against a recorder and returns the session cookie it set.
@@ -40,7 +54,7 @@ func requestWith(c *http.Cookie) *http.Request {
 // A copy of the cookie used to work for 30 days although the browser dropped
 // it after an hour (pentest F-04).
 func TestSessionEndsAfterItsLifetime(t *testing.T) {
-	a := testAuthenticator(t)
+	a, _ := testAuthenticator(t)
 	user := &User{ID: "kc-1", Email: "member@base48.cz", Roles: []string{"memberportal_admin"}}
 
 	fresh := cookieFor(t, func(w http.ResponseWriter, r *http.Request) error { return a.SignIn(w, r, user) })
@@ -56,6 +70,7 @@ func TestSessionEndsAfterItsLifetime(t *testing.T) {
 			s, _ := a.store.New(r, sessionName)
 			s.Values[sessionUserKey] = user
 			s.Values[sessionIssuedKey] = issued.Unix()
+			s.Values[sessionIDKey] = "session-" + issued.String()
 			return s.Save(r, w)
 		})
 	}
@@ -69,7 +84,7 @@ func TestSessionEndsAfterItsLifetime(t *testing.T) {
 		t.Error("session signed in 30 days ago was accepted")
 	}
 
-	// What a cookie from before this change holds: a user and no sign-in time.
+	// What a cookie from before these changes holds: a user, nothing else.
 	legacy := cookieFor(t, func(w http.ResponseWriter, r *http.Request) error {
 		s, _ := a.store.New(r, sessionName)
 		s.Values[sessionUserKey] = user
@@ -77,5 +92,69 @@ func TestSessionEndsAfterItsLifetime(t *testing.T) {
 	})
 	if got := a.GetUser(requestWith(legacy)); got != nil {
 		t.Error("session without a sign-in time was accepted")
+	}
+}
+
+// Logout used to only ask the browser to delete the cookie; the pentest
+// reused the original cookie right after and got its profile (F-04).
+func TestLogoutRevokesTheSession(t *testing.T) {
+	a, database := testAuthenticator(t)
+	user := &User{ID: "kc-1", Email: "member@base48.cz"}
+	signIn := func(w http.ResponseWriter, r *http.Request) error { return a.SignIn(w, r, user) }
+	laptop := cookieFor(t, signIn)
+	phone := cookieFor(t, signIn)
+
+	// An old revocation that has expired, for logout to clean up.
+	if _, err := database.Exec(`INSERT INTO revoked_sessions (id, expires_at) VALUES ('old', ?)`, time.Now().Add(-time.Minute).Unix()); err != nil {
+		t.Fatal(err)
+	}
+
+	logout := httptest.NewRequest(http.MethodGet, "/auth/logout", nil)
+	logout.AddCookie(laptop)
+	rec := httptest.NewRecorder()
+	a.LogoutHandler(rec, logout)
+
+	if got := a.GetUser(requestWith(laptop)); got != nil {
+		t.Error("the logged-out session's cookie still works")
+	}
+	if got := a.GetUser(requestWith(phone)); got == nil {
+		t.Error("logging out on one device ended the session on another")
+	}
+
+	var ids []string
+	rows, err := database.Query(`SELECT id FROM revoked_sessions`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	if len(ids) != 1 || ids[0] == "old" {
+		t.Errorf("revoked_sessions = %v, want just the laptop session", ids)
+	}
+
+	// A second logout with the same cookie is harmless.
+	a.LogoutHandler(httptest.NewRecorder(), logout)
+}
+
+// Sign-in hands out a new session id each time.
+func TestSignInStartsANewSession(t *testing.T) {
+	a, _ := testAuthenticator(t)
+	ids := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		c := cookieFor(t, func(w http.ResponseWriter, r *http.Request) error { return a.SignIn(w, r, &User{ID: "kc-1"}) })
+		r := requestWith(c)
+		s, err := a.store.Get(r, sessionName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, _ := s.Values[sessionIDKey].(string)
+		if id == "" || ids[id] {
+			t.Fatalf("session id %q is empty or repeated", id)
+		}
+		ids[id] = true
 	}
 }

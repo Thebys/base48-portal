@@ -721,3 +721,17 @@ RETURNING *;
 -- Returns sql.ErrNoRows when there was no such grant.
 DELETE FROM access_grants WHERE user_id = ? AND scope = ?
 RETURNING *;
+
+-- ============================================================================
+-- Revoked sessions: logged out before they expired. See migration 020.
+-- ============================================================================
+
+-- name: RevokeSession :exec
+INSERT INTO revoked_sessions (id, expires_at) VALUES (?, ?)
+ON CONFLICT (id) DO NOTHING;
+
+-- name: IsSessionRevoked :one
+SELECT EXISTS (SELECT 1 FROM revoked_sessions WHERE id = ?);
+
+-- name: DeleteExpiredRevokedSessions :exec
+DELETE FROM revoked_sessions WHERE expires_at < ?;

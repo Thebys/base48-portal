@@ -30,6 +30,7 @@ const (
 	sessionUserKey   = "user"
 	sessionStateKey  = "oauth_state"
 	sessionIssuedKey = "issued_at"
+	sessionIDKey     = "session_id"
 )
 
 // SessionLifetime is how long a sign-in lasts. Roles are copied from the ID
@@ -121,11 +122,12 @@ func init() {
 
 // NewWithStore returns an Authenticator that reads sessions from store and
 // never talks to Keycloak: login does not work, GetUser and RequireAuth do.
-// For handler tests, which write the session cookie with the same store.
-func NewWithStore(cfg *config.Config, store *sessions.CookieStore) *Authenticator {
+// For handler tests, which sign users in with SignIn.
+func NewWithStore(cfg *config.Config, store *sessions.CookieStore, queries *db.Queries) *Authenticator {
 	return &Authenticator{
 		store:    store,
 		config:   cfg,
+		queries:  queries,
 		appCache: make(map[string][]KeycloakApplication),
 	}
 }
@@ -420,6 +422,7 @@ func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session, _ := a.store.Get(r, sessionName)
+	a.revoke(r.Context(), session)
 	session.Values = make(map[interface{}]interface{})
 	session.Options.MaxAge = -1
 	session.Save(r, w)
@@ -445,7 +448,26 @@ func (a *Authenticator) SignIn(w http.ResponseWriter, r *http.Request, user *Use
 	session, _ := a.store.Get(r, sessionName)
 	session.Values[sessionUserKey] = user
 	session.Values[sessionIssuedKey] = time.Now().Unix()
+	session.Values[sessionIDKey] = generateState() // 32 random bytes, as for the OAuth state
 	return session.Save(r, w)
+}
+
+// revoke records session as logged out. Deleting the cookie only asks the
+// browser to forget it; a copy taken before logout would work until the
+// session expires (pentest F-04). GetUser refuses revoked sessions.
+func (a *Authenticator) revoke(ctx context.Context, session *sessions.Session) {
+	id, ok := session.Values[sessionIDKey].(string)
+	issued, ok2 := session.Values[sessionIssuedKey].(int64)
+	if !ok || !ok2 {
+		return
+	}
+	expires := time.Unix(issued, 0).Add(SessionLifetime).Unix()
+	if err := a.queries.RevokeSession(ctx, db.RevokeSessionParams{ID: id, ExpiresAt: expires}); err != nil {
+		fmt.Printf("⚠ WARNING: Failed to revoke session on logout: %v\n", err)
+	}
+	if err := a.queries.DeleteExpiredRevokedSessions(ctx, time.Now().Unix()); err != nil {
+		fmt.Printf("⚠ WARNING: Failed to delete expired revoked sessions: %v\n", err)
+	}
 }
 
 // GetUser returns the authenticated user from session, or nil if not authenticated
@@ -464,6 +486,15 @@ func (a *Authenticator) GetUser(r *http.Request) *User {
 	// before it was recorded has none and counts as expired.
 	issued, ok := session.Values[sessionIssuedKey].(int64)
 	if !ok || time.Since(time.Unix(issued, 0)) > SessionLifetime {
+		return nil
+	}
+
+	id, ok := session.Values[sessionIDKey].(string)
+	if !ok {
+		return nil
+	}
+	revoked, err := a.queries.IsSessionRevoked(r.Context(), id)
+	if err != nil || revoked {
 		return nil
 	}
 

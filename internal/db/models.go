@@ -142,6 +142,11 @@ type RevbankTransaction struct {
 	SyncedAt       time.Time      `json:"synced_at"`
 }
 
+type RevokedSession struct {
+	ID        string `json:"id"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
 type Setting struct {
 	Key       string    `json:"key"`
 	Value     string    `json:"value"`

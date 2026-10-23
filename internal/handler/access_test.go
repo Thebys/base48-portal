@@ -38,7 +38,7 @@ func newAccessEnv(t *testing.T) *accessEnv {
 	cfg := &config.Config{WebRoot: "../../web", BaseURL: "https://portal.base48.cz"}
 	store := auth.NewSessionStore(&config.Config{SessionSecret: "access-test-session-key"})
 	h := &Handler{
-		auth:         auth.NewWithStore(cfg, store),
+		auth:         auth.NewWithStore(cfg, store, queries),
 		db:           database,
 		queries:      queries,
 		config:       cfg,
