@@ -85,6 +85,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(handler.SecurityHeaders(strings.HasPrefix(cfg.BaseURL, "https://")))
+	r.Use(handler.SameOriginWrites(cfg.BaseURL))
 
 	// Static files
 	r.Handle("/static/*", http.StripPrefix("/static/", handler.StaticFiles(filepath.Join(cfg.WebRoot, "static"))))
