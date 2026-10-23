@@ -246,10 +246,10 @@ async function loadProjects() {
                 if (project.vs_list && project.vs_list.length > 0) {
                     project.vs_list.forEach((vsItem, index) => {
                         const isPrimary = index === 0;
-                        const noteTitle = vsItem.note ? ` title="${vsItem.note}"` : '';
+                        const noteTitle = vsItem.note ? ` title="${esc(vsItem.note)}"` : '';
                         vsTagsHtml += `
                             <span class="vs-tag ${isPrimary ? 'primary' : ''}"${noteTitle}>
-                                ${vsItem.vs}
+                                ${esc(vsItem.vs)}
                             </span>
                         `;
                     });
@@ -258,23 +258,23 @@ async function loadProjects() {
                 const projectSection = document.createElement('details');
 
                 const descriptionHtml = project.description
-                    ? `<p style="padding: 0 20px; color: #9ca3af;">${project.description}</p>`
+                    ? `<p style="padding: 0 20px; color: #9ca3af;">${esc(project.description)}</p>`
                     : '';
 
                 const primaryVS = project.vs_list && project.vs_list.length > 0 ? project.vs_list[0].vs : '';
                 const qrHtml = primaryVS ? `
                     <div class="qr-section">
-                        <a id="qr-link-${project.id}" href="/api/qr?vs=${primaryVS}&msg=${encodeURIComponent(project.name)}" target="_blank" title="Klikni pro otevření v bankovní aplikaci">
-                            <img id="qr-img-${project.id}" src="/api/qr?vs=${primaryVS}&msg=${encodeURIComponent(project.name)}" alt="QR platba" width="150" height="150" style="cursor:pointer;">
+                        <a id="qr-link-${project.id}" href="/api/qr?vs=${encodeURIComponent(primaryVS)}&msg=${encodeURIComponent(project.name)}" target="_blank" title="Klikni pro otevření v bankovní aplikaci">
+                            <img id="qr-img-${project.id}" src="/api/qr?vs=${encodeURIComponent(primaryVS)}&msg=${encodeURIComponent(project.name)}" alt="QR platba" width="150" height="150" style="cursor:pointer;">
                         </a>
                         <div class="qr-info">
                             <p><strong>QR platba</strong></p>
-                            <p>VS: <strong>${primaryVS}</strong></p>
+                            <p>VS: <strong>${esc(primaryVS)}</strong></p>
                             <p>Bez předvyplněné částky.</p>
                             <div class="qr-amount-row">
                                 <input type="number" id="qr-amount-${project.id}" min="1" step="1" placeholder="Kč">
-                                <button class="btn btn-sm btn-primary" onclick="setQRAmount(${project.id}, '${primaryVS}', '${encodeURIComponent(project.name)}')">Nastavit částku</button>
-                                <button class="btn btn-sm btn-secondary" onclick="resetQR(${project.id}, '${primaryVS}', '${encodeURIComponent(project.name)}')">Reset</button>
+                                <button class="btn btn-sm btn-primary" onclick="setQRAmount(${project.id}, ${jsArg(encodeURIComponent(primaryVS))}, ${jsArg(encodeURIComponent(project.name))})">Nastavit částku</button>
+                                <button class="btn btn-sm btn-secondary" onclick="resetQR(${project.id}, ${jsArg(encodeURIComponent(primaryVS))}, ${jsArg(encodeURIComponent(project.name))})">Reset</button>
                             </div>
                         </div>
                     </div>
@@ -284,7 +284,7 @@ async function loadProjects() {
                     <summary>
                         <div class="project-header">
                             <div class="project-info">
-                                <div class="project-title">${project.name}</div>
+                                <div class="project-title">${esc(project.name)}</div>
                                 <div class="project-meta">
                                     VS: ${vsTagsHtml || '<span style="color: #9ca3af;">–</span>'}
                                 </div>
@@ -322,7 +322,7 @@ async function loadProjects() {
         console.error('Error loading projects:', error);
         document.getElementById('projectsList').innerHTML = `
             <div style="text-align: center; padding: 40px; color: #ef4444;">
-                Chyba při načítání projektů: ${error.message}
+                Chyba při načítání projektů: ${esc(error.message)}
             </div>
         `;
     }
@@ -352,10 +352,10 @@ async function loadProjectPayments(projectId) {
             data.payments.forEach(payment => {
                 html += `
                     <tr>
-                        <td>${payment.date}</td>
-                        <td style="color: #059669; font-weight: 600;">+${payment.amount} Kč</td>
-                        <td>${payment.remote_account || '-'}</td>
-                        <td><span class="vs">${payment.identification || '-'}</span></td>
+                        <td>${esc(payment.date)}</td>
+                        <td style="color: #059669; font-weight: 600;">+${esc(payment.amount)} Kč</td>
+                        <td>${esc(payment.remote_account || '-')}</td>
+                        <td><span class="vs">${esc(payment.identification || '-')}</span></td>
                     </tr>
                 `;
             });
@@ -373,7 +373,7 @@ async function loadProjectPayments(projectId) {
         console.error('Error loading project payments:', error);
         document.getElementById(`payments-${projectId}`).innerHTML = `
             <div style="text-align: center; padding: 20px; color: #ef4444;">
-                Chyba při načítání plateb: ${error.message}
+                Chyba při načítání plateb: ${esc(error.message)}
             </div>
         `;
     }

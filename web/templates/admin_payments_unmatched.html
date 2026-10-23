@@ -643,7 +643,7 @@
                 if (data.projects && data.projects.length > 0) {
                     select.innerHTML = '<option value="">-- Vyber projekt --</option>';
                     data.projects.forEach(project => {
-                        select.innerHTML += `<option value="${project.id}">${project.name} (VS: ${project.payments_id || 'N/A'})</option>`;
+                        select.add(new Option(`${project.name} (VS: ${project.payments_id || 'N/A'})`, project.id));
                     });
                 } else {
                     select.innerHTML = '<option value="">Žádné projekty (vytvořte v /admin/projects)</option>';
@@ -665,20 +665,27 @@
                 const data = await response.json();
 
                 if (data.users && data.users.length > 0) {
-                    let html = '<div style="padding: 10px;">';
+                    // Names and e-mails are whatever people typed when they
+                    // registered in Keycloak: set as text, never as markup or
+                    // as part of an onclick.
+                    const list = document.createElement('div');
+                    list.style.padding = '10px';
                     data.users.forEach(user => {
                         const displayName = user.realname || user.username || user.email;
-                        const escapedName = displayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                        const escapedEmail = user.email.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                        html += `
-                            <div class="user-item" onclick="selectUser(${user.id}, '${escapedName}', '${escapedEmail}', '${user.payments_id || ''}', this)" style="padding: 10px; border-bottom: 1px solid #e5e7eb; cursor: pointer; transition: all 0.15s;">
-                                <div style="font-weight: 600;">${displayName}</div>
-                                <div style="font-size: 13px; color: #6b7280;">${user.email}${user.payments_id ? ' | VS: ' + user.payments_id : ''}</div>
-                            </div>
-                        `;
+                        const item = document.createElement('div');
+                        item.className = 'user-item';
+                        item.style.cssText = 'padding: 10px; border-bottom: 1px solid #e5e7eb; cursor: pointer; transition: all 0.15s;';
+                        const name = document.createElement('div');
+                        name.style.fontWeight = '600';
+                        name.textContent = displayName;
+                        const details = document.createElement('div');
+                        details.style.cssText = 'font-size: 13px; color: #6b7280;';
+                        details.textContent = user.email + (user.payments_id ? ' | VS: ' + user.payments_id : '');
+                        item.append(name, details);
+                        item.addEventListener('click', () => selectUser(user.id, displayName, user.email, user.payments_id || '', item));
+                        list.appendChild(item);
                     });
-                    html += '</div>';
-                    document.getElementById('userList').innerHTML = html;
+                    document.getElementById('userList').replaceChildren(list);
                 } else {
                     document.getElementById('userList').innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280; font-size: 13px;">Žádní uživatelé nenalezeni</div>';
                 }

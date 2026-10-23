@@ -413,15 +413,15 @@ function queueDebtEmails() {
     .then(r => r.json())
     .then(data => {
         if (!data.success) {
-            showDebtStatus('error', 'Chyba: ' + (data.error || 'Neznámá chyba'));
+            showDebtStatus('error', 'Chyba: ' + esc(data.error || 'Neznámá chyba'));
             updateDebtSelection();
             return;
         }
-        let html = '<strong>' + data.message + '</strong>';
+        let html = `<strong>${esc(data.message)}</strong>`;
         if (data.skipped && data.skipped.length > 0) {
             html += '<ul class="mt-2 list-disc list-inside">';
             data.skipped.forEach(s => {
-                html += '<li>' + (s.email || ('#' + s.user_id)) + ': ' + s.reason + '</li>';
+                html += `<li>${esc(s.email || ('#' + s.user_id))}: ${esc(s.reason)}</li>`;
             });
             html += '</ul>';
         }
@@ -431,7 +431,7 @@ function queueDebtEmails() {
         setTimeout(() => location.reload(), 2500);
     })
     .catch(err => {
-        showDebtStatus('error', 'Chyba: ' + err.message);
+        showDebtStatus('error', 'Chyba: ' + esc(err.message));
         updateDebtSelection();
     });
 }

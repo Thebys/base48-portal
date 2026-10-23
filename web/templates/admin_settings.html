@@ -429,7 +429,7 @@ BANK_ACCOUNT_CZ=2800691518/2010</pre>
                 <div id="template-status" class="hidden mt-3"></div>
 
                 <div id="template-preview" class="hidden mt-4 border rounded-lg overflow-hidden">
-                    <iframe id="preview-iframe" class="w-full" style="height:500px; border:none;"></iframe>
+                    <iframe id="preview-iframe" sandbox class="w-full" style="height:500px; border:none;"></iframe>
                 </div>
             </div>
         </details>
@@ -745,7 +745,9 @@ function showStatus(type, message) {
         info: {bg: 'bg-blue-50', text: 'text-blue-800', icon: '\u2139'}
     };
     const c = colors[type] || colors.info;
-    statusDiv.innerHTML = `<div class="rounded-md ${c.bg} p-4"><div class="flex"><div class="flex-shrink-0"><span class="text-lg">${c.icon}</span></div><div class="ml-3"><p class="text-sm font-medium ${c.text}">${message}</p></div></div></div>`;
+    statusDiv.innerHTML = `<div class="rounded-md ${c.bg} p-4"><div class="flex"><div class="flex-shrink-0"><span class="text-lg">${c.icon}</span></div><div class="ml-3"><p class="text-sm font-medium ${c.text}"></p></div></div></div>`;
+    // Server messages can quote addresses and other stored text.
+    statusDiv.querySelector('p').textContent = message;
     if (type === 'success') setTimeout(() => statusDiv.classList.add('hidden'), 5000);
 }
 
@@ -757,7 +759,8 @@ function showTemplateStatus(type, message) {
         error: {bg: 'bg-red-50', text: 'text-red-800'},
     };
     const c = colors[type] || colors.success;
-    statusDiv.innerHTML = `<div class="rounded-md ${c.bg} p-3"><p class="text-sm font-medium ${c.text}">${message}</p></div>`;
+    statusDiv.innerHTML = `<div class="rounded-md ${c.bg} p-3"><p class="text-sm font-medium ${c.text}"></p></div>`;
+    statusDiv.querySelector('p').textContent = message;
     if (type === 'success') setTimeout(() => statusDiv.classList.add('hidden'), 3000);
 }
 
