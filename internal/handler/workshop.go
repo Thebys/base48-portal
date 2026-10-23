@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
@@ -92,6 +93,23 @@ func reservationUsername(username sql.NullString, email string, showEmail bool) 
 func historyWindowStart(now time.Time) string {
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	return monthStart.AddDate(0, -1, 0).Format(reservationTimeLayout)
+}
+
+// A member's reservation is at most a month long and starts at most half a
+// year ahead, so nobody holds a bay for years (pentest F-08). A longer stay
+// is a new reservation. Admin reservations are not limited.
+const (
+	maxReservationLength = 31 * 24 * time.Hour
+	maxReservationLead   = 183 * 24 * time.Hour
+	maxReservationNote   = 200 // characters, as the form's maxlength
+)
+
+// reservationTooLong reports whether a reservation from startsAt to endsAt
+// (storage format) is longer than a member may book.
+func reservationTooLong(startsAt, endsAt string) bool {
+	start, err1 := time.Parse(reservationTimeLayout, startsAt)
+	end, err2 := time.Parse(reservationTimeLayout, endsAt)
+	return err1 != nil || err2 != nil || end.Sub(start) > maxReservationLength
 }
 
 // parseReservationTime accepts datetime-local input ("2006-01-02T15:04")
@@ -250,6 +268,18 @@ func (h *Handler) CreateReservationHandler(w http.ResponseWriter, r *http.Reques
 		h.jsonError(w, "Rezervace nesmí končit v minulosti", http.StatusBadRequest)
 		return
 	}
+	if reservationTooLong(startsAt, endsAt) {
+		h.jsonError(w, "Rezervace může trvat nejvýš 31 dní; na delší stání si udělej další", http.StatusBadRequest)
+		return
+	}
+	if latest := time.Now().Add(maxReservationLead).Format(reservationTimeLayout); startsAt > latest {
+		h.jsonError(w, "Rezervace může začínat nejvýš půl roku dopředu", http.StatusBadRequest)
+		return
+	}
+	if utf8.RuneCountInString(req.Note) > maxReservationNote {
+		h.jsonError(w, "Poznámka může mít nejvýš 200 znaků", http.StatusBadRequest)
+		return
+	}
 
 	reservation, err := h.queries.CreateReservation(ctx, db.CreateReservationParams{
 		ResourceID: req.ResourceID,
@@ -350,6 +380,13 @@ func (h *Handler) UpdateReservationEndHandler(w http.ResponseWriter, r *http.Req
 	endsAt, err := parseReservationTime(req.EndsAt)
 	if err != nil {
 		h.jsonError(w, "Neplatný konec rezervace", http.StatusBadRequest)
+		return
+	}
+
+	// Someone else's reservation gets the same answer as a clash below.
+	if current, err := h.queries.GetReservation(ctx, id); err == nil && current.UserID == dbUser.ID &&
+		reservationTooLong(current.StartsAt, endsAt) {
+		h.jsonError(w, "Rezervace může trvat nejvýš 31 dní; na delší stání si udělej další", http.StatusBadRequest)
 		return
 	}
 
