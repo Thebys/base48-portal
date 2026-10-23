@@ -259,7 +259,10 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 // fetchKeycloakUserByID fetches a user from Keycloak by their ID.
 // Returns the auth.User (for template compatibility) and the raw KeycloakUserInfo (for attributes).
 func (h *Handler) fetchKeycloakUserByID(ctx context.Context, accessToken, keycloakID string) (*auth.User, *KeycloakUserInfo, error) {
-	url := fmt.Sprintf("%s/admin/realms/%s/users/%s", h.config.KeycloakURL, h.config.KeycloakRealm, keycloakID)
+	url, err := keycloak.UserURL(h.config, keycloakID, "")
+	if err != nil {
+		return nil, nil, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -298,8 +301,10 @@ func (h *Handler) fetchKeycloakUserByID(ctx context.Context, accessToken, keyclo
 
 // fetchUserRolesFromKeycloak fetches roles for a specific user
 func (h *Handler) fetchUserRolesFromKeycloak(ctx context.Context, accessToken, keycloakID string) ([]string, error) {
-	url := fmt.Sprintf("%s/admin/realms/%s/users/%s/role-mappings/realm",
-		h.config.KeycloakURL, h.config.KeycloakRealm, keycloakID)
+	url, err := keycloak.UserURL(h.config, keycloakID, "/role-mappings/realm")
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

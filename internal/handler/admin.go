@@ -60,6 +60,10 @@ func (h *Handler) AdminAssignRoleHandler(w http.ResponseWriter, r *http.Request)
 		h.jsonError(w, "user_id and role_name are required", http.StatusBadRequest)
 		return
 	}
+	if !keycloak.ValidUserID(req.UserID) {
+		h.jsonError(w, "Invalid user_id", http.StatusBadRequest)
+		return
+	}
 
 	// Validate role name (whitelist for security)
 	if !allowedManagedRoles[req.RoleName] {
@@ -105,6 +109,10 @@ func (h *Handler) AdminRemoveRoleHandler(w http.ResponseWriter, r *http.Request)
 		h.jsonError(w, "user_id and role_name are required", http.StatusBadRequest)
 		return
 	}
+	if !keycloak.ValidUserID(req.UserID) {
+		h.jsonError(w, "Invalid user_id", http.StatusBadRequest)
+		return
+	}
 
 	// Validate role name (whitelist for security)
 	if !allowedManagedRoles[req.RoleName] {
@@ -142,6 +150,10 @@ func (h *Handler) AdminGetUserRolesHandler(w http.ResponseWriter, r *http.Reques
 	userID := r.URL.Query().Get("user_id")
 	if userID == "" {
 		h.jsonError(w, "user_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+	if !keycloak.ValidUserID(userID) {
+		h.jsonError(w, "Invalid user_id", http.StatusBadRequest)
 		return
 	}
 

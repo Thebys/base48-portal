@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/base48/member-portal/internal/config"
@@ -16,6 +18,32 @@ import (
 // is set. Callers already log a failed role sync, so the refusal shows up in
 // the log where the change would have been.
 var ErrReadOnly = errors.New("keycloak is read-only here (KEYCLOAK_READ_ONLY), role not changed")
+
+// ErrBadUserID is returned for a user id that cannot be a Keycloak user id.
+var ErrBadUserID = errors.New("not a Keycloak user id")
+
+// userIDPattern is what a Keycloak user id looks like: a UUID for a local
+// user, "f:<component id>:<username>" for a federated one.
+var userIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._@-]*$`)
+
+// ValidUserID reports whether id can be a Keycloak user id.
+func ValidUserID(id string) bool {
+	return userIDPattern.MatchString(id) && !strings.Contains(id, "..")
+}
+
+// UserURL is the Admin API URL of one user, followed by path ("" or e.g.
+// "/role-mappings/realm"). The id goes into the URL path and some ids come
+// from requests (/api/admin/users/roles?user_id=, the role assign and remove
+// body), so it is checked first: "../clients/<id>/client-secret?x=" used to
+// send the service account's token to another Admin API endpoint (pentest
+// F-15).
+func UserURL(cfg *config.Config, userID, path string) (string, error) {
+	if !ValidUserID(userID) {
+		return "", fmt.Errorf("%w: %q", ErrBadUserID, userID)
+	}
+	return fmt.Sprintf("%s/admin/realms/%s/users/%s%s",
+		cfg.KeycloakURL, cfg.KeycloakRealm, url.PathEscape(userID), path), nil
+}
 
 // Client wraps Keycloak Admin API calls
 type Client struct {
@@ -76,7 +104,7 @@ func (c *Client) GetRealmRoles(ctx context.Context) ([]Role, error) {
 
 // GetRoleByName gets a specific realm role by name
 func (c *Client) GetRoleByName(ctx context.Context, roleName string) (*Role, error) {
-	url := fmt.Sprintf("%s/admin/realms/%s/roles/%s", c.config.KeycloakURL, c.config.KeycloakRealm, roleName)
+	url := fmt.Sprintf("%s/admin/realms/%s/roles/%s", c.config.KeycloakURL, c.config.KeycloakRealm, url.PathEscape(roleName))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -107,8 +135,10 @@ func (c *Client) GetRoleByName(ctx context.Context, roleName string) (*Role, err
 
 // GetUserRoles returns all realm roles assigned to a user
 func (c *Client) GetUserRoles(ctx context.Context, userID string) ([]Role, error) {
-	url := fmt.Sprintf("%s/admin/realms/%s/users/%s/role-mappings/realm",
-		c.config.KeycloakURL, c.config.KeycloakRealm, userID)
+	url, err := UserURL(c.config, userID, "/role-mappings/realm")
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -143,14 +173,16 @@ func (c *Client) AssignRoleToUser(ctx context.Context, userID, roleName string) 
 		return ErrReadOnly
 	}
 
+	url, err := UserURL(c.config, userID, "/role-mappings/realm")
+	if err != nil {
+		return err
+	}
+
 	// First get the role details
 	role, err := c.GetRoleByName(ctx, roleName)
 	if err != nil {
 		return fmt.Errorf("failed to get role %s: %w", roleName, err)
 	}
-
-	url := fmt.Sprintf("%s/admin/realms/%s/users/%s/role-mappings/realm",
-		c.config.KeycloakURL, c.config.KeycloakRealm, userID)
 
 	// Keycloak expects an array of role objects
 	rolePayload := []Role{*role}
@@ -187,14 +219,16 @@ func (c *Client) RemoveRoleFromUser(ctx context.Context, userID, roleName string
 		return ErrReadOnly
 	}
 
+	url, err := UserURL(c.config, userID, "/role-mappings/realm")
+	if err != nil {
+		return err
+	}
+
 	// First get the role details
 	role, err := c.GetRoleByName(ctx, roleName)
 	if err != nil {
 		return fmt.Errorf("failed to get role %s: %w", roleName, err)
 	}
-
-	url := fmt.Sprintf("%s/admin/realms/%s/users/%s/role-mappings/realm",
-		c.config.KeycloakURL, c.config.KeycloakRealm, userID)
 
 	// Keycloak expects an array of role objects
 	rolePayload := []Role{*role}
