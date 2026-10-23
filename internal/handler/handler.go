@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -120,6 +121,15 @@ func (h *Handler) HomeHandler(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "home.html", data)
 }
 
+// errEmailNotVerified is getOrCreateUser refusing to link a Keycloak account
+// to the portal record with the same e-mail, because Keycloak has not
+// verified that the person signing in owns that e-mail.
+var errEmailNotVerified = errors.New("e-mail not verified in Keycloak")
+
+// unverifiedEmailMessage is what that person is told.
+const unverifiedEmailMessage = "Tvůj e-mail v Base48 SSO zatím není ověřený a v portálu k němu už existuje členský záznam. " +
+	"Než ho k tvému účtu připojíme, potřebujeme vědět, že je e-mail tvůj: ověř ho v SSO, nebo napiš správcům portálu, a pak se přihlas znovu."
+
 // getOrCreateUser tries to find user by Keycloak ID, then by email (for migration),
 // and creates a new user if none exists
 func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User, error) {
@@ -160,6 +170,20 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	// Try to find by email (for migration from old system)
 	dbUser, err = h.queries.GetUserByEmail(ctx, kcUser.Email)
 	if err == nil {
+		// Anyone can register in Keycloak with any address. Linking on one
+		// Keycloak has not verified would hand that person the record of the
+		// member who owns it: state, level, VS, contacts (pentest F-13).
+		if !kcUser.EmailVerified {
+			h.queries.CreateLog(ctx, db.CreateLogParams{
+				Subsystem: "keycloak",
+				Level:     "warning",
+				UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
+				Message:   fmt.Sprintf("Not linking Keycloak account to %s: e-mail not verified in Keycloak", kcUser.Email),
+				Metadata:  logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email}),
+			})
+			return nil, errEmailNotVerified
+		}
+
 		// Found by email! Link the Keycloak ID
 		linkedUser, err := h.queries.LinkKeycloakID(ctx, db.LinkKeycloakIDParams{
 			KeycloakID: sql.NullString{String: kcUser.ID, Valid: true},
@@ -295,6 +319,10 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dbUser, err := h.getOrCreateUser(r, user)
+	if errors.Is(err, errEmailNotVerified) {
+		http.Error(w, unverifiedEmailMessage, http.StatusForbidden)
+		return
+	}
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return

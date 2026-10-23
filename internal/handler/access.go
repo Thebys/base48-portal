@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 
@@ -44,6 +45,10 @@ func (h *Handler) memberPage(w http.ResponseWriter, r *http.Request, allowed fun
 	}
 
 	dbUser, err := h.getOrCreateUser(r, user)
+	if errors.Is(err, errEmailNotVerified) {
+		http.Error(w, unverifiedEmailMessage, http.StatusForbidden)
+		return nil, nil, acc, false
+	}
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return nil, nil, acc, false
@@ -67,6 +72,10 @@ func (h *Handler) memberAPI(w http.ResponseWriter, r *http.Request, allowed func
 	}
 
 	dbUser, err := h.getOrCreateUser(r, user)
+	if errors.Is(err, errEmailNotVerified) {
+		h.jsonError(w, unverifiedEmailMessage, http.StatusForbidden)
+		return nil, acc, false
+	}
 	if err != nil {
 		h.jsonError(w, "Database error", http.StatusInternalServerError)
 		return nil, acc, false
