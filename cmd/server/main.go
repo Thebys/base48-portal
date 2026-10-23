@@ -80,7 +80,11 @@ func main() {
 	r := chi.NewRouter()
 
 	// Middleware
-	r.Use(middleware.RealIP)
+	// The client IP is only logged. nginx in front sets X-Real-IP, replacing
+	// whatever the client sent, and the port listens on loopback only.
+	// RealIP, used before, also took True-Client-IP, which nginx passes on
+	// from the client as is.
+	r.Use(middleware.ClientIPFromHeader("X-Real-IP"))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))

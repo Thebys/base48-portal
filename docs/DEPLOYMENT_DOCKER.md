@@ -353,7 +353,7 @@ Někde v `.env` je dolar. Escapuj ho jako `$$`, nebo hodnotu přegeneruj.
 
 **Změna base image / verze Go**
 Base images jsou v `Dockerfile` připnuté digestem. Bump:
-`docker pull golang:1.24-alpine`, pak nový digest z `docker images --digests`.
+`docker pull golang:1.26-alpine`, pak nový digest z `docker images --digests`.
 
 **Chci pustit testy stejně jako CI**
 ```bash

@@ -25,7 +25,7 @@ Server běží na `http://localhost:4848`
 
 ## Požadavky
 
-- Go 1.24+
+- Go 1.26+
 - Keycloak server
 - SQLite3 CLI
 

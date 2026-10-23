@@ -4,10 +4,13 @@
 #   /app/portal              web server        (default)
 #   /app/portal-cron daemon  sync/fees daemon  (compose overrides `command`)
 #
-# Base images are pinned by digest. To bump: `docker pull golang:1.24-alpine`
-# then read the new digest from `docker images --digests`.
+# Base images are pinned by digest. To bump: `docker pull golang:1.26-alpine`
+# then read the new digest from `docker images --digests`. Keep Go on a
+# supported release: the standard library (net/http, crypto/tls,
+# html/template) is compiled into the binary, so its fixes only reach
+# production through this line.
 
-FROM golang:1.24-alpine@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191 AS deps
+FROM golang:1.26-alpine@sha256:27f2d3b83cfc5803c8078f8e730af0f7c431bf067afaec8f60a36fb763187cba AS deps
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
