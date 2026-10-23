@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/gob"
@@ -132,9 +134,14 @@ func NewWithStore(cfg *config.Config, store *sessions.CookieStore, queries *db.Q
 	}
 }
 
-// NewSessionStore is the cookie store for portal sessions.
+// NewSessionStore is the cookie store for portal sessions. The cookie is
+// signed and encrypted: it carries the user's e-mail, name and roles, which
+// anyone with a copy could read while it was only signed (pentest F-07).
 func NewSessionStore(cfg *config.Config) *sessions.CookieStore {
-	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
+	store := sessions.NewCookieStore(
+		sessionKey(cfg.SessionSecret, "sign"),
+		sessionKey(cfg.SessionSecret, "encrypt"),
+	)
 	store.Options = &sessions.Options{
 		Path:     "/",
 		HttpOnly: true,
@@ -148,6 +155,15 @@ func NewSessionStore(cfg *config.Config) *sessions.CookieStore {
 	// as well, so this is the second of two locks.
 	store.MaxAge(int(SessionLifetime / time.Second))
 	return store
+}
+
+// sessionKey derives a key from SESSION_SECRET, so the one secret in the vault
+// gives separate keys to sign and to encrypt with: 32 bytes each, for
+// HMAC-SHA256 and AES-256.
+func sessionKey(secret, purpose string) []byte {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte("base48 portal session " + purpose))
+	return mac.Sum(nil)
 }
 
 // New creates a new Authenticator. It tries once to reach Keycloak so the

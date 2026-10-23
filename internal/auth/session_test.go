@@ -1,13 +1,17 @@
 package auth
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/gorilla/sessions"
 
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
@@ -156,5 +160,49 @@ func TestSignInStartsANewSession(t *testing.T) {
 			t.Fatalf("session id %q is empty or repeated", id)
 		}
 		ids[id] = true
+	}
+}
+
+// The cookie used to be base64 of gob: e-mail, name and roles in plain text
+// for anyone holding a copy (pentest F-07).
+func TestSessionCookieIsEncrypted(t *testing.T) {
+	a, _ := testAuthenticator(t)
+	user := &User{ID: "kc-1", Email: "secret.member@base48.cz", Name: "Tajný Člen", Roles: []string{"memberportal_admin"}}
+	c := cookieFor(t, func(w http.ResponseWriter, r *http.Request) error { return a.SignIn(w, r, user) })
+
+	// securecookie: base64("timestamp|base64(payload)|mac")
+	outer, err := base64.URLEncoding.DecodeString(c.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := bytes.SplitN(outer, []byte("|"), 3)
+	if len(parts) != 3 {
+		t.Fatalf("unexpected cookie format: %q", outer)
+	}
+	payload, err := base64.URLEncoding.DecodeString(string(parts[1]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{user.Email, user.Name, "memberportal_admin"} {
+		if bytes.Contains(payload, []byte(secret)) {
+			t.Errorf("cookie payload contains %q in plain text", secret)
+		}
+	}
+	if got := a.GetUser(requestWith(c)); got == nil || got.Email != user.Email {
+		t.Errorf("GetUser on the encrypted cookie = %v", got)
+	}
+
+	// A cookie signed the old way, with the raw secret and no encryption,
+	// does not decode.
+	old := sessions.NewCookieStore([]byte("session-test-secret"))
+	legacy := cookieFor(t, func(w http.ResponseWriter, r *http.Request) error {
+		s, _ := old.New(r, sessionName)
+		s.Values[sessionUserKey] = user
+		s.Values[sessionIssuedKey] = time.Now().Unix()
+		s.Values[sessionIDKey] = "legacy"
+		return s.Save(r, w)
+	})
+	if got := a.GetUser(requestWith(legacy)); got != nil {
+		t.Error("a cookie signed with the raw secret was accepted")
 	}
 }
