@@ -679,18 +679,20 @@ func (c *Client) formatMessage(to, subject, body string) string {
 func (c *Client) logEmail(ctx context.Context, params SendParams, err error) error {
 	level := "success"
 	message := fmt.Sprintf("Email sent to %s: %s", params.Recipient, params.Subject)
-	metadata := fmt.Sprintf(`{"recipient":"%s","subject":"%s","template":"%s"}`,
-		params.Recipient, params.Subject, params.TemplateName)
+	// Marshalled, not formatted: a quote in an address, a subject or an
+	// SMTP error would otherwise end the JSON string and add fields.
+	fields := map[string]string{"recipient": params.Recipient, "subject": params.Subject, "template": params.TemplateName}
 
 	if err != nil {
 		level = "error"
 		message = fmt.Sprintf("Failed to send email to %s: %v", params.Recipient, err)
-		metadata = fmt.Sprintf(`{"recipient":"%s","subject":"%s","template":"%s","error":"%s"}`,
-			params.Recipient, params.Subject, params.TemplateName, err.Error())
+		fields["error"] = err.Error()
 		log.Printf("[Email] %s", message)
 	} else {
 		log.Printf("[Email] %s", message)
 	}
+
+	metadata, _ := json.Marshal(fields)
 
 	if c.queries != nil {
 		if _, dbErr := c.queries.CreateLog(ctx, db.CreateLogParams{
@@ -698,7 +700,7 @@ func (c *Client) logEmail(ctx context.Context, params SendParams, err error) err
 			Level:     level,
 			UserID:    params.UserID,
 			Message:   message,
-			Metadata:  sql.NullString{String: metadata, Valid: true},
+			Metadata:  sql.NullString{String: string(metadata), Valid: true},
 		}); dbErr != nil {
 			log.Printf("[Email] Warning: failed to log to database: %v", dbErr)
 		}

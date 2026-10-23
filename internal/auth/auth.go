@@ -414,13 +414,15 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 			userID = sql.NullInt64{Int64: dbUser.ID, Valid: true}
 		}
 
-		// Log login (gracefully - don't fail login if logging fails)
+		// Log login (gracefully - don't fail login if logging fails).
+		// Marshalled, not formatted: the e-mail is the user's own text.
+		metadata, _ := json.Marshal(map[string]string{"keycloak_id": user.ID, "email": user.Email})
 		_, _ = a.queries.CreateLog(r.Context(), db.CreateLogParams{
 			Subsystem: "auth",
 			Level:     "info",
 			UserID:    userID,
 			Message:   fmt.Sprintf("User login: %s", user.Email),
-			Metadata:  sql.NullString{String: fmt.Sprintf(`{"keycloak_id":"%s","email":"%s"}`, user.ID, user.Email), Valid: true},
+			Metadata:  sql.NullString{String: string(metadata), Valid: true},
 		})
 	}
 
