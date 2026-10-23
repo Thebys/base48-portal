@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -316,8 +317,13 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Update profile (member portal fields only — realname handled by Keycloak IDP)
+		phone := strings.TrimSpace(r.FormValue("phone"))
+		if !phoneChars.MatchString(phone) {
+			http.Error(w, "Telefon může obsahovat jen číslice, mezery a znaky + ( ) - / . (nejvýš 32 znaků). Jiný kontakt patří do pole Alternativní kontakt.", http.StatusBadRequest)
+			return
+		}
 		_, err := h.queries.UpdateUserProfile(r.Context(), db.UpdateUserProfileParams{
-			Phone:      sql.NullString{String: r.FormValue("phone"), Valid: r.FormValue("phone") != ""},
+			Phone:      sql.NullString{String: phone, Valid: phone != ""},
 			AltContact: sql.NullString{String: r.FormValue("alt_contact"), Valid: r.FormValue("alt_contact") != ""},
 			ID:         dbUser.ID,
 		})
@@ -345,6 +351,10 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, "profile.html", data)
 }
+
+// phoneChars is what a phone number may contain. The number ends up in the
+// member export, where anything more could be a spreadsheet formula.
+var phoneChars = regexp.MustCompile(`^[0-9+()/. -]{0,32}$`)
 
 // handleCustomFeeUpdate handles updating user's custom membership fee amount
 func (h *Handler) handleCustomFeeUpdate(w http.ResponseWriter, r *http.Request, dbUser *db.User) {

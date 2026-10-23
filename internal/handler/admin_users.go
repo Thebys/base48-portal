@@ -496,16 +496,37 @@ func (h *Handler) AdminUsersCSVExportHandler(w http.ResponseWriter, r *http.Requ
 		row := []string{
 			stateCode(u.State),
 			fmt.Sprintf("%d", u.ID),
-			nullStr(u.PaymentsID),
-			nullStr(u.Username),
-			nullStr(u.Realname),
-			u.Email,
-			nullStr(u.Phone),
+			csvText(nullStr(u.PaymentsID)),
+			csvText(nullStr(u.Username)),
+			csvText(nullStr(u.Realname)),
+			csvText(u.Email),
+			csvText(nullStr(u.Phone)),
 		}
 		if err := cw.Write(row); err != nil {
 			return
 		}
 	}
+}
+
+// csvText keeps a spreadsheet from reading a cell as a formula (pentest F-03).
+// Names, usernames, e-mails and phone numbers are typed by members, and Excel
+// or LibreOffice evaluate a cell such as =HYPERLINK(...) or =cmd|... when the
+// export is opened. A leading apostrophe makes the cell text. A phone number
+// like +420 777 123 456 starts with + too, but has nothing a formula could
+// call, so it is left as it is.
+func csvText(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '@', '\t', '\r', '\n':
+		return "'" + s
+	case '+', '-':
+		if !phoneChars.MatchString(s) {
+			return "'" + s
+		}
+	}
+	return s
 }
 
 func nullStr(ns sql.NullString) string {
