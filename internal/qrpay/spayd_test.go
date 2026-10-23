@@ -1,6 +1,7 @@
 package qrpay
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -82,6 +83,16 @@ func TestGenerateSPAYD(t *testing.T) {
 				t.Errorf("GenerateSPAYD() = %q, should end with *", result)
 			}
 		})
+	}
+}
+
+// A non-finite amount is no amount: never "AM:NaN" or "AM:+Inf".
+func TestGenerateSPAYDSkipsNonFiniteAmount(t *testing.T) {
+	for _, amount := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		got := GenerateSPAYD(PaymentParams{IBAN: "CZ6508000000192000145399", Amount: amount})
+		if strings.Contains(got, "AM:") {
+			t.Errorf("amount %v: %s", amount, got)
+		}
 	}
 }
 

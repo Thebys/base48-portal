@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -463,6 +464,11 @@ func (h *Handler) handleLevelUpgrade(w http.ResponseWriter, r *http.Request, dbU
 	http.Redirect(w, r, "/profile?success=1", http.StatusSeeOther)
 }
 
+var variableSymbol = regexp.MustCompile(`^[0-9]{1,10}$`)
+
+// maxQRAmount is the largest amount that fits the SPAYD AM field.
+const maxQRAmount = 9999999.99
+
 // QRPaymentHandler serves a QR payment code as PNG image.
 // GET /api/qr?vs=123&amount=1000&msg=PRISPEVEK
 // Public endpoint — the QR encodes only bank IBAN + VS + optional amount.
@@ -476,12 +482,24 @@ func (h *Handler) QRPaymentHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "vs parameter required", http.StatusBadRequest)
 		return
 	}
+	// A variable symbol is up to 10 digits; the generator would quietly
+	// drop anything else and still answer with a code.
+	if !variableSymbol.MatchString(vs) {
+		http.Error(w, "invalid vs", http.StatusBadRequest)
+		return
+	}
+	if len(msg) > 200 {
+		http.Error(w, "msg too long", http.StatusBadRequest)
+		return
+	}
 
 	var amount float64
 	if amountStr != "" {
 		var err error
 		amount, err = strconv.ParseFloat(amountStr, 64)
-		if err != nil || amount < 0 {
+		// ParseFloat takes "NaN" and "Inf" (pentest F-12): "Inf" made a code
+		// with AM:+Inf. The SPAYD amount field holds at most 10 characters.
+		if err != nil || math.IsNaN(amount) || amount < 0 || amount > maxQRAmount {
 			http.Error(w, "invalid amount", http.StatusBadRequest)
 			return
 		}

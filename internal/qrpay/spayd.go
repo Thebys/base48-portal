@@ -4,6 +4,7 @@ package qrpay
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -50,8 +51,8 @@ func GenerateSPAYD(p PaymentParams) string {
 	}
 	parts = append(parts, "ACC:"+acc)
 
-	// Amount (optional)
-	if p.Amount > 0 {
+	// Amount (optional). NaN is not > 0; +Inf is, and would print "+Inf".
+	if p.Amount > 0 && !math.IsInf(p.Amount, 1) {
 		parts = append(parts, fmt.Sprintf("AM:%.2f", p.Amount))
 	}
 
