@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/money"
 )
 
 // AdminLevelsHandler shows the membership levels management page.
@@ -84,16 +85,15 @@ func (h *Handler) AdminCreateLevelHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Validate amount is a positive number
-	var amount float64
-	if _, err := fmt.Sscanf(req.Amount, "%f", &amount); err != nil || amount < 0 {
+	amount, err := money.ParseAmount(req.Amount)
+	if err != nil {
 		h.jsonError(w, "Neplatná částka", http.StatusBadRequest)
 		return
 	}
 
 	newLevel, err := h.queries.CreateLevel(ctx, db.CreateLevelParams{
 		Name:   req.Name,
-		Amount: req.Amount,
+		Amount: money.FormatAmount(amount),
 	})
 	if err != nil {
 		h.jsonError(w, "Chyba při vytváření úrovně (možná duplicitní název)", http.StatusInternalServerError)
@@ -140,8 +140,8 @@ func (h *Handler) AdminUpdateLevelHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var amount float64
-	if _, err := fmt.Sscanf(req.Amount, "%f", &amount); err != nil || amount < 0 {
+	amount, err := money.ParseAmount(req.Amount)
+	if err != nil {
 		h.jsonError(w, "Neplatná částka", http.StatusBadRequest)
 		return
 	}
@@ -155,7 +155,7 @@ func (h *Handler) AdminUpdateLevelHandler(w http.ResponseWriter, r *http.Request
 
 	level, err := h.queries.UpdateLevel(ctx, db.UpdateLevelParams{
 		Name:   req.Name,
-		Amount: req.Amount,
+		Amount: money.FormatAmount(amount),
 		ID:     req.ID,
 	})
 	if err != nil {

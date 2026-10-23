@@ -9,6 +9,7 @@ import (
 
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/money"
 )
 
 // runFees creates monthly membership fee records for all accepted members.
@@ -54,11 +55,21 @@ func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 			continue
 		}
 
-		// Určíme částku - vždy používáme level_actual_amount, fallback na level.amount
+		// Určíme částku - vždy používáme level_actual_amount, fallback na level.amount.
+		// Nečíselnou částku (třeba "NaN", který profil dřív pustil) by SQLite
+		// v bilanci sečetlo jako 0, takže by člen fakticky neplatil nic.
 		feeAmount := user.LevelActualAmount
-		if feeAmount == "0" || feeAmount == "" {
+		if amount, err := money.ParseAmount(feeAmount); err != nil {
+			feeAmount = user.LevelAmount
+			log.Printf("  ⚠ User %s has an invalid level_actual_amount %q, using level default: %s", user.Email, user.LevelActualAmount, feeAmount)
+		} else if amount == 0 {
 			feeAmount = user.LevelAmount
 			log.Printf("  ⚠ User %s has no level_actual_amount, using level default: %s", user.Email, feeAmount)
+		}
+		if _, err := money.ParseAmount(feeAmount); err != nil {
+			log.Printf("  ✗ Level amount %q of %s is not a valid amount, no fee created", feeAmount, user.Email)
+			errors++
+			continue
 		}
 
 		// Vytvoříme fee záznam

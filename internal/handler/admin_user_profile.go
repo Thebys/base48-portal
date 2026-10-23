@@ -16,6 +16,7 @@ import (
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/keycloak"
+	"github.com/base48/member-portal/internal/money"
 	"github.com/base48/member-portal/internal/qrpay"
 	"github.com/go-chi/chi/v5"
 )
@@ -861,6 +862,12 @@ func (h *Handler) AdminCreateFeeHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	amount, err := money.ParseAmount(req.Amount)
+	if err != nil {
+		h.jsonError(w, "Neplatná částka", http.StatusBadRequest)
+		return
+	}
+
 	// Parse period_start "2026-03" to time.Time (first day of month)
 	periodTime, err := time.Parse("2006-01", req.PeriodStart)
 	if err != nil {
@@ -897,7 +904,7 @@ func (h *Handler) AdminCreateFeeHandler(w http.ResponseWriter, r *http.Request) 
 		UserID:      userID,
 		LevelID:     req.LevelID,
 		PeriodStart: periodTime,
-		Amount:      req.Amount,
+		Amount:      money.FormatAmount(amount),
 	})
 	if err != nil {
 		h.jsonError(w, "Failed to create fee: "+err.Error(), http.StatusInternalServerError)

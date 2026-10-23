@@ -18,6 +18,7 @@ import (
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
 	"github.com/base48/member-portal/internal/keycloak"
+	"github.com/base48/member-portal/internal/money"
 	"github.com/base48/member-portal/internal/qrpay"
 )
 
@@ -347,11 +348,8 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 
 // handleCustomFeeUpdate handles updating user's custom membership fee amount
 func (h *Handler) handleCustomFeeUpdate(w http.ResponseWriter, r *http.Request, dbUser *db.User) {
-	customFeeStr := r.FormValue("custom_fee_amount")
-
-	// Parse the custom fee amount
-	var customFee float64
-	if _, err := fmt.Sscanf(customFeeStr, "%f", &customFee); err != nil {
+	customFee, err := money.ParseAmount(r.FormValue("custom_fee_amount"))
+	if err != nil {
 		http.Error(w, "Neplatná částka", http.StatusBadRequest)
 		return
 	}
@@ -363,9 +361,8 @@ func (h *Handler) handleCustomFeeUpdate(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Parse level minimum amount
-	var levelMinimum float64
-	if _, err := fmt.Sscanf(level.Amount, "%f", &levelMinimum); err != nil {
+	levelMinimum, err := money.ParseAmount(level.Amount)
+	if err != nil {
 		http.Error(w, "Chyba konfigurace úrovně členství", http.StatusInternalServerError)
 		return
 	}
