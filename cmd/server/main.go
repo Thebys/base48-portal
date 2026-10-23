@@ -87,8 +87,7 @@ func main() {
 	r.Use(handler.SecurityHeaders(strings.HasPrefix(cfg.BaseURL, "https://")))
 
 	// Static files
-	fileServer := http.FileServer(http.Dir(filepath.Join(cfg.WebRoot, "static")))
-	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
+	r.Handle("/static/*", http.StripPrefix("/static/", handler.StaticFiles(filepath.Join(cfg.WebRoot, "static"))))
 
 	// Public routes
 	r.Get("/", h.HomeHandler)
