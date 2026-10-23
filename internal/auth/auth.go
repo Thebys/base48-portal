@@ -26,18 +26,16 @@ import (
 )
 
 const (
-	sessionName     = "base48-session"
-	sessionUserKey  = "user"
-	sessionStateKey = "oauth_state"
+	sessionName      = "base48-session"
+	sessionUserKey   = "user"
+	sessionStateKey  = "oauth_state"
+	sessionIssuedKey = "issued_at"
 )
 
-// SessionName and SessionUserKey say where GetUser looks: the session cookie
-// and the key under which it stores the *User. Handler tests use them to sign
-// a user in through a store passed to NewWithStore.
-const (
-	SessionName    = sessionName
-	SessionUserKey = sessionUserKey
-)
+// SessionLifetime is how long a sign-in lasts. Roles are copied from the ID
+// token at sign-in, so it is also how long a role removed in Keycloak (admin,
+// active_member) keeps working in the portal.
+const SessionLifetime = time.Hour
 
 // KeycloakApplication represents a client/service visible in Keycloak
 type KeycloakApplication struct {
@@ -132,6 +130,24 @@ func NewWithStore(cfg *config.Config, store *sessions.CookieStore) *Authenticato
 	}
 }
 
+// NewSessionStore is the cookie store for portal sessions.
+func NewSessionStore(cfg *config.Config) *sessions.CookieStore {
+	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
+	store.Options = &sessions.Options{
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   strings.HasPrefix(cfg.BaseURL, "https"),
+		SameSite: http.SameSiteLaxMode,
+	}
+	// Sets the cookie's Max-Age and the codecs' own limit. NewCookieStore
+	// gives the codecs 30 days, and replacing Options does not touch that:
+	// the browser dropped the cookie after an hour, but a copy of it was
+	// accepted for 30 days (pentest F-04). GetUser checks the sign-in time
+	// as well, so this is the second of two locks.
+	store.MaxAge(int(SessionLifetime / time.Second))
+	return store
+}
+
 // New creates a new Authenticator. It tries once to reach Keycloak so the
 // happy-path startup returns a fully ready authenticator. If Keycloak is
 // unreachable, the authenticator is returned in limited mode and a background
@@ -141,17 +157,8 @@ func New(ctx context.Context, cfg *config.Config, queries *db.Queries) (*Authent
 	// IPv4 only, see keycloak.HTTPClient.
 	httpClient := keycloak.HTTPClient
 
-	store := sessions.NewCookieStore([]byte(cfg.SessionSecret))
-	store.Options = &sessions.Options{
-		Path:     "/",
-		MaxAge:   3600, // 60 minutes — forces re-login to refresh Keycloak roles
-		HttpOnly: true,
-		Secure:   strings.HasPrefix(cfg.BaseURL, "https"),
-		SameSite: http.SameSiteLaxMode,
-	}
-
 	a := &Authenticator{
-		store:      store,
+		store:      NewSessionStore(cfg),
 		config:     cfg,
 		queries:    queries,
 		httpClient: httpClient,
@@ -371,8 +378,7 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 
 	// Store user in session (but NOT the full token - it's too big for cookies)
 	// For admin operations, we'll use service account instead
-	session.Values[sessionUserKey] = &user
-	if err := session.Save(r, w); err != nil {
+	if err := a.SignIn(w, r, &user); err != nil {
 		http.Error(w, "Failed to save session", http.StatusInternalServerError)
 		return
 	}
@@ -433,6 +439,15 @@ func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }
 
+// SignIn starts a session for user. CallbackHandler calls it once the ID
+// token checks out; handler tests call it to get a signed-in cookie.
+func (a *Authenticator) SignIn(w http.ResponseWriter, r *http.Request, user *User) error {
+	session, _ := a.store.Get(r, sessionName)
+	session.Values[sessionUserKey] = user
+	session.Values[sessionIssuedKey] = time.Now().Unix()
+	return session.Save(r, w)
+}
+
 // GetUser returns the authenticated user from session, or nil if not authenticated
 func (a *Authenticator) GetUser(r *http.Request) *User {
 	session, err := a.store.Get(r, sessionName)
@@ -442,6 +457,13 @@ func (a *Authenticator) GetUser(r *http.Request) *User {
 
 	user, ok := session.Values[sessionUserKey].(*User)
 	if !ok {
+		return nil
+	}
+
+	// The cookie is signed, so this is the time SignIn wrote. A session from
+	// before it was recorded has none and counts as expired.
+	issued, ok := session.Values[sessionIssuedKey].(int64)
+	if !ok || time.Since(time.Unix(issued, 0)) > SessionLifetime {
 		return nil
 	}
 

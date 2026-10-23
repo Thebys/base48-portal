@@ -36,7 +36,7 @@ func newAccessEnv(t *testing.T) *accessEnv {
 	t.Helper()
 	queries, database := testQueries(t)
 	cfg := &config.Config{WebRoot: "../../web", BaseURL: "https://portal.base48.cz"}
-	store := sessions.NewCookieStore([]byte("access-test-session-key"))
+	store := auth.NewSessionStore(&config.Config{SessionSecret: "access-test-session-key"})
 	h := &Handler{
 		auth:         auth.NewWithStore(cfg, store),
 		db:           database,
@@ -117,13 +117,8 @@ func (e *accessEnv) sessionCookie(u *auth.User) *http.Cookie {
 	e.t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
-	session, err := e.sessions.New(req, auth.SessionName)
-	if err != nil {
-		e.t.Fatalf("new session: %v", err)
-	}
-	session.Values[auth.SessionUserKey] = u
-	if err := session.Save(req, rec); err != nil {
-		e.t.Fatalf("save session: %v", err)
+	if err := e.h.auth.SignIn(rec, req, u); err != nil {
+		e.t.Fatalf("sign in: %v", err)
 	}
 	return rec.Result().Cookies()[0]
 }
