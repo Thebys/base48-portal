@@ -4,35 +4,39 @@
 
 ## Funkce
 
-- Keycloak OIDC autentizace
-- Automatické stahování a párování plateb z FIO Banky
-- Automatická správa měsíčních členských příspěvků
-- QR platební kódy
-- Fundraising projekty
-- Admin rozhraní pro správu uživatelů, plateb a fundraisingu
+- Keycloak OIDC autentizace, role `active_member` a `in_debt` se syncují zpět do Keycloaku
+- Automatické stahování a párování plateb z FIO Banky (podle VS)
+- Automatická správa měsíčních členských příspěvků, člen si může zvýšit úroveň nebo částku
+- QR platební kódy (v profilu i v upomínkách)
+- E-maily přes outbox: registrace, přijetí, upomínky dluhu, dluh na baru; šablony cs/en se upravují v adminu
+- Finanční přehled a fundraising projekty s vlastním VS
+- Rezervace stání v autodílně
+- Bar: zůstatek a nákupy z RevBank kiosku
+- Admin rozhraní pro správu uživatelů, plateb, úrovní, autodílny, baru, e-mailů a nastavení
 
 ## Rychlý start
 
 ```bash
 make setup      # Závislosti + .env
-make db-init    # Inicializace DB
-nano .env       # Nastavení konfigurace
-make sqlc       # Generování SQL kódu
-make run        # Spuštění serveru
+$EDITOR .env    # Nastavení konfigurace
+make run        # Spuštění serveru (DB a migrace si vytvoří sám)
 ```
 
-Server běží na `http://localhost:4848`
+Server běží na `http://localhost:4848` (`PORT` v `.env`).
 
 ## Požadavky
 
 - Go 1.26+
 - Keycloak server
-- SQLite3 CLI
+- Volitelně: sqlc (`make tools`) pro změny SQL dotazů, SQLite3 CLI na ruční dotazy do DB
 
 ## Vývoj
 
 ```bash
+make tools      # sqlc + air
+make hooks      # Git hook proti commitu secrets (repo je veřejné)
 make dev        # Hot reload (air)
+make sqlc       # Přegenerování internal/db po změně queries.sql
 make build-all  # Build všech binárků
 make test       # Testy
 make help       # Všechny příkazy
@@ -66,6 +70,7 @@ cp .env.example .env && $EDITOR .env
 docker compose up -d --build
 ```
 
+Portál pak poslouchá na `127.0.0.1:8090` (`PORTAL_BIND_*` v `.env`).
 Stack je app-only — TLS a vhosty zůstávají na reverse proxy hostu.
 
 - [Docker stack, orchestrace, vault, zálohy](docs/DEPLOYMENT_DOCKER.md)
@@ -82,4 +87,5 @@ Detaily: [docs/REVBANK_INTEGRATION.md](docs/REVBANK_INTEGRATION.md)
 - [Docker deployment, orchestrace a secrets](docs/DEPLOYMENT_DOCKER.md)
 - [Keycloak setup](docs/KEYCLOAK_SETUP.md)
 - [RevBank integrace](docs/REVBANK_INTEGRATION.md)
+- [Frontend pravidla](FRONTEND.md)
 - [Specifikace](SPEC.md)

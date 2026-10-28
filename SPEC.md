@@ -1,136 +1,62 @@
 # Base48 Member Portal - Specifikace
 
-## Přehled
+Go reimplementace původního Haskell portálu s Keycloak autentizací. Co portál
+umí a jak se spouští, je v [README](README.md). Routy jsou v `cmd/server/main.go`,
+konfigurace v `.env.example`, schéma v `migrations/`.
 
-Členský portál pro hackerspace Base48. Go reimplementace původního Haskell portálu s Keycloak autentizací.
+## Autentizace a role
 
-## Funkce
+- Přihlášení přes Keycloak OIDC, role se čtou z ID tokenu
+- Service account pro cron a změny rolí přes Keycloak Admin API
+- `memberportal_admin`: přístup do Správy
+- `active_member`: každý člen ve stavu `accepted`
+- `in_debt`: záporná bilance, cron ji přidává a odebírá každé 2 minuty
+- Nastavení Keycloaku: [docs/KEYCLOAK_SETUP.md](docs/KEYCLOAK_SETUP.md)
 
-### Autentizace
-- Keycloak OIDC SSO
-- Service Account pro automatizaci
-- Role: `memberportal_admin`, `active_member`, `in_debt`
-- Dual client architektura (web + service account)
+## Členství a platby
 
-### Správa členů
-- Profil uživatele (zobrazení, editace)
-- Stav členství a plateb
-- Admin: přehled uživatelů, správa rolí
-- Externí uživatelé (stav `external`): nečlenové s účtem
-- Oprávnění k částem portálu nezávisle na stavu (`access_grants`, zatím autodílna); pravidla v `internal/access`
-
-### Platby
-- FIO Bank automatická synchronizace
-- Historie plateb a dlužných poplatků
-- QR platební kódy
-- Manuální přiřazení plateb (admin)
-- Automatické generování měsíčních poplatků
-
-### Fundraising
-- Projekty s vlastním VS
-- Sledování příspěvků na projekty
-
-### Administrace
-- Správa uživatelů a rolí
-- Finanční přehled
-- System logs (audit)
-- Nastavení portálu
-
-## Databázový model
-
-```
-levels          - Úrovně členství (Student, Full, Sponsor...)
-users           - Členové hackerspace (a externí uživatelé)
-access_grants   - Oprávnění nezávislá na stavu členství
-payments        - Platby (FIO sync + manuální)
-fees            - Měsíční poplatky
-projects        - Fundraising projekty
-system_logs     - Audit log
-```
+- Stavy: `awaiting` (po prvním přihlášení), `accepted`, `suspended`, `exmember`, `rejected`,
+  `external` (nečlen s účtem)
+- Kdo smí co, rozhoduje `internal/access`: stav členství a navíc `access_grants`
+  (oprávnění nezávislá na stavu, zatím autodílna)
+- Nový člen dostane VS (`users.payments_id`) hned při prvním přihlášení
+- Fees vznikají 1. v měsíci pro `accepted` členy: `level_actual_amount`, jinak částka úrovně
+- Platby z FIO se párují podle VS na člena, jinak na fundraising projekt
+- Bilance = platby s VS člena − fees
 
 ## Tech stack
 
-- **Go 1.24** - Backend
-- **Chi** - HTTP router
-- **html/template** - Server-side rendering
-- **SQLite** - Database (modernc.org/sqlite, pure Go)
-- **sqlc** - Type-safe SQL
-- **go-oidc** - Keycloak OIDC
+- **Go 1.26**, **Chi**, **html/template**
+- **SQLite** (modernc.org/sqlite, pure Go), **sqlc**, migrace zabalené v binárce
+- **go-oidc** (Keycloak), FIO API, SMTP
 
 ## Struktura
 
 ```
 cmd/
-├── server/     # Hlavní aplikace
-├── cron/       # portal-cron: sync, fees, report
+├── server/     # Web server
+├── cron/       # portal-cron: daemon, sync, fees, debt-emails, bar-debt-emails, report
 ├── import/     # Import ze staré databáze
-└── test/       # Test skripty
+└── test/       # Ad-hoc test skripty
 
 internal/
 ├── access/     # Kdo smí co: stav členství + oprávnění
 ├── auth/       # Keycloak OIDC + Service Account
 ├── config/     # Environment konfigurace
-├── db/         # Database queries (sqlc)
-├── email/      # Email client
+├── db/         # sqlc: queries.sql → queries.sql.go
+├── email/      # Šablony, outbox, SMTP
 ├── fio/        # FIO Bank API
 ├── handler/    # HTTP handlery
 ├── keycloak/   # Keycloak Admin API
-└── qrpay/      # QR platební kódy
+├── migrate/    # Migrace při startu serveru
+└── qrpay/      # QR platební kódy (SPAYD)
 
-web/templates/  # HTML templates
-migrations/     # SQL schema
+web/            # Šablony (vč. e-mailů) a statické soubory
+migrations/     # SQL migrace
+contrib/        # revbank-sync.sh pro bar kiosek
 ```
 
-## API Endpoints
+## Otevřené
 
-### Public
-- `GET /` - Homepage
-
-### Auth
-- `GET /auth/login` - Keycloak login
-- `GET /auth/callback` - OIDC callback
-- `GET /auth/logout` - Logout
-
-### Protected
-- `GET/POST /profile` - Profil uživatele
-
-### Admin UI
-- `GET /admin/users` - Seznam uživatelů
-- `GET /admin/users/{id}` - Detail uživatele
-- `GET /admin/payments/unmatched` - Nespárované platby
-- `GET /admin/projects` - Fundraising projekty
-- `GET /admin/logs` - System logs
-- `GET /admin/settings` - Nastavení
-
-### Admin API
-- `GET /api/admin/users` - Seznam uživatelů (JSON)
-- `POST /api/admin/roles/assign` - Přiřazení role
-- `POST /api/admin/roles/remove` - Odebrání role
-- `POST /api/admin/payments/assign` - Přiřazení platby
-- `POST /api/admin/payments/update` - Úprava platby
-- `GET/POST/DELETE /api/admin/projects` - CRUD projekty
-
-## Cron úlohy
-
-Unified binary `portal-cron` se subcommandama:
-
-- `portal-cron sync` - Synchronizace plateb z FIO + debt/role sync + pending emaily (každé 2 min)
-- `portal-cron fees` - Generování měsíčních poplatků + debt warning emaily (1. den v měsíci)
-- `portal-cron report` - Report nespárovaných plateb (ad-hoc)
-
-## TODO
-
-- [ ] Email notifikace (uvítání, upomínky)
-- [ ] Level management (admin UI)
-- [ ] Member state management (admin UI)
-- [ ] CSRF protection
-- [ ] Rate limiting
-
-## Konfigurace
-
-Viz `.env.example`:
-- `PORT`, `BASE_URL` - Server
-- `DATABASE_URL` - SQLite
-- `KEYCLOAK_*` - OIDC + Service Account
-- `BANK_FIO_TOKEN` - FIO API
-- `SESSION_SECRET` - Sessions
+- CSRF ochrana
+- Rate limiting
