@@ -74,6 +74,26 @@ func (q *Queries) AssignPayment(ctx context.Context, arg AssignPaymentParams) (P
 	return i, err
 }
 
+const assignPaymentsByProjectVS = `-- name: AssignPaymentsByProjectVS :execrows
+UPDATE payments SET project_id = ?1
+WHERE project_id IS NULL AND user_id IS NULL AND identification = ?2
+`
+
+type AssignPaymentsByProjectVSParams struct {
+	ProjectID sql.NullInt64 `json:"project_id"`
+	Vs        string        `json:"vs"`
+}
+
+// A VS was added to a project: the payments carrying it that belong to nobody
+// yet join the project, e.g. those sent before the symbol was known.
+func (q *Queries) AssignPaymentsByProjectVS(ctx context.Context, arg AssignPaymentsByProjectVSParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, assignPaymentsByProjectVS, arg.ProjectID, arg.Vs)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const bumpReservation = `-- name: BumpReservation :one
 UPDATE reservations SET
     state = 'bumped',
@@ -295,6 +315,17 @@ func (q *Queries) CountFeesByLevel(ctx context.Context) ([]CountFeesByLevelRow, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const countProjectPayments = `-- name: CountProjectPayments :one
+SELECT COUNT(*) FROM payments WHERE project_id = ?
+`
+
+func (q *Queries) CountProjectPayments(ctx context.Context, projectID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProjectPayments, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countUsersByLevel = `-- name: CountUsersByLevel :many
@@ -1009,23 +1040,6 @@ func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
 	return i, err
 }
 
-const getProjectBalance = `-- name: GetProjectBalance :one
-SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
-FROM (
-    SELECT DISTINCT p.id, p.amount FROM payments p
-    WHERE p.project_id = ?1
-       OR p.identification IN (SELECT pv.vs FROM project_vs pv WHERE pv.project_id = ?1)
-) sub
-`
-
-// Sum all payments for a project (by project_id OR by any VS in project_vs)
-func (q *Queries) GetProjectBalance(ctx context.Context, projectID sql.NullInt64) (interface{}, error) {
-	row := q.db.QueryRowContext(ctx, getProjectBalance, projectID)
-	var total interface{}
-	err := row.Scan(&total)
-	return total, err
-}
-
 const getProjectByPaymentsID = `-- name: GetProjectByPaymentsID :one
 SELECT p.id, p.name, p.payments_id, p.description FROM projects p
 JOIN project_vs pv ON p.id = pv.project_id
@@ -1046,15 +1060,13 @@ func (q *Queries) GetProjectByPaymentsID(ctx context.Context, vs string) (Projec
 }
 
 const getProjectPayments = `-- name: GetProjectPayments :many
-SELECT DISTINCT p.id, p.user_id, p.date, p.amount, p.kind, p.kind_id, p.local_account, p.remote_account, p.identification, p.raw_data, p.staff_comment, p.created_at, p.project_id, p.dismissed_at, p.dismissed_by, p.dismissed_reason FROM payments p
-WHERE p.project_id = ?1
-   OR p.identification IN (SELECT pv.vs FROM project_vs pv WHERE pv.project_id = ?1)
-ORDER BY p.date DESC
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments
+WHERE project_id = ?
+ORDER BY date DESC, id DESC
 `
 
-// Get all payments for a project:
-// 1. Payments explicitly assigned to project (project_id set)
-// 2. Payments matching any of project's VS identifiers (from project_vs table)
+// A project's payments, incoming and outgoing. A payment belongs to a project
+// through project_id only; see migration 021.
 func (q *Queries) GetProjectPayments(ctx context.Context, projectID sql.NullInt64) ([]Payment, error) {
 	rows, err := q.db.QueryContext(ctx, getProjectPayments, projectID)
 	if err != nil {
@@ -1925,6 +1937,40 @@ func (q *Queries) ListAllLevels(ctx context.Context) ([]Level, error) {
 	return items, nil
 }
 
+const listAllProjectVS = `-- name: ListAllProjectVS :many
+SELECT id, project_id, vs, note, created_at FROM project_vs ORDER BY project_id, created_at, id
+`
+
+// Every project's symbols, for listing all projects without a query each.
+func (q *Queries) ListAllProjectVS(ctx context.Context) ([]ProjectV, error) {
+	rows, err := q.db.QueryContext(ctx, listAllProjectVS)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectV{}
+	for rows.Next() {
+		var i ProjectV
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Vs,
+			&i.Note,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDismissedPayments = `-- name: ListDismissedPayments :many
 SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE dismissed_at IS NOT NULL ORDER BY dismissed_at DESC
 `
@@ -2218,6 +2264,46 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) 
 			&i.DismissedBy,
 			&i.DismissedReason,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectTotals = `-- name: ListProjectTotals :many
+SELECT pr.id AS project_id,
+    CAST(COALESCE(SUM(CASE WHEN CAST(p.amount AS REAL) > 0 THEN CAST(p.amount AS REAL) END), 0) AS REAL) AS raised,
+    CAST(COALESCE(-SUM(CASE WHEN CAST(p.amount AS REAL) < 0 THEN CAST(p.amount AS REAL) END), 0) AS REAL) AS spent
+FROM projects pr
+LEFT JOIN payments p ON p.project_id = pr.id
+GROUP BY pr.id
+`
+
+type ListProjectTotalsRow struct {
+	ProjectID int64   `json:"project_id"`
+	Raised    float64 `json:"raised"`
+	Spent     float64 `json:"spent"`
+}
+
+// What each project raised (incoming) and spent (outgoing, as a positive
+// number), for all projects in one go.
+func (q *Queries) ListProjectTotals(ctx context.Context) ([]ListProjectTotalsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectTotals)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectTotalsRow{}
+	for rows.Next() {
+		var i ListProjectTotalsRow
+		if err := rows.Scan(&i.ProjectID, &i.Raised, &i.Spent); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2971,6 +3057,25 @@ type RevokeSessionParams struct {
 func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) error {
 	_, err := q.db.ExecContext(ctx, revokeSession, arg.ID, arg.ExpiresAt)
 	return err
+}
+
+const unassignPaymentsByProjectVS = `-- name: UnassignPaymentsByProjectVS :execrows
+UPDATE payments SET project_id = NULL
+WHERE project_id = ?1 AND user_id IS NULL AND identification = ?2
+`
+
+type UnassignPaymentsByProjectVSParams struct {
+	ProjectID sql.NullInt64 `json:"project_id"`
+	Vs        string        `json:"vs"`
+}
+
+// A VS was removed from a project: the payments it brought in leave again.
+func (q *Queries) UnassignPaymentsByProjectVS(ctx context.Context, arg UnassignPaymentsByProjectVSParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, unassignPaymentsByProjectVS, arg.ProjectID, arg.Vs)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const undismissPayment = `-- name: UndismissPayment :one

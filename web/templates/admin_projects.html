@@ -363,7 +363,7 @@ async function loadProjects() {
         if (data.projects && data.projects.length > 0) {
             container.innerHTML = '';
             data.projects.forEach(project => {
-                const balance = project.total_amount || 0;
+                const balance = project.remaining || 0;
 
                 // Build VS tags HTML
                 let vsTagsHtml = '';

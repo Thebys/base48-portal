@@ -85,17 +85,6 @@ func (h *Handler) AdminUnmatchedPaymentsHandler(w http.ResponseWriter, r *http.R
 			continue
 		}
 
-		// Check if this VS belongs to a project (skip if it does)
-		_, err = h.queries.GetProjectByPaymentsID(ctx, payment.Identification)
-		if err == nil {
-			// Project exists with this VS - this is a project payment, skip it
-			continue
-		} else if err != sql.ErrNoRows {
-			// Database error (not just "not found")
-			http.Error(w, "Database error checking project", http.StatusInternalServerError)
-			return
-		}
-
 		// Check if user with this payments_id exists
 		_, err = h.queries.GetUserByPaymentsID(ctx, sql.NullString{String: payment.Identification, Valid: true})
 		if err == sql.ErrNoRows {
@@ -125,7 +114,7 @@ func (h *Handler) AdminUnmatchedPaymentsHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Filter dismissed payments - exclude those with project VS (they belong to projects, not archive)
+	// Dismissed payments that belong to a project are the project's, not the archive's.
 	var dismissedPayments []db.Payment
 	dismissedTotal := 0.0
 	for _, p := range allDismissedPayments {
@@ -138,13 +127,8 @@ func (h *Handler) AdminUnmatchedPaymentsHandler(w http.ResponseWriter, r *http.R
 			continue
 		}
 
-		// Skip if VS belongs to a project
-		if p.Identification != "" {
-			_, err := h.queries.GetProjectByPaymentsID(ctx, p.Identification)
-			if err == nil {
-				// Project exists with this VS - skip, it's a project payment
-				continue
-			}
+		if p.ProjectID.Valid {
+			continue
 		}
 
 		dismissedPayments = append(dismissedPayments, p)

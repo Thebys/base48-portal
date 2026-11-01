@@ -278,22 +278,35 @@ RETURNING *;
 DELETE FROM projects WHERE id = ?;
 
 -- name: GetProjectPayments :many
--- Get all payments for a project:
--- 1. Payments explicitly assigned to project (project_id set)
--- 2. Payments matching any of project's VS identifiers (from project_vs table)
-SELECT DISTINCT p.* FROM payments p
-WHERE p.project_id = sqlc.arg(project_id)
-   OR p.identification IN (SELECT pv.vs FROM project_vs pv WHERE pv.project_id = sqlc.arg(project_id))
-ORDER BY p.date DESC;
+-- A project's payments, incoming and outgoing. A payment belongs to a project
+-- through project_id only; see migration 021.
+SELECT * FROM payments
+WHERE project_id = ?
+ORDER BY date DESC, id DESC;
 
--- name: GetProjectBalance :one
--- Sum all payments for a project (by project_id OR by any VS in project_vs)
-SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) as total
-FROM (
-    SELECT DISTINCT p.id, p.amount FROM payments p
-    WHERE p.project_id = sqlc.arg(project_id)
-       OR p.identification IN (SELECT pv.vs FROM project_vs pv WHERE pv.project_id = sqlc.arg(project_id))
-) sub;
+-- name: ListProjectTotals :many
+-- What each project raised (incoming) and spent (outgoing, as a positive
+-- number), for all projects in one go.
+SELECT pr.id AS project_id,
+    CAST(COALESCE(SUM(CASE WHEN CAST(p.amount AS REAL) > 0 THEN CAST(p.amount AS REAL) END), 0) AS REAL) AS raised,
+    CAST(COALESCE(-SUM(CASE WHEN CAST(p.amount AS REAL) < 0 THEN CAST(p.amount AS REAL) END), 0) AS REAL) AS spent
+FROM projects pr
+LEFT JOIN payments p ON p.project_id = pr.id
+GROUP BY pr.id;
+
+-- name: AssignPaymentsByProjectVS :execrows
+-- A VS was added to a project: the payments carrying it that belong to nobody
+-- yet join the project, e.g. those sent before the symbol was known.
+UPDATE payments SET project_id = sqlc.arg(project_id)
+WHERE project_id IS NULL AND user_id IS NULL AND identification = sqlc.arg(vs);
+
+-- name: UnassignPaymentsByProjectVS :execrows
+-- A VS was removed from a project: the payments it brought in leave again.
+UPDATE payments SET project_id = NULL
+WHERE project_id = sqlc.arg(project_id) AND user_id IS NULL AND identification = sqlc.arg(vs);
+
+-- name: CountProjectPayments :one
+SELECT COUNT(*) FROM payments WHERE project_id = ?;
 
 -- ============================================================================
 -- PROJECT VS (Multiple VS identifiers per project)
@@ -301,6 +314,10 @@ FROM (
 
 -- name: ListProjectVS :many
 SELECT * FROM project_vs WHERE project_id = ? ORDER BY created_at;
+
+-- name: ListAllProjectVS :many
+-- Every project's symbols, for listing all projects without a query each.
+SELECT * FROM project_vs ORDER BY project_id, created_at, id;
 
 -- name: AddProjectVS :one
 INSERT INTO project_vs (project_id, vs, note)

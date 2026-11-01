@@ -47,59 +47,34 @@ func (h *Handler) MemberProjectsHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 // MemberProjectsAPIHandler returns a read-only list of projects (JSON).
-// No payment details, no CRUD operations.
 // GET /api/member/projects
 func (h *Handler) MemberProjectsAPIHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	if _, _, ok := h.memberAPI(w, r, access.Subject.Fundraising); !ok {
 		return
 	}
 
-	projects, err := h.queries.ListProjects(ctx)
+	projects, err := h.listProjectSummaries(r.Context())
 	if err != nil {
-		h.jsonError(w, "Failed to fetch projects: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("[Projects] list: %v", err)
+		h.jsonError(w, "Failed to fetch projects", http.StatusInternalServerError)
 		return
 	}
 
-	projectResponses := make([]MemberProjectResponse, len(projects))
+	out := make([]MemberProjectResponse, len(projects))
 	for i, p := range projects {
-		balanceInterface, err := h.queries.GetProjectBalance(ctx, sql.NullInt64{Int64: p.ID, Valid: true})
-		totalAmount := 0.0
-		if err != nil {
-			log.Printf("[Handler] failed to get project balance for project %d: %v", p.ID, err)
-		} else {
-			if f, ok := balanceInterface.(float64); ok {
-				totalAmount = f
-			}
-		}
-
-		vsList, err := h.queries.ListProjectVS(ctx, p.ID)
-		vsInfoList := []VSInfo{}
-		if err != nil {
-			log.Printf("[Handler] failed to list project VS for project %d: %v", p.ID, err)
-		} else {
-			for _, vs := range vsList {
-				vsInfoList = append(vsInfoList, VSInfo{
-					VS:   vs.Vs,
-					Note: vs.Note.String,
-				})
-			}
-		}
-
-		projectResponses[i] = MemberProjectResponse{
+		out[i] = MemberProjectResponse{
 			ID:          p.ID,
 			Name:        p.Name,
-			VSList:      vsInfoList,
+			VSList:      p.VSList,
 			Description: p.Description.String,
-			TotalAmount: totalAmount,
+			TotalAmount: p.Remaining(),
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":  true,
-		"projects": projectResponses,
+		"projects": out,
 	})
 }
 

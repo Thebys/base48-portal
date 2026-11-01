@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -41,73 +42,44 @@ type VSInfo struct {
 	Note string `json:"note"`
 }
 
-// ProjectResponse is the JSON response for a project
+// ProjectResponse is a project as the admin page gets it.
 type ProjectResponse struct {
 	ID          int64    `json:"id"`
 	Name        string   `json:"name"`
-	PaymentsID  string   `json:"payments_id"`  // Primary VS (deprecated, use VSList)
-	VSList      []VSInfo `json:"vs_list"`      // All VS identifiers
+	VSList      []VSInfo `json:"vs_list"` // primary first
 	Description string   `json:"description"`
-	TotalAmount float64  `json:"total_amount"`
+	Raised      float64  `json:"raised"`
+	Spent       float64  `json:"spent"`
+	Remaining   float64  `json:"remaining"`
 }
 
-// AdminProjectsAPIHandler returns list of projects (JSON)
+// AdminProjectsAPIHandler returns all projects with what they raised and spent.
 // GET /api/admin/projects
 func (h *Handler) AdminProjectsAPIHandler(w http.ResponseWriter, r *http.Request) {
-	_ = r // auth enforced by RequireAdmin middleware
-
-	ctx := r.Context()
-
-	// Get all active projects
-	projects, err := h.queries.ListProjects(ctx)
+	projects, err := h.listProjectSummaries(r.Context())
 	if err != nil {
-		h.jsonError(w, "Failed to fetch projects: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("[Projects] list: %v", err)
+		h.jsonError(w, "Failed to fetch projects", http.StatusInternalServerError)
 		return
 	}
 
-	// Convert to response format with proper string handling and calculate totals
-	projectResponses := make([]ProjectResponse, len(projects))
+	out := make([]ProjectResponse, len(projects))
 	for i, p := range projects {
-		// Get total amount for this project (by project_id or any VS in project_vs)
-		balanceInterface, err := h.queries.GetProjectBalance(ctx, sql.NullInt64{Int64: p.ID, Valid: true})
-		totalAmount := 0.0
-		if err != nil {
-			log.Printf("[Handler] failed to get project balance for project %d: %v", p.ID, err)
-		} else {
-			// The query returns interface{}, need to convert to float64
-			if f, ok := balanceInterface.(float64); ok {
-				totalAmount = f
-			}
-		}
-
-		// Get all VS identifiers for this project
-		vsList, err := h.queries.ListProjectVS(ctx, p.ID)
-		vsInfoList := []VSInfo{}
-		if err != nil {
-			log.Printf("[Handler] failed to list project VS for project %d: %v", p.ID, err)
-		} else {
-			for _, vs := range vsList {
-				vsInfoList = append(vsInfoList, VSInfo{
-					VS:   vs.Vs,
-					Note: vs.Note.String,
-				})
-			}
-		}
-
-		projectResponses[i] = ProjectResponse{
+		out[i] = ProjectResponse{
 			ID:          p.ID,
 			Name:        p.Name,
-			PaymentsID:  p.PaymentsID.String,
-			VSList:      vsInfoList,
+			VSList:      p.VSList,
 			Description: p.Description.String,
-			TotalAmount: totalAmount,
+			Raised:      p.Raised,
+			Spent:       p.Spent,
+			Remaining:   p.Remaining(),
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":  true,
-		"projects": projectResponses,
+		"projects": out,
 	})
 }
 
@@ -158,6 +130,8 @@ func (h *Handler) AdminCreateProjectHandler(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			// Log but don't fail - project was created
 			// The VS might already exist from migration
+		} else {
+			h.assignPaymentsByVS(ctx, project.ID, req.PaymentsID)
 		}
 	}
 
@@ -226,7 +200,6 @@ func (h *Handler) AdminProjectPaymentsHandler(w http.ResponseWriter, r *http.Req
 
 	ctx := r.Context()
 
-	// Get payments for this project (by project_id or any VS in project_vs)
 	payments, err := h.queries.GetProjectPayments(ctx, sql.NullInt64{Int64: projectID, Valid: true})
 	if err != nil {
 		h.jsonError(w, "Failed to fetch payments: "+err.Error(), http.StatusInternalServerError)
@@ -297,8 +270,24 @@ func (h *Handler) AdminAddProjectVSHandler(w http.ResponseWriter, r *http.Reques
 		h.jsonError(w, "Failed to add VS: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.assignPaymentsByVS(ctx, req.ProjectID, req.VS)
 
 	h.jsonSuccess(w, "VS added successfully")
+}
+
+// assignPaymentsByVS books the payments carrying vs that belong to nobody yet
+// to the project, e.g. those sent before the symbol was added. Logged, not
+// fatal: the symbol is in place and the sync assigns new payments by it.
+func (h *Handler) assignPaymentsByVS(ctx context.Context, projectID int64, vs string) {
+	n, err := h.queries.AssignPaymentsByProjectVS(ctx, db.AssignPaymentsByProjectVSParams{
+		ProjectID: sql.NullInt64{Int64: projectID, Valid: true},
+		Vs:        vs,
+	})
+	if err != nil {
+		log.Printf("[Projects] assign payments with VS %s to project %d: %v", vs, projectID, err)
+	} else if n > 0 {
+		log.Printf("[Projects] VS %s brought %d earlier payment(s) into project %d", vs, n, projectID)
+	}
 }
 
 // RemoveProjectVSRequest is the request body for removing a VS from a project
@@ -341,6 +330,16 @@ func (h *Handler) AdminRemoveProjectVSHandler(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		h.jsonError(w, "Failed to remove VS: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+	// The payments this symbol brought in leave with it.
+	n, err := h.queries.UnassignPaymentsByProjectVS(ctx, db.UnassignPaymentsByProjectVSParams{
+		ProjectID: sql.NullInt64{Int64: req.ProjectID, Valid: true},
+		Vs:        req.VS,
+	})
+	if err != nil {
+		log.Printf("[Projects] unassign payments with VS %s from project %d: %v", req.VS, req.ProjectID, err)
+	} else if n > 0 {
+		log.Printf("[Projects] removing VS %s took %d payment(s) out of project %d", req.VS, n, req.ProjectID)
 	}
 
 	h.jsonSuccess(w, "VS removed successfully")

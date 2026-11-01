@@ -155,11 +155,6 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		if amount < 5 {
 			continue
 		}
-		if p.Identification != "" {
-			if _, err := h.queries.GetProjectByPaymentsID(ctx, p.Identification); err == nil {
-				continue
-			}
-		}
 		unmatchedPayments = append(unmatchedPayments, UnmatchedPaymentItem{
 			ID:             p.ID,
 			Date:           p.Date,
