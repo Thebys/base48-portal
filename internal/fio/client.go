@@ -50,7 +50,8 @@ type Transaction struct {
 // FetchResult contains transactions and account info from a FIO API response.
 type FetchResult struct {
 	Transactions   []Transaction
-	ClosingBalance float64
+	OpeningBalance float64 // at the end of the day before DateStart
+	ClosingBalance float64 // after the last transaction
 	Account        AccountInfo
 	DateStart      string // period covered, as FIO gives it: 2026-02-12+0100
 	DateEnd        string
@@ -269,6 +270,7 @@ func ParseStatement(r io.Reader) (*FetchResult, error) {
 	info := result.AccountStatement.Info
 	return &FetchResult{
 		Transactions:   transactions,
+		OpeningBalance: info.OpeningBalance,
 		ClosingBalance: info.ClosingBalance,
 		DateStart:      info.DateStart,
 		DateEnd:        info.DateEnd,

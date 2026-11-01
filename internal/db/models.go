@@ -18,6 +18,12 @@ type AccessGrant struct {
 	CreatedAt time.Time      `json:"created_at"`
 }
 
+type BankBalance struct {
+	Account string  `json:"account"`
+	Day     string  `json:"day"`
+	Balance float64 `json:"balance"`
+}
+
 type EmailOutbox struct {
 	ID           int64          `json:"id"`
 	UserID       sql.NullInt64  `json:"user_id"`

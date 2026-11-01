@@ -22,6 +22,8 @@ func TestScriptMarkupEscapesData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	partials, _ := filepath.Glob("../../web/templates/partials/*.html")
+	files = append(files, partials...)
 	js, _ := filepath.Glob("../../web/static/js/*.js")
 	for _, f := range js {
 		// Vendored and minified: not ours to hold to this rule.

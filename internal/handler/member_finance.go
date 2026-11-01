@@ -3,12 +3,13 @@ package handler
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
-	"sort"
 	"time"
 
 	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/finance"
 )
 
 // financeSummary holds aggregate financial data safe for all authenticated users.
@@ -17,8 +18,9 @@ type financeSummary struct {
 	TotalMonthlyFees       int64
 	ReceivedThisMonth      int64
 	ReceivedThisMonthCount int64
-	BankBalance            int64
-	BankBalanceDate        string
+	BankBalance            int64  // on all accounts
+	BankBalanceDate        string // the latest day a balance is known for
+	BankAccounts           []db.ListLatestBalancesRow
 	RentAmount             int64
 	RentDate               string
 	RentPaid               bool
@@ -28,6 +30,7 @@ type financeSummary struct {
 	DeepDebt               int64
 	MonthlyRows            []MonthlyRow
 	Prediction             MonthlyRow
+	Chart                  []finance.Month // the closed months, for the chart
 }
 
 // buildFinanceSummary computes aggregate financial data: summary tiles and monthly overview.
@@ -78,67 +81,34 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 		}
 	}
 
-	// Monthly overview
-	paymentStats, _ := h.queries.ListMonthlyPaymentStats(ctx)
-	feeStats, _ := h.queries.ListMonthlyFeeStats(ctx)
-
-	paymentMap := make(map[string]db.ListMonthlyPaymentStatsRow)
-	for _, ps := range paymentStats {
-		paymentMap[ps.Period] = ps
+	// Month by month since the first fee. The table shows the last 13 months
+	// and the current one; the chart stops at the last closed month, since a
+	// running one has half its payments and all its fees.
+	history, err := h.financeHistory(ctx, now)
+	if err != nil {
+		return nil, err
 	}
-
-	feeMap := make(map[string]db.ListMonthlyFeeStatsRow)
-	for _, fs := range feeStats {
-		feeMap[fs.Period] = fs
-	}
-
-	monthSet := make(map[string]bool)
-	for k := range paymentMap {
-		monthSet[k] = true
-	}
-	for k := range feeMap {
-		monthSet[k] = true
-	}
-
-	var months []string
-	for m := range monthSet {
-		months = append(months, m)
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(months)))
-
 	var monthlyRows []MonthlyRow
-	var recentPaymentTotals []int64
-
-	for _, m := range months {
-		ps := paymentMap[m]
-		fs := feeMap[m]
-		row := MonthlyRow{
-			Period:       m,
-			PaymentCount: ps.PaymentCount,
-			PaymentTotal: ps.PaymentTotal,
-			FeeCount:     fs.FeeCount,
-			FeeTotal:     fs.FeeTotal,
-			Delta:        ps.PaymentTotal - fs.FeeTotal,
-		}
-		monthlyRows = append(monthlyRows, row)
-
-		if len(recentPaymentTotals) < 3 && ps.PaymentTotal > 0 {
-			recentPaymentTotals = append(recentPaymentTotals, ps.PaymentTotal)
-		}
+	for i := len(history) - 1; i >= 0 && len(monthlyRows) < 14; i-- {
+		monthlyRows = append(monthlyRows, monthlyRow(history[i]))
 	}
 
+	// The prediction expects what the last three whole months brought.
+	var recent []int64
+	for i := len(history) - 2; i >= 0 && len(recent) < 3; i-- {
+		if history[i].Paid > 0 {
+			recent = append(recent, int64(history[i].Paid))
+		}
+	}
 	var avgPayments int64
-	if len(recentPaymentTotals) > 0 {
-		var sum int64
-		for _, v := range recentPaymentTotals {
-			sum += v
-		}
-		avgPayments = sum / int64(len(recentPaymentTotals))
+	for _, v := range recent {
+		avgPayments += v
 	}
-
+	if len(recent) > 0 {
+		avgPayments /= int64(len(recent))
+	}
 	prediction := MonthlyRow{
 		Period:       nextPeriod.Format("2006-01"),
-		PaymentCount: 0,
 		PaymentTotal: avgPayments,
 		FeeCount:     int64(totalMembers),
 		FeeTotal:     totalMonthlyFees,
@@ -146,23 +116,22 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 		IsPrediction: true,
 	}
 
-	// Received this month
-	currentMonthKey := now.Format("2006-01")
-	var receivedThisMonth int64
-	var receivedThisMonthCount int64
-	if ps, ok := paymentMap[currentMonthKey]; ok {
-		receivedThisMonth = ps.PaymentTotal
-		receivedThisMonthCount = ps.PaymentCount
+	var receivedThisMonth, receivedThisMonthCount int64
+	if n := len(history); n > 0 {
+		receivedThisMonth = int64(history[n-1].Paid)
+		receivedThisMonthCount = history[n-1].Payments
 	}
 
-	// FIO cached data
-	var bankBalance int64
-	var bankBalanceDate string
-	if setting, err := h.queries.GetSetting(ctx, "fio_closing_balance"); err == nil {
-		fmt.Sscanf(setting.Value, "%d", &bankBalance)
+	// What the accounts hold now: each one as the bank last reported it.
+	latest, err := h.queries.ListLatestBalances(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load account balances: %w", err)
 	}
-	if setting, err := h.queries.GetSetting(ctx, "fio_closing_balance_date"); err == nil {
-		bankBalanceDate = setting.Value
+	var bankBalance float64
+	var bankBalanceDate string
+	for _, b := range latest {
+		bankBalance += b.Balance
+		bankBalanceDate = max(bankBalanceDate, b.Day)
 	}
 
 	var rentAmount int64
@@ -188,8 +157,9 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 		TotalMonthlyFees:       totalMonthlyFees,
 		ReceivedThisMonth:      receivedThisMonth,
 		ReceivedThisMonthCount: receivedThisMonthCount,
-		BankBalance:            bankBalance,
+		BankBalance:            int64(math.Round(bankBalance)),
 		BankBalanceDate:        bankBalanceDate,
+		BankAccounts:           latest,
 		RentAmount:             rentAmount,
 		RentDate:               rentDate,
 		RentPaid:               rentPaid,
@@ -199,6 +169,7 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 		DeepDebt:               deepDebt,
 		MonthlyRows:            monthlyRows,
 		Prediction:             prediction,
+		Chart:                  history[:max(0, len(history)-1)],
 	}, nil
 }
 
@@ -222,22 +193,44 @@ func (h *Handler) MemberFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		"DBUser": dbUser,
 		"Access": acc,
 
-		"TotalMembers":           summary.TotalMembers,
-		"TotalMonthlyFees":       summary.TotalMonthlyFees,
-		"ReceivedThisMonth":      summary.ReceivedThisMonth,
-		"ReceivedThisMonthCount": summary.ReceivedThisMonthCount,
-		"BankBalance":            summary.BankBalance,
-		"BankBalanceDate":        summary.BankBalanceDate,
-		"RentAmount":             summary.RentAmount,
-		"RentDate":               summary.RentDate,
-		"RentPaid":               summary.RentPaid,
-		"DaysRemaining":          summary.DaysRemaining,
-		"MembersInDebt":          summary.MembersInDebt,
-		"TotalDebt":              summary.TotalDebt,
-		"DeepDebt":               summary.DeepDebt,
-		"MonthlyRows":            summary.MonthlyRows,
-		"Prediction":             summary.Prediction,
+		"Finance": summary,
 	}
 
 	h.render(w, "member_finance.html", data)
+}
+
+// financeHistory is the association's history month by month until now.
+func (h *Handler) financeHistory(ctx context.Context, now time.Time) ([]finance.Month, error) {
+	fees, err := h.queries.ListMonthlyFeesByUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load fees: %w", err)
+	}
+	payments, err := h.queries.ListMonthlyMemberPaymentsByUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load payments: %w", err)
+	}
+	balances, err := h.queries.ListBankBalances(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load account balances: %w", err)
+	}
+	return finance.History(fees, payments, balances, now), nil
+}
+
+// monthlyRow is a month of the history as the table shows it, in whole crowns.
+func monthlyRow(m finance.Month) MonthlyRow {
+	row := MonthlyRow{
+		Period:       m.Month,
+		PaymentCount: m.Payments,
+		PaymentTotal: int64(math.Round(m.Paid)),
+		FeeCount:     m.Fees,
+		FeeTotal:     int64(math.Round(m.Charged)),
+		Debt:         int64(math.Round(m.Debt)),
+		Debtors:      m.Debtors,
+	}
+	row.Delta = row.PaymentTotal - row.FeeTotal
+	if m.Balance != nil {
+		row.Balance = int64(math.Round(m.Balance.End))
+		row.HasBalance = true
+	}
+	return row
 }

@@ -76,6 +76,12 @@
     --money-negative: #f44336;
     --money-positive: #4caf50;
 
+    /* Chart series, in this order. Checked as a set for colour-blind
+       separation and contrast against --surface in both themes. */
+    --chart-1: #2a78d6;   /* blue */
+    --chart-2: #eb6834;   /* orange */
+    --chart-3: #1baf7a;   /* aqua; under 3:1 on white, so it always has a legend or labels */
+
     --overlay: rgba(0, 0, 0, 0.5);
     --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.1);
     --shadow-pop: 0 10px 24px -8px rgba(0, 0, 0, 0.18);
@@ -122,6 +128,10 @@ html.dark {
 
     --money-negative: #f87171;
     --money-positive: #4ade80;
+
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
 
     --overlay: rgba(0, 0, 0, 0.7);
     /* A drop shadow is invisible on a dark ground, so elevation is carried by

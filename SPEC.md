@@ -39,7 +39,7 @@ konfigurace v `.env.example`, schéma v `migrations/`.
 ```
 cmd/
 ├── server/     # Web server
-├── cron/       # portal-cron: daemon, sync, fio-backfill, fees, debt-emails, bar-debt-emails, report
+├── cron/       # portal-cron: daemon, sync, fio-backfill, fio-balances, fees, debt-emails, bar-debt-emails, report
 ├── import/     # Import ze staré databáze
 └── test/       # Ad-hoc test skripty
 

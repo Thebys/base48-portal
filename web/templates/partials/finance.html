@@ -1,0 +1,114 @@
+{{/* The finance overview members and admins share; both take a
+     financeSummary. "finance-tiles" is the row of figures at the top,
+     "finance-history" the chart with the monthly table under it. */}}
+{{ define "finance-tiles" }}
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
+    <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
+        <div class="text-2xl font-bold text-blue-900">{{.TotalMembers}}</div>
+        <div class="text-xs text-blue-600">Aktivních členů</div>
+    </div>
+    <div class="bg-green-50 px-4 py-3 rounded-md text-center">
+        <div class="text-2xl font-bold text-green-900">{{fmtNum .TotalMonthlyFees}} Kč</div>
+        <div class="text-xs text-green-600">Měsíční předpis</div>
+    </div>
+    <div class="bg-purple-50 px-4 py-3 rounded-md text-center">
+        <div class="text-2xl font-bold text-purple-900">{{fmtNum .ReceivedThisMonth}} Kč</div>
+        <div class="text-xs text-purple-600">Přijato tento měsíc ({{.ReceivedThisMonthCount}} plateb)</div>
+    </div>
+    <div class="{{ if .RentPaid }}bg-green-50{{ else }}bg-red-50{{ end }} px-4 py-3 rounded-md text-center">
+        <div class="text-2xl font-bold {{ if .RentPaid }}text-green-900{{ else }}text-red-900{{ end }}">{{fmtNum .RentAmount}} Kč</div>
+        <div class="text-xs {{ if .RentPaid }}text-green-600{{ else }}text-red-600{{ end }}">Nájem {{ if .RentPaid }}zaplacen{{ if .RentDate }} ({{.RentDate}}){{ end }}{{ else }}nezaplacen · zbývá {{.DaysRemaining}} dní{{ end }}</div>
+    </div>
+    <div class="bg-blue-50 px-4 py-3 rounded-md text-center"{{ if gt (len .BankAccounts) 1 }} title="{{ range $i, $a := .BankAccounts }}{{ if $i }}&#10;{{ end }}{{$a.Account}}: {{fmtKc $a.Balance}} Kč ke dni {{$a.Day}}{{ end }}"{{ end }}>
+        <div class="text-2xl font-bold text-blue-900">{{fmtNum .BankBalance}} Kč</div>
+        <div class="text-xs text-blue-600">{{ if gt (len .BankAccounts) 1 }}Zůstatek na {{len .BankAccounts}} účtech{{ else }}Zůstatek na účtu{{ end }}{{ if .BankBalanceDate }} ({{.BankBalanceDate}}){{ end }}</div>
+    </div>
+    <div class="{{ if eq .MembersInDebt 0 }}bg-green-50{{ else }}bg-red-50{{ end }} px-4 py-3 rounded-md text-center">
+        <div class="text-2xl font-bold {{ if eq .MembersInDebt 0 }}text-green-900{{ else }}text-red-900{{ end }}">{{fmtNum .TotalDebt}} Kč</div>
+        <div class="text-xs {{ if eq .MembersInDebt 0 }}text-green-600{{ else }}text-red-600{{ end }}">Dluh členů · {{.MembersInDebt}} členů{{ if gt .DeepDebt 0 }} ({{fmtNum .DeepDebt}} Kč &gt;1 měs.){{ end }}</div>
+    </div>
+</div>
+{{ end }}
+
+{{ define "finance-history" }}
+<section class="fin-card mb-8" aria-labelledby="fin-chart-title">
+    <div class="fin-card-head">
+        <div>
+            <h2 id="fin-chart-title">Příspěvky, dluh a zůstatek</h2>
+            <p>Za každý uzavřený měsíc: zůstatek na účtech, dluh členů, zaplacené příspěvky a předpis.</p>
+        </div>
+        <div class="fin-range" role="group" aria-label="Období grafu">
+            <button type="button" data-months="12">Rok</button>
+            <button type="button" data-months="36" aria-pressed="true">3 roky</button>
+            <button type="button" data-months="0">Vše</button>
+        </div>
+    </div>
+    <div class="fin-legend" role="group" aria-label="Řady v grafu (kliknutím skryješ nebo zobrazíš)">
+        <button type="button" data-series="balance" aria-pressed="true"><i class="key key-balance" aria-hidden="true"></i>Zůstatek na účtech</button>
+        <button type="button" data-series="debt" aria-pressed="true"><i class="key key-debt" aria-hidden="true"></i>Dluh členů</button>
+        <button type="button" data-series="paid" aria-pressed="true"><i class="key key-paid" aria-hidden="true"></i>Zaplaceno</button>
+        <button type="button" data-series="charged" aria-pressed="true"><i class="key key-charged" aria-hidden="true"></i>Předpis</button>
+    </div>
+    <div class="fin-chart" id="fin-chart"></div>
+    <p class="fin-note">
+        Zůstatek je průměr přes dny měsíce, světlé pásmo rozsah, ve kterém se během měsíce pohyboval: nájem odchází jednou měsíčně.
+        Dluh je to, co na konci měsíce dlužili členové, kteří ten měsíc měli předpis. Rozběhnutý měsíc ukazují čísla nahoře.
+    </p>
+    <script type="application/json" id="fin-history">{{.Chart}}</script>
+    <script src="/static/js/finance-chart.js" defer></script>
+</section>
+
+<details class="bg-white shadow rounded-lg mb-8">
+    <summary class="px-6 py-4 cursor-pointer">
+        <h2 class="text-lg font-semibold text-gray-900 inline">Měsíční přehled</h2>
+    </summary>
+    <div class="border-t border-gray-200">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Měsíc</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Platby</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Zaplaceno</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Předpisy</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Předpis</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Rozdíl</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Dluh</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Zůstatek</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <tr class="bg-blue-50 border-b-2 border-blue-200">
+                        <td class="px-4 py-2 text-sm font-medium text-blue-900 whitespace-nowrap">
+                            {{.Prediction.Period}} <span class="text-xs text-blue-600">(predikce)</span>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-right text-blue-700">–</td>
+                        <td class="px-4 py-2 text-sm text-right text-blue-700 italic whitespace-nowrap">~{{fmtNum .Prediction.PaymentTotal}} Kč</td>
+                        <td class="px-4 py-2 text-sm text-right text-blue-700">{{.Prediction.FeeCount}}</td>
+                        <td class="px-4 py-2 text-sm text-right text-blue-700 whitespace-nowrap">{{fmtNum .Prediction.FeeTotal}} Kč</td>
+                        <td class="px-4 py-2 text-sm text-right font-medium whitespace-nowrap {{ if ge .Prediction.Delta 0 }}text-green-700{{ else }}text-red-700{{ end }}">
+                            {{ if ge .Prediction.Delta 0 }}+{{ end }}{{fmtNum .Prediction.Delta}} Kč
+                        </td>
+                        <td class="px-4 py-2 text-sm text-right text-blue-700">–</td>
+                        <td class="px-4 py-2 text-sm text-right text-blue-700">–</td>
+                    </tr>
+                    {{ range .MonthlyRows }}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">{{.Period}}</td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-500">{{.PaymentCount}}</td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-900 whitespace-nowrap">{{fmtNum .PaymentTotal}} Kč</td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-500">{{.FeeCount}}</td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-900 whitespace-nowrap">{{fmtNum .FeeTotal}} Kč</td>
+                        <td class="px-4 py-2 text-sm text-right font-medium whitespace-nowrap {{ if ge .Delta 0 }}text-green-600{{ else }}text-red-600{{ end }}">
+                            {{ if ge .Delta 0 }}+{{ end }}{{fmtNum .Delta}} Kč
+                        </td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-900 whitespace-nowrap">{{fmtNum .Debt}} Kč <span class="text-xs text-gray-500">({{.Debtors}})</span></td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-900 whitespace-nowrap">{{ if .HasBalance }}{{fmtNum .Balance}} Kč{{ else }}–{{ end }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</details>
+{{ end }}

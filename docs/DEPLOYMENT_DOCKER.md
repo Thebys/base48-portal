@@ -259,6 +259,26 @@ docker compose exec -T cron sh -c 'wget -qO- "https://fioapi.fio.cz/v1/rest/peri
 docker compose exec -T cron /app/portal-cron fio-backfill - < vypis.json
 ```
 
+### Zůstatky účtů pro graf financí
+
+Graf na `/finance` bere zůstatek z výpisů FIO, ne z plateb. Sync s každým
+během přepočítá posledních 85 dní účtu, ze kterého čte. Starší historii
+a jiné účty spolku (starý transparentní účet) nahraje `fio-balances` z výpisu
+uloženého jako JSON. Platby nemění, jen zůstatky po dnech. Výpis, jehož pohyby
+nesedí na konečný zůstatek, odmítne.
+
+```bash
+# z počítače s výpisy, jeden výpis na jedno spuštění
+for f in data/raw/fio_*.json; do
+  ssh phoenix 'cd /root/compose/member-portal && docker compose exec -T cron /app/portal-cron fio-balances -' < "$f"
+done
+```
+
+Dva výpisy, které končí stejným dnem, nahraj od staršího k novějšímu: výpis
+stažený během dne má ten den neúplný. Starý účet sync nečte, takže jeho
+zůstatek platí ke dni posledního nahraného výpisu. Po zrušení účtu nahraj
+ještě závěrečný výpis, ať graf ví, že na něm nic nezůstalo.
+
 ## Zálohování a obnova
 
 V image je `sqlite3`, takže online záloha jde bez odstavení:

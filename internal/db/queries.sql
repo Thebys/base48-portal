@@ -570,23 +570,43 @@ AND LENGTH(payments_id) <= 10;
 -- FINANCIAL OVERVIEW
 -- ============================================================================
 
--- name: ListMonthlyPaymentStats :many
-SELECT substr(date, 1, 7) as period,
-    COUNT(*) as payment_count,
-    CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as payment_total
-FROM payments
-WHERE CAST(amount AS REAL) >= 5
-    AND user_id IS NOT NULL
-    AND date >= date('now', 'start of month', '-13 months')
-GROUP BY 1;
-
--- name: ListMonthlyFeeStats :many
-SELECT substr(period_start, 1, 7) as period,
-    COUNT(*) as fee_count,
-    CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as fee_total
+-- name: ListMonthlyFeesByUser :many
+-- Each member's fees per month, for the finance history.
+SELECT user_id, substr(period_start, 1, 7) AS month,
+    COUNT(*) AS fee_count,
+    CAST(SUM(CAST(amount AS REAL)) AS REAL) AS amount
 FROM fees
-WHERE period_start >= date('now', 'start of month', '-13 months')
-GROUP BY 1;
+GROUP BY user_id, substr(period_start, 1, 7)
+ORDER BY user_id, month;
+
+-- name: ListMonthlyMemberPaymentsByUser :many
+-- Each member's payments per month, by the rule of ListUserBalances: only
+-- payments with the member's own VS count.
+SELECT p.user_id, substr(p.date, 1, 7) AS month,
+    COUNT(*) AS payment_count,
+    CAST(SUM(CAST(p.amount AS REAL)) AS REAL) AS amount
+FROM payments p
+JOIN users u ON u.id = p.user_id
+WHERE p.identification = u.payments_id
+GROUP BY p.user_id, substr(p.date, 1, 7)
+ORDER BY p.user_id, month;
+
+-- name: UpsertBankBalance :exec
+-- Writes only a changed balance: the sync restates 85 days on every run.
+INSERT INTO bank_balances (account, day, balance) VALUES (?, ?, ?)
+ON CONFLICT (account, day) DO UPDATE SET balance = excluded.balance
+WHERE bank_balances.balance <> excluded.balance;
+
+-- name: ListBankBalances :many
+SELECT * FROM bank_balances ORDER BY day, account;
+
+-- name: ListLatestBalances :many
+-- Each account's last stored balance. With MAX() in a GROUP BY, SQLite takes
+-- the bare column balance from the row with MAX(day).
+SELECT account, CAST(MAX(day) AS TEXT) AS day, balance
+FROM bank_balances
+GROUP BY account
+ORDER BY account;
 
 -- name: ListRecentPayments :many
 -- List all payments from the current and previous month (for bank statement view)

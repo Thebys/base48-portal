@@ -88,18 +88,15 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	} else {
 		localAccount = account.Domestic()
 		log.Printf("Payment account (from FIO): %s", localAccount)
-	}
 
-	// Cache FIO closing balance
-	queries.UpsertSetting(ctx, db.UpsertSettingParams{
-		Key:   "fio_closing_balance",
-		Value: fmt.Sprintf("%.0f", result.ClosingBalance),
-	})
-	queries.UpsertSetting(ctx, db.UpsertSettingParams{
-		Key:   "fio_closing_balance_date",
-		Value: fio.FormatDate(dateTo),
-	})
-	log.Printf("Cached FIO closing balance: %.0f CZK", result.ClosingBalance)
+		// What the account held, day by day, for the balance chart. All 85
+		// days every time, so a payment booked late still corrects its day.
+		if days, err := recordBalances(ctx, queries, localAccount, result); err != nil {
+			log.Printf("⚠ Account balances not recorded: %v", err)
+		} else {
+			log.Printf("Balance %.2f CZK (%d day balances restated)", result.ClosingBalance, days)
+		}
+	}
 
 	log.Printf("Fetched %d transactions from FIO API", len(transactions))
 

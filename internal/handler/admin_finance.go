@@ -30,6 +30,7 @@ type UnmatchedPaymentItem struct {
 	RemoteAccount  string
 }
 
+// MonthlyRow is a month of the finance table, in whole crowns.
 type MonthlyRow struct {
 	Period       string
 	PaymentCount int64
@@ -37,6 +38,10 @@ type MonthlyRow struct {
 	FeeCount     int64
 	FeeTotal     int64
 	Delta        int64
+	Debt         int64 // owed at the month's end by those charged for it
+	Debtors      int
+	Balance      int64 // on the accounts at the month's end
+	HasBalance   bool
 	IsPrediction bool
 }
 
@@ -165,22 +170,9 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 	unmatchedCount := len(unmatchedPayments)
 
 	data := map[string]interface{}{
-		"User": h.auth.GetUser(r),
-
-		// Summary cards (from shared helper)
-		"TotalMembers":           summary.TotalMembers,
-		"TotalMonthlyFees":       summary.TotalMonthlyFees,
-		"ReceivedThisMonth":      summary.ReceivedThisMonth,
-		"ReceivedThisMonthCount": summary.ReceivedThisMonthCount,
-		"BankBalance":            summary.BankBalance,
-		"BankBalanceDate":        summary.BankBalanceDate,
-		"RentAmount":             summary.RentAmount,
-		"RentDate":               summary.RentDate,
-		"RentPaid":               summary.RentPaid,
-		"DaysRemaining":          summary.DaysRemaining,
-		"MembersInDebt":          summary.MembersInDebt,
-		"TotalDebt":              summary.TotalDebt,
-		"DeepDebt":               summary.DeepDebt,
+		"Title":   "Finanční přehled",
+		"User":    h.auth.GetUser(r),
+		"Finance": summary,
 
 		// Fee preview (admin-only)
 		"FeePreview":         feePreview,
@@ -193,10 +185,6 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		"DebtCandidates": debtCandidates,
 		"DebtSendable":   debtSendable,
 		"EmailEnabled":   h.config.EmailEnabled,
-
-		// Monthly overview (from shared helper)
-		"MonthlyRows": summary.MonthlyRows,
-		"Prediction":  summary.Prediction,
 
 		// Unmatched payments (admin-only)
 		"UnmatchedCount":    unmatchedCount,

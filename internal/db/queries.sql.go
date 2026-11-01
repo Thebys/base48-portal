@@ -2124,6 +2124,33 @@ func (q *Queries) ListAssignedProjectPayments(ctx context.Context) ([]Payment, e
 	return items, nil
 }
 
+const listBankBalances = `-- name: ListBankBalances :many
+SELECT account, day, balance FROM bank_balances ORDER BY day, account
+`
+
+func (q *Queries) ListBankBalances(ctx context.Context) ([]BankBalance, error) {
+	rows, err := q.db.QueryContext(ctx, listBankBalances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BankBalance{}
+	for rows.Next() {
+		var i BankBalance
+		if err := rows.Scan(&i.Account, &i.Day, &i.Balance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDismissedPayments = `-- name: ListDismissedPayments :many
 SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments WHERE dismissed_at IS NOT NULL ORDER BY dismissed_at DESC
 `
@@ -2248,6 +2275,44 @@ func (q *Queries) ListFeesByUser(ctx context.Context, userID int64) ([]Fee, erro
 	return items, nil
 }
 
+const listLatestBalances = `-- name: ListLatestBalances :many
+SELECT account, CAST(MAX(day) AS TEXT) AS day, balance
+FROM bank_balances
+GROUP BY account
+ORDER BY account
+`
+
+type ListLatestBalancesRow struct {
+	Account string  `json:"account"`
+	Day     string  `json:"day"`
+	Balance float64 `json:"balance"`
+}
+
+// Each account's last stored balance. With MAX() in a GROUP BY, SQLite takes
+// the bare column balance from the row with MAX(day).
+func (q *Queries) ListLatestBalances(ctx context.Context) ([]ListLatestBalancesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLatestBalances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLatestBalancesRow{}
+	for rows.Next() {
+		var i ListLatestBalancesRow
+		if err := rows.Scan(&i.Account, &i.Day, &i.Balance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLogsFiltered = `-- name: ListLogsFiltered :many
 SELECT id, subsystem, level, user_id, message, metadata, created_at FROM system_logs
 WHERE (? = '' OR subsystem = ?)
@@ -2305,31 +2370,42 @@ func (q *Queries) ListLogsFiltered(ctx context.Context, arg ListLogsFilteredPara
 	return items, nil
 }
 
-const listMonthlyFeeStats = `-- name: ListMonthlyFeeStats :many
-SELECT substr(period_start, 1, 7) as period,
-    COUNT(*) as fee_count,
-    CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as fee_total
+const listMonthlyFeesByUser = `-- name: ListMonthlyFeesByUser :many
+
+SELECT user_id, substr(period_start, 1, 7) AS month,
+    COUNT(*) AS fee_count,
+    CAST(SUM(CAST(amount AS REAL)) AS REAL) AS amount
 FROM fees
-WHERE period_start >= date('now', 'start of month', '-13 months')
-GROUP BY 1
+GROUP BY user_id, substr(period_start, 1, 7)
+ORDER BY user_id, month
 `
 
-type ListMonthlyFeeStatsRow struct {
-	Period   string `json:"period"`
-	FeeCount int64  `json:"fee_count"`
-	FeeTotal int64  `json:"fee_total"`
+type ListMonthlyFeesByUserRow struct {
+	UserID   int64   `json:"user_id"`
+	Month    string  `json:"month"`
+	FeeCount int64   `json:"fee_count"`
+	Amount   float64 `json:"amount"`
 }
 
-func (q *Queries) ListMonthlyFeeStats(ctx context.Context) ([]ListMonthlyFeeStatsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listMonthlyFeeStats)
+// ============================================================================
+// FINANCIAL OVERVIEW
+// ============================================================================
+// Each member's fees per month, for the finance history.
+func (q *Queries) ListMonthlyFeesByUser(ctx context.Context) ([]ListMonthlyFeesByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMonthlyFeesByUser)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListMonthlyFeeStatsRow{}
+	items := []ListMonthlyFeesByUserRow{}
 	for rows.Next() {
-		var i ListMonthlyFeeStatsRow
-		if err := rows.Scan(&i.Period, &i.FeeCount, &i.FeeTotal); err != nil {
+		var i ListMonthlyFeesByUserRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Month,
+			&i.FeeCount,
+			&i.Amount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2343,37 +2419,41 @@ func (q *Queries) ListMonthlyFeeStats(ctx context.Context) ([]ListMonthlyFeeStat
 	return items, nil
 }
 
-const listMonthlyPaymentStats = `-- name: ListMonthlyPaymentStats :many
-
-SELECT substr(date, 1, 7) as period,
-    COUNT(*) as payment_count,
-    CAST(SUM(CAST(amount AS REAL)) AS INTEGER) as payment_total
-FROM payments
-WHERE CAST(amount AS REAL) >= 5
-    AND user_id IS NOT NULL
-    AND date >= date('now', 'start of month', '-13 months')
-GROUP BY 1
+const listMonthlyMemberPaymentsByUser = `-- name: ListMonthlyMemberPaymentsByUser :many
+SELECT p.user_id, substr(p.date, 1, 7) AS month,
+    COUNT(*) AS payment_count,
+    CAST(SUM(CAST(p.amount AS REAL)) AS REAL) AS amount
+FROM payments p
+JOIN users u ON u.id = p.user_id
+WHERE p.identification = u.payments_id
+GROUP BY p.user_id, substr(p.date, 1, 7)
+ORDER BY p.user_id, month
 `
 
-type ListMonthlyPaymentStatsRow struct {
-	Period       string `json:"period"`
-	PaymentCount int64  `json:"payment_count"`
-	PaymentTotal int64  `json:"payment_total"`
+type ListMonthlyMemberPaymentsByUserRow struct {
+	UserID       sql.NullInt64 `json:"user_id"`
+	Month        string        `json:"month"`
+	PaymentCount int64         `json:"payment_count"`
+	Amount       float64       `json:"amount"`
 }
 
-// ============================================================================
-// FINANCIAL OVERVIEW
-// ============================================================================
-func (q *Queries) ListMonthlyPaymentStats(ctx context.Context) ([]ListMonthlyPaymentStatsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listMonthlyPaymentStats)
+// Each member's payments per month, by the rule of ListUserBalances: only
+// payments with the member's own VS count.
+func (q *Queries) ListMonthlyMemberPaymentsByUser(ctx context.Context) ([]ListMonthlyMemberPaymentsByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMonthlyMemberPaymentsByUser)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListMonthlyPaymentStatsRow{}
+	items := []ListMonthlyMemberPaymentsByUserRow{}
 	for rows.Next() {
-		var i ListMonthlyPaymentStatsRow
-		if err := rows.Scan(&i.Period, &i.PaymentCount, &i.PaymentTotal); err != nil {
+		var i ListMonthlyMemberPaymentsByUserRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Month,
+			&i.PaymentCount,
+			&i.Amount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3979,6 +4059,24 @@ func (q *Queries) UpdateUserState(ctx context.Context, arg UpdateUserStateParams
 		&i.Locale,
 	)
 	return i, err
+}
+
+const upsertBankBalance = `-- name: UpsertBankBalance :exec
+INSERT INTO bank_balances (account, day, balance) VALUES (?, ?, ?)
+ON CONFLICT (account, day) DO UPDATE SET balance = excluded.balance
+WHERE bank_balances.balance <> excluded.balance
+`
+
+type UpsertBankBalanceParams struct {
+	Account string  `json:"account"`
+	Day     string  `json:"day"`
+	Balance float64 `json:"balance"`
+}
+
+// Writes only a changed balance: the sync restates 85 days on every run.
+func (q *Queries) UpsertBankBalance(ctx context.Context, arg UpsertBankBalanceParams) error {
+	_, err := q.db.ExecContext(ctx, upsertBankBalance, arg.Account, arg.Day, arg.Balance)
+	return err
 }
 
 const upsertEmailTemplateContent = `-- name: UpsertEmailTemplateContent :one
