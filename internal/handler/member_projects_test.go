@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -39,7 +40,6 @@ func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
 		"-22" + nbsp + "977,90 Kč",
 		"Doplatek zvedáku", // the approved note
 		">výdaj<",          // an expense without a note
-		"123456789/0800",   // members see donors' accounts
 		"Zvedák a vybavení",
 		`data-vs="202646"`,
 	} {
@@ -48,7 +48,7 @@ func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
 		}
 	}
 	// Who was paid and what the bank said stay with the admins.
-	for _, leak := range []string{"330981999", "1832792017", "Dodavatel zvedáků", "260908", "Smazat projekt", "Přidat VS"} {
+	for _, leak := range []string{"123456789/0800", "330981999", "1832792017", "Dodavatel zvedáků", "260908", "Smazat projekt", "Přidat VS"} {
 		if strings.Contains(page, leak) {
 			t.Errorf("page shows %q", leak)
 		}
@@ -68,7 +68,7 @@ func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
 		t.Fatalf("GET /admin/projects as admin = %d", rec.Code)
 	}
 	adminPage := rec.Body.String()
-	for _, want := range []string{"Přidat VS", "Projekt s platbami nejde smazat", "330981999/0300", "faktura v šanonu", "25" + nbsp + "462,10 Kč"} {
+	for _, want := range []string{"Přidat VS", "Projekt s platbami nejde smazat", "123456789/0800", "330981999/0300", "faktura v šanonu", "25" + nbsp + "462,10 Kč"} {
 		if !strings.Contains(adminPage, want) {
 			t.Errorf("admin page lacks %q", want)
 		}
@@ -77,11 +77,20 @@ func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
 
 func TestRecentPaymentsShowWhatMoneyWentOn(t *testing.T) {
 	e := newAccessEnv(t)
-	member, _ := e.user("member", "accepted", nil)
+	member, memberID := e.user("member", "accepted", nil)
+	_, otherID := e.user("other", "accepted", nil)
+	var ownVS, otherVS string
+	e.database.QueryRow(`SELECT payments_id FROM users WHERE id = ?`, memberID).Scan(&ownVS)
+	e.database.QueryRow(`SELECT payments_id FROM users WHERE id = ?`, otherID).Scan(&otherVS)
+
 	for _, query := range []string{
 		`INSERT INTO projects (id, name) VALUES (10, 'Garáž')`,
-		`INSERT INTO payments (date, amount, kind, kind_id, local_account, remote_account, identification)
-		 VALUES (date('now'), '1000', 'fio', 'fee', 'FIO', '2400139123/2010', '4242')`,
+		`INSERT INTO payments (date, amount, kind, kind_id, local_account, remote_account, identification, user_id)
+		 VALUES (date('now'), '1000', 'fio', 'own', 'FIO', '1111111111/2010', '` + ownVS + `', ` + fmt.Sprint(memberID) + `)`,
+		`INSERT INTO payments (date, amount, kind, kind_id, local_account, remote_account, identification, user_id)
+		 VALUES (date('now'), '1200', 'fio', 'other', 'FIO', '2400139123/2010', '` + otherVS + `', ` + fmt.Sprint(otherID) + `)`,
+		`INSERT INTO payments (date, amount, kind, kind_id, local_account, remote_account, identification, project_id)
+		 VALUES (date('now'), '500', 'fio', 'gift', 'FIO', '123456789/0800', '202646', 10)`,
 		`INSERT INTO payments (date, amount, kind, kind_id, local_account, remote_account, identification, project_id, public_note)
 		 VALUES (date('now'), '-9693', 'fio', 'concrete', 'FIO', '3446840227/0100', '260163', 10, 'Doplatek za betonování')`,
 		`INSERT INTO payments (date, amount, kind, kind_id, local_account, remote_account, identification)
@@ -93,13 +102,14 @@ func TestRecentPaymentsShowWhatMoneyWentOn(t *testing.T) {
 	}
 
 	page := e.do(member, http.MethodGet, "/payments/recent", "").Body.String()
-	for _, want := range []string{"+1 000 Kč", "-9 693 Kč", "Doplatek za betonování", "Garáž", "-44 000 Kč", ">výdaj<", "4242",
-		"přišlo 1 000 Kč, odešlo 53 693 Kč"} {
+	for _, want := range []string{"+1\u00a0000 Kč", "-9\u00a0693 Kč", "Doplatek za betonování", "Garáž", "-44\u00a0000 Kč", ">výdaj<",
+		"vaše platba", "VS " + ownVS, "členský příspěvek", "přišlo 2\u00a0700 Kč, odešlo 53\u00a0693 Kč"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q", want)
 		}
 	}
-	for _, leak := range []string{"3446840227", "3131267163", "260163", "2400139123"} {
+	// Private by default: nobody else's VS or account, nor whom expenses went to.
+	for _, leak := range []string{otherVS, "2400139123", "123456789", "3446840227", "3131267163", "260163", "202646"} {
 		if strings.Contains(page, leak) {
 			t.Errorf("page shows %q", leak)
 		}

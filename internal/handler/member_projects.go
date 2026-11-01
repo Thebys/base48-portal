@@ -19,10 +19,10 @@ type projectView struct {
 	Payments   []projectPaymentView
 }
 
-// projectPaymentView is a payment of a project. Members see an expense's
-// date, amount and note only; who was paid stays with the admins, as does
-// the staff comment. A donor's account is shown to members, not to external
-// users.
+// projectPaymentView is a payment of a project. Members see date, amount and
+// the note of an expense; whose account a payment came from or went to stays
+// with the admins, as does the staff comment. Private by default: a gift
+// says nothing about the giver.
 type projectPaymentView struct {
 	ID            int64
 	Date          time.Time
@@ -84,10 +84,8 @@ func (h *Handler) renderProjects(w http.ResponseWriter, r *http.Request, user *a
 		} else {
 			view.VS = p.Identification
 		}
-		if manage || (!view.Outgoing && acc.MemberArea()) {
-			view.RemoteAccount = p.RemoteAccount
-		}
 		if manage {
+			view.RemoteAccount = p.RemoteAccount
 			view.StaffComment = p.StaffComment.String
 		}
 		byProject[p.ProjectID.Int64] = append(byProject[p.ProjectID.Int64], view)

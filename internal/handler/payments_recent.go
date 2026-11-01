@@ -17,14 +17,17 @@ type memberRecentPayment struct {
 	Date     time.Time
 	Value    float64
 	Outgoing bool
-	VS       string // incoming
+	Own      bool   // the viewer's own payment
+	VS       string // incoming, the viewer's own only
+	Kind     string // incoming: "členský příspěvek", or "" when unassigned
 	Note     string // outgoing: the note an admin approved
-	Project  string // outgoing: the project it was spent on
+	Project  string // the project it came in for or was spent on
 }
 
 // MemberRecentPaymentsHandler shows the account's payments of this and last
-// month. Who an outgoing payment went to is left out; members see what it
-// was for.
+// month. Private by default: members see what money came in for and went out
+// on, not who sent it or got it. Their own payments show their VS, so they
+// can find them.
 // GET /payments/recent
 func (h *Handler) MemberRecentPaymentsHandler(w http.ResponseWriter, r *http.Request) {
 	// A sub-page of the finance overview, so the same members-only rule.
@@ -57,15 +60,22 @@ func (h *Handler) MemberRecentPaymentsHandler(w http.ResponseWriter, r *http.Req
 			continue
 		}
 		row := memberRecentPayment{Date: p.Date, Value: value, Outgoing: value < 0}
-		if row.Outgoing {
+		if p.ProjectID.Valid {
+			row.Project = projectNames[p.ProjectID.Int64]
+		}
+		switch {
+		case row.Outgoing:
 			out -= value
 			row.Note = p.PublicNote.String
-			if p.ProjectID.Valid {
-				row.Project = projectNames[p.ProjectID.Int64]
-			}
-		} else {
+		case p.UserID.Valid && p.UserID.Int64 == dbUser.ID:
 			in += value
+			row.Own = true
 			row.VS = p.Identification
+		case p.UserID.Valid:
+			in += value
+			row.Kind = "členský příspěvek"
+		default:
+			in += value
 		}
 		rows = append(rows, row)
 	}

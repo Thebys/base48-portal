@@ -18,7 +18,7 @@
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Datum</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Částka</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VS / za co</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Za co</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -39,12 +39,11 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-600">
                             +{{fmtKc .Value}} Kč
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            {{ if .VS }}
-                            <span class="font-mono bg-gray-100 px-2 py-1 rounded text-xs">{{.VS}}</span>
-                            {{ else }}
-                            <span class="text-gray-400">–</span>
-                            {{ end }}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ if .Own }}vaše platba <span class="ml-1 font-mono bg-gray-100 px-2 py-1 rounded text-xs">VS {{.VS}}</span>
+                            {{ else if .Project }}<span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">{{.Project}}</span>
+                            {{ else if .Kind }}{{.Kind}}
+                            {{ else }}<span class="text-gray-400">–</span>{{ end }}
                         </td>
                         {{ end }}
                     </tr>

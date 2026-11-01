@@ -492,8 +492,9 @@ func TestNonMembersSeeNoPersonalData(t *testing.T) {
 		}
 		return strings.Contains(rec.Body.String(), "123456789/0800")
 	}
-	if !seesDonor(member) {
-		t.Error("member does not see the donor account, want it shown")
+	// Nobody but admins: a gift says nothing about the giver.
+	if seesDonor(member) {
+		t.Error("member sees the donor account")
 	}
 	if seesDonor(granted) {
 		t.Error("external user sees the donor account")
