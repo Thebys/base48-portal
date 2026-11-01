@@ -54,8 +54,6 @@ func newAccessEnv(t *testing.T) *accessEnv {
 	r.Get("/payments/recent", h.MemberRecentPaymentsHandler)
 	r.Get("/projects", h.MemberProjectsHandler)
 	r.Get("/workshop", h.WorkshopHandler)
-	r.Get("/api/member/projects", h.MemberProjectsAPIHandler)
-	r.Get("/api/member/projects/payments", h.MemberProjectPaymentsHandler)
 	r.Get("/api/member/workshop", h.WorkshopAPIHandler)
 	r.Post("/api/member/workshop/reservations", h.CreateReservationHandler)
 	r.Post("/api/member/workshop/reservations/{id}/cancel", h.CancelReservationHandler)
@@ -168,10 +166,6 @@ func TestWhoGetsWhichPage(t *testing.T) {
 			member: ok, applicant: redirect, external: redirect, granted: redirect, exmember: redirect, suspended: redirect, rejected: redirect, admin: ok}},
 		{"/projects", map[*auth.User]int{
 			member: ok, applicant: redirect, external: ok, granted: ok, exmember: redirect, suspended: redirect, rejected: redirect, admin: ok}},
-		{"/api/member/projects", map[*auth.User]int{
-			member: ok, applicant: forbidden, external: ok, granted: ok, exmember: forbidden, suspended: forbidden, rejected: forbidden, admin: ok}},
-		{"/api/member/projects/payments?project_id=1", map[*auth.User]int{
-			member: ok, applicant: forbidden, external: ok, granted: ok, exmember: forbidden, suspended: forbidden, rejected: forbidden, admin: ok}},
 		{"/workshop", map[*auth.User]int{
 			member: ok, applicant: redirect, external: redirect, granted: ok, exmember: redirect, suspended: redirect, rejected: redirect, admin: ok}},
 		{"/api/member/workshop", map[*auth.User]int{
@@ -490,23 +484,17 @@ func TestNonMembersSeeNoPersonalData(t *testing.T) {
 		t.Errorf("external user sees a member's e-mail: %q", got)
 	}
 
-	donor := func(u *auth.User) string {
-		var resp struct {
-			Payments []struct {
-				RemoteAccount  string `json:"remote_account"`
-				Identification string `json:"identification"`
-			} `json:"payments"`
+	seesDonor := func(u *auth.User) bool {
+		rec := e.do(u, http.MethodGet, "/projects", "")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Zvedák") {
+			t.Fatalf("fundraising page as %s: %d %.300s", u.PreferredName, rec.Code, rec.Body.String())
 		}
-		rec := e.do(u, http.MethodGet, fmt.Sprintf("/api/member/projects/payments?project_id=%d", projectID), "")
-		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || len(resp.Payments) != 1 {
-			t.Fatalf("project payments as %s: %d %s", u.PreferredName, rec.Code, rec.Body.String())
-		}
-		return resp.Payments[0].RemoteAccount
+		return strings.Contains(rec.Body.String(), "123456789/0800")
 	}
-	if got := donor(member); got != "123456789/0800" {
-		t.Errorf("member sees donor account %q, want it shown", got)
+	if !seesDonor(member) {
+		t.Error("member does not see the donor account, want it shown")
 	}
-	if got := donor(granted); got != "" {
-		t.Errorf("external user sees donor account %q", got)
+	if seesDonor(granted) {
+		t.Error("external user sees the donor account")
 	}
 }

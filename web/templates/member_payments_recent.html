@@ -4,7 +4,7 @@
         <div class="flex items-center justify-between">
             <div>
                 <h1 class="text-2xl font-bold text-gray-900">Poslední platby</h1>
-                <p class="mt-1 text-sm text-gray-500">Platby za aktuální a minulý měsíc</p>
+                <p class="mt-1 text-sm text-gray-500">Platby na účtu spolku za aktuální a minulý měsíc{{ if .Payments }}: přišlo {{fmtKc .In}} Kč, odešlo {{fmtKc .Out}} Kč{{ end }}</p>
             </div>
             <a href="/finance" class="text-sm text-blue-600 hover:text-blue-800">&larr; Zpět na přehled</a>
         </div>
@@ -18,7 +18,7 @@
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Datum</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Částka</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VS</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VS / za co</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -27,16 +27,26 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {{.Date.Format "02.01.2006"}}
                         </td>
+                        {{ if .Outgoing }}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-red-600">
+                            {{fmtKc .Value}} Kč
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            {{ if .Note }}{{.Note}}{{ else }}<span class="text-gray-400">výdaj</span>{{ end }}
+                            {{ if .Project }}<span class="ml-2 inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">{{.Project}}</span>{{ end }}
+                        </td>
+                        {{ else }}
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-600">
-                            +{{.Amount}} Kč
+                            +{{fmtKc .Value}} Kč
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            {{ if .Identification }}
-                            <span class="font-mono bg-gray-100 px-2 py-1 rounded text-xs">{{.Identification}}</span>
+                            {{ if .VS }}
+                            <span class="font-mono bg-gray-100 px-2 py-1 rounded text-xs">{{.VS}}</span>
                             {{ else }}
                             <span class="text-gray-400">–</span>
                             {{ end }}
                         </td>
+                        {{ end }}
                     </tr>
                     {{ end }}
                 </tbody>

@@ -2076,6 +2076,54 @@ func (q *Queries) ListAllProjectVS(ctx context.Context) ([]ProjectV, error) {
 	return items, nil
 }
 
+const listAssignedProjectPayments = `-- name: ListAssignedProjectPayments :many
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments
+WHERE project_id IS NOT NULL
+ORDER BY date DESC, id DESC
+`
+
+// Every payment that belongs to some project, for the fundraising page.
+func (q *Queries) ListAssignedProjectPayments(ctx context.Context) ([]Payment, error) {
+	rows, err := q.db.QueryContext(ctx, listAssignedProjectPayments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payment{}
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Date,
+			&i.Amount,
+			&i.Kind,
+			&i.KindID,
+			&i.LocalAccount,
+			&i.RemoteAccount,
+			&i.Identification,
+			&i.RawData,
+			&i.StaffComment,
+			&i.CreatedAt,
+			&i.ProjectID,
+			&i.DismissedAt,
+			&i.DismissedBy,
+			&i.DismissedReason,
+			&i.PublicNote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDismissedPayments = `-- name: ListDismissedPayments :many
 SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments WHERE dismissed_at IS NOT NULL ORDER BY dismissed_at DESC
 `

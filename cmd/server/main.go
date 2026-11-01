@@ -124,8 +124,6 @@ func main() {
 	// Member API routes (read-only, requires auth)
 	r.Route("/api/member", func(r chi.Router) {
 		r.Use(authenticator.RequireAuth)
-		r.Get("/projects", h.MemberProjectsAPIHandler)
-		r.Get("/projects/payments", h.MemberProjectPaymentsHandler)
 		r.Get("/workshop", h.WorkshopAPIHandler)
 		r.Post("/workshop/reservations", h.CreateReservationHandler)
 		r.Post("/workshop/reservations/{id}/cancel", h.CancelReservationHandler)

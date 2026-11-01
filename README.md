@@ -9,7 +9,7 @@
 - Automatická správa měsíčních členských příspěvků, člen si může zvýšit úroveň nebo částku
 - QR platební kódy (v profilu i v upomínkách)
 - E-maily přes outbox: registrace, přijetí, upomínky dluhu, dluh na baru; šablony cs/en se upravují v adminu
-- Finanční přehled a fundraising projekty s vlastním VS
+- Finanční přehled a fundraising projekty s vlastním VS: kolik se vybralo, utratilo a za co
 - Rezervace stání v autodílně
 - Bar: zůstatek a nákupy z RevBank kiosku
 - Admin rozhraní pro správu uživatelů, plateb, úrovní, autodílny, baru, e-mailů a nastavení

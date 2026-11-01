@@ -331,6 +331,12 @@ SELECT * FROM payments
 WHERE project_id = ?
 ORDER BY date DESC, id DESC;
 
+-- name: ListAssignedProjectPayments :many
+-- Every payment that belongs to some project, for the fundraising page.
+SELECT * FROM payments
+WHERE project_id IS NOT NULL
+ORDER BY date DESC, id DESC;
+
 -- name: ListProjectTotals :many
 -- What each project raised (incoming) and spent (outgoing, as a positive
 -- number), for all projects in one go.

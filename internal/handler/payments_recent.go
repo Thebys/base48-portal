@@ -3,6 +3,8 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/db"
@@ -16,8 +18,20 @@ type RecentPaymentView struct {
 	IsNegative  bool   // True if amount is negative (outgoing payment)
 }
 
-// MemberRecentPaymentsHandler shows recent payments (current + last month) for members.
-// Displays simplified view: date, amount, variable symbol.
+// memberRecentPayment is a bank payment as members see it: a payment in with
+// its VS, or a payment out with what it was for.
+type memberRecentPayment struct {
+	Date     time.Time
+	Value    float64
+	Outgoing bool
+	VS       string // incoming
+	Note     string // outgoing: the note an admin approved
+	Project  string // outgoing: the project it was spent on
+}
+
+// MemberRecentPaymentsHandler shows the account's payments of this and last
+// month. Who an outgoing payment went to is left out; members see what it
+// was for.
 // GET /payments/recent
 func (h *Handler) MemberRecentPaymentsHandler(w http.ResponseWriter, r *http.Request) {
 	// A sub-page of the finance overview, so the same members-only rule.
@@ -27,32 +41,51 @@ func (h *Handler) MemberRecentPaymentsHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	ctx := r.Context()
-
-	// Get all recent payments
 	payments, err := h.queries.ListRecentPayments(ctx)
 	if err != nil {
 		http.Error(w, "Failed to load payments", http.StatusInternalServerError)
 		return
 	}
-
-	// Filter to only incoming payments (amount > 0) for member view
-	var incomingPayments []db.Payment
-	for _, p := range payments {
-		var amount float64
-		if _, err := fmt.Sscanf(p.Amount, "%f", &amount); err == nil && amount > 0 {
-			incomingPayments = append(incomingPayments, p)
-		}
+	projects, err := h.queries.ListProjects(ctx)
+	if err != nil {
+		http.Error(w, "Failed to load payments", http.StatusInternalServerError)
+		return
+	}
+	projectNames := make(map[int64]string, len(projects))
+	for _, p := range projects {
+		projectNames[p.ID] = p.Name
 	}
 
-	data := map[string]interface{}{
+	var rows []memberRecentPayment
+	var in, out float64
+	for _, p := range payments {
+		value, err := strconv.ParseFloat(p.Amount, 64)
+		if err != nil || value == 0 {
+			continue
+		}
+		row := memberRecentPayment{Date: p.Date, Value: value, Outgoing: value < 0}
+		if row.Outgoing {
+			out -= value
+			row.Note = p.PublicNote.String
+			if p.ProjectID.Valid {
+				row.Project = projectNames[p.ProjectID.Int64]
+			}
+		} else {
+			in += value
+			row.VS = p.Identification
+		}
+		rows = append(rows, row)
+	}
+
+	h.render(w, "member_payments_recent.html", map[string]interface{}{
 		"Title":    "Poslední platby",
 		"User":     user,
 		"DBUser":   dbUser,
 		"Access":   acc,
-		"Payments": incomingPayments,
-	}
-
-	h.render(w, "member_payments_recent.html", data)
+		"Payments": rows,
+		"In":       in,
+		"Out":      out,
+	})
 }
 
 // AdminRecentPaymentsHandler shows full bank statement for admins.
