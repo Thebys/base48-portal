@@ -74,10 +74,10 @@
                 <td class="px-4 py-2 text-sm text-gray-900">
                     <a href="/admin/emails/{{.ID}}" class="hover:underline">{{.Type}}</a>
                     <div class="text-xs text-gray-500 max-w-xs truncate" title="{{.Subject}}">{{.Subject}}</div>
+                    {{if .LastError.Valid}}<div class="mt-1 text-xs text-gray-500 max-w-xs">{{.LastError.String}}</div>{{end}}
                 </td>
                 <td class="px-4 py-2 text-sm">
                     <span class="badge {{.StatusClass}}">{{.StatusLabel}}</span>
-                    {{if .LastError.Valid}}<div class="mt-1 text-xs text-gray-500 max-w-xs">{{.LastError.String}}</div>{{end}}
                 </td>
                 <td class="px-4 py-2 text-sm whitespace-nowrap">
                     <div class="flex items-center gap-1">

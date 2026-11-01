@@ -520,11 +520,11 @@ const createEmailOutbox = `-- name: CreateEmailOutbox :one
 
 INSERT INTO email_outbox (
     user_id, recipient, subject, template_name,
-    template_data, rendered_html, status, max_attempts, next_retry_at
+    rendered_html, status, max_attempts, next_retry_at
 ) VALUES (
     ?1, ?2, ?3, ?4,
-    ?5, ?6, ?7,
-    ?8, substr(?9, 1, 19)
+    ?5, ?6,
+    ?7, substr(?8, 1, 19)
 )
 RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until
 `
@@ -534,7 +534,6 @@ type CreateEmailOutboxParams struct {
 	Recipient    string         `json:"recipient"`
 	Subject      string         `json:"subject"`
 	TemplateName string         `json:"template_name"`
-	TemplateData sql.NullString `json:"template_data"`
 	RenderedHtml sql.NullString `json:"rendered_html"`
 	Status       string         `json:"status"`
 	MaxAttempts  int64          `json:"max_attempts"`
@@ -551,7 +550,6 @@ func (q *Queries) CreateEmailOutbox(ctx context.Context, arg CreateEmailOutboxPa
 		arg.Recipient,
 		arg.Subject,
 		arg.TemplateName,
-		arg.TemplateData,
 		arg.RenderedHtml,
 		arg.Status,
 		arg.MaxAttempts,
@@ -3863,15 +3861,14 @@ const updateEmailOutboxContent = `-- name: UpdateEmailOutboxContent :exec
 UPDATE email_outbox SET
     subject = ?1,
     template_name = ?2,
-    template_data = ?3,
-    rendered_html = ?4
-WHERE id = ?5 AND status = 'pending'
+    template_data = NULL, -- read by nothing; drop the column once a rollback to 1.17 is off the table
+    rendered_html = ?3
+WHERE id = ?4 AND status = 'pending'
 `
 
 type UpdateEmailOutboxContentParams struct {
 	Subject      string         `json:"subject"`
 	TemplateName string         `json:"template_name"`
-	TemplateData sql.NullString `json:"template_data"`
 	RenderedHtml sql.NullString `json:"rendered_html"`
 	ID           int64          `json:"id"`
 }
@@ -3884,7 +3881,6 @@ func (q *Queries) UpdateEmailOutboxContent(ctx context.Context, arg UpdateEmailO
 	_, err := q.db.ExecContext(ctx, updateEmailOutboxContent,
 		arg.Subject,
 		arg.TemplateName,
-		arg.TemplateData,
 		arg.RenderedHtml,
 		arg.ID,
 	)

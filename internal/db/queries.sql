@@ -412,10 +412,10 @@ SELECT * FROM project_vs WHERE vs = ? LIMIT 1;
 -- substr normalizes Go time.Time to YYYY-MM-DD HH:MM:SS for SQLite datetime compat
 INSERT INTO email_outbox (
     user_id, recipient, subject, template_name,
-    template_data, rendered_html, status, max_attempts, next_retry_at
+    rendered_html, status, max_attempts, next_retry_at
 ) VALUES (
     sqlc.arg(user_id), sqlc.arg(recipient), sqlc.arg(subject), sqlc.arg(template_name),
-    sqlc.arg(template_data), sqlc.arg(rendered_html), sqlc.arg(status),
+    sqlc.arg(rendered_html), sqlc.arg(status),
     sqlc.arg(max_attempts), substr(sqlc.arg(next_retry_at), 1, 19)
 )
 RETURNING *;
@@ -583,7 +583,7 @@ LIMIT 1;
 UPDATE email_outbox SET
     subject = sqlc.arg(subject),
     template_name = sqlc.arg(template_name),
-    template_data = sqlc.arg(template_data),
+    template_data = NULL, -- read by nothing; drop the column once a rollback to 1.17 is off the table
     rendered_html = sqlc.arg(rendered_html)
 WHERE id = sqlc.arg(id) AND status = 'pending';
 

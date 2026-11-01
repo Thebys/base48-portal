@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -350,24 +349,24 @@ func (c *Client) MembershipEmailFor(ctx context.Context, user *db.User, lang, ti
 	return c.membershipEmail(ctx, user, lang, tier, st, LoadMembershipSettings(ctx, c.queries))
 }
 
-// refreshMembershipReminder re-checks a membership reminder against the
-// member's standing now. A debt reminder may turn into the other debt
-// reminder, or be withdrawn once the debt is gone; it never becomes the
-// friendly one, as the member has just acted. The friendly one is withdrawn
-// when switched off or no longer warranted.
-func (c *Client) refreshMembershipReminder(ctx context.Context, entry *db.EmailOutbox) look {
-	user, verdict := c.activeMemberFor(ctx, entry)
-	if verdict != lookSend {
-		return verdict
+// membershipLook re-checks a membership reminder against the member's
+// standing now. A debt reminder may turn into the other debt reminder, or be
+// withdrawn once the debt is gone; it never becomes the friendly one, as the
+// member has just acted. The friendly one is withdrawn when switched off or
+// no longer warranted.
+func (c *Client) membershipLook(ctx context.Context, entry *db.EmailOutbox) verdict {
+	user, v := c.inState(ctx, entry, "accepted", "už není aktivní člen")
+	if v.cancel != "" || v.err != nil {
+		return v
 	}
 	level, err := c.queries.GetLevel(ctx, user.LevelID)
 	if err != nil {
-		return c.holdOn(entry, err)
+		return verdict{err: err}
 	}
 	now := time.Now()
 	st, err := dues.Load(ctx, c.queries, &user, level.Amount, now)
 	if err != nil {
-		return c.holdOn(entry, err)
+		return verdict{err: err}
 	}
 	settings := LoadMembershipSettings(ctx, c.queries)
 	tier := dues.Classify(st, dues.MonthOf(now), settings.Policy())
@@ -375,23 +374,16 @@ func (c *Client) refreshMembershipReminder(ctx context.Context, entry *db.EmailO
 	queued := strings.TrimSuffix(entry.TemplateName, ".html")
 	switch {
 	case dues.IsDebt(queued) && !dues.IsDebt(tier):
-		return c.cancelOutbox(ctx, entry, fmt.Sprintf("bilance je teď %s, dluh mezitím uhrazen", Crowns(st.Balance)))
+		return verdict{cancel: fmt.Sprintf("bilance je teď %s, dluh mezitím uhrazen", Crowns(st.Balance))}
 	case queued == TierPrepaidEnding && !settings.PrepaidEnabled:
-		return c.cancelOutbox(ctx, entry, "upozornění před koncem předplatného byla vypnuta")
+		return verdict{cancel: "upozornění před koncem předplatného byla vypnuta"}
 	case queued == TierPrepaidEnding && tier != TierPrepaidEnding:
-		return c.cancelOutbox(ctx, entry, fmt.Sprintf("už má zaplaceno do konce %s", MonthUntil(st.PaidThrough(), "cs")))
+		return verdict{cancel: fmt.Sprintf("už má zaplaceno do konce %s", MonthUntil(st.PaidThrough(), "cs"))}
 	}
 
 	e, err := c.membershipEmail(ctx, &user, userLang(&user), tier, st, settings)
 	if err != nil {
-		return c.holdOn(entry, err)
+		return verdict{err: err}
 	}
-	c.rerender(ctx, entry, TemplateFileForTier(tier), e.Content["subject"], e)
-	return lookSend
-}
-
-// holdOn logs why an entry cannot be checked now; the lease brings it back.
-func (c *Client) holdOn(entry *db.EmailOutbox, err error) look {
-	log.Printf("[Email] cannot re-check outbox #%d, holding it: %v", entry.ID, err)
-	return lookHeld
+	return verdict{file: TemplateFileForTier(tier), subject: e.Content["subject"], data: e}
 }

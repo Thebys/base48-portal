@@ -3,7 +3,6 @@ package email
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -21,110 +20,130 @@ import (
 // Every delivery takes this look: the worker's, and an admin's send-now or
 // retry, so a stale reminder cannot go out by hand either.
 
-// look is the verdict of the last look.
-type look int
-
-const (
-	lookSend      look = iota // deliver the entry as it now stands
-	lookCancelled             // withdrawn here; the reason is in last_error
-	lookHeld                  // could not check now; the lease brings it back
-)
+// verdict is the last look at a pending email: withdraw it, hold it (the
+// lease brings it back), or send it, rendered afresh when file is set.
+type verdict struct {
+	cancel        string
+	err           error
+	file, subject string
+	data          any
+}
 
 // cancelledPrefix starts the last_error of every entry withdrawn by the last look.
 const cancelledPrefix = "Zrušeno před odesláním: "
 
-// refreshBeforeSend checks a leased entry just before it is sent.
-func (c *Client) refreshBeforeSend(ctx context.Context, entry *db.EmailOutbox) look {
+// lastLook checks a pending entry against how things stand now. It only
+// reads: refreshBeforeSend acts on the verdict, AsItWouldLeave shows it.
+func (c *Client) lastLook(ctx context.Context, entry *db.EmailOutbox) verdict {
 	if !entry.UserID.Valid {
-		return lookSend
+		return verdict{}
 	}
+	var v verdict
 	switch entry.TemplateName {
 	case TemplateFileBarDebt:
-		return c.refreshBarDebt(ctx, entry)
+		v = c.barDebtLook(ctx, entry)
 	case TemplateFileForTier(TierPrepaidEnding), TemplateFileForTier(TierNegativeBalance), TemplateFileForTier(TierDebtWarning):
-		return c.refreshMembershipReminder(ctx, entry)
+		v = c.membershipLook(ctx, entry)
 	case "welcome.html":
-		return c.stillInState(ctx, entry, "accepted", "už není přijatý člen")
+		_, v = c.inState(ctx, entry, "accepted", "už není přijatý člen")
 	case "registration.html":
-		return c.stillInState(ctx, entry, "awaiting", "registrace už byla vyřízena")
+		_, v = c.inState(ctx, entry, "awaiting", "registrace už byla vyřízena")
 	case "membership_suspended.html":
-		return c.stillInState(ctx, entry, "suspended", "členství už není pozastavené")
-	default:
-		return lookSend
+		_, v = c.inState(ctx, entry, "suspended", "členství už není pozastavené")
 	}
+	return v
 }
 
-// stillInState cancels an entry announcing a state the recipient has left
-// since it was queued: an admin who accepts a member and changes their mind
-// within the delay must not have both emails go out.
-func (c *Client) stillInState(ctx context.Context, entry *db.EmailOutbox, state, reason string) look {
+// inState loads the entry's recipient and withdraws the entry when they are
+// gone or no longer in state: an admin who accepts a member and changes their
+// mind within the delay must not have both emails go out.
+func (c *Client) inState(ctx context.Context, entry *db.EmailOutbox, state, reason string) (db.User, verdict) {
 	user, err := c.queries.GetUserByID(ctx, entry.UserID.Int64)
-	if errors.Is(err, sql.ErrNoRows) {
-		return c.cancelOutbox(ctx, entry, "uživatel neexistuje")
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return user, verdict{cancel: "uživatel neexistuje"}
+	case err != nil:
+		return user, verdict{err: err}
+	case user.State != state:
+		return user, verdict{cancel: reason}
 	}
-	if err != nil {
-		log.Printf("[Email] cannot re-check outbox #%d: %v", entry.ID, err)
-		return lookHeld
-	}
-	if user.State != state {
-		return c.cancelOutbox(ctx, entry, reason)
-	}
-	return lookSend
+	return user, verdict{}
 }
 
-// activeMemberFor loads the entry's recipient and cancels the entry when they
-// are gone or no longer an accepted member. The verdict is lookSend only when
-// the entry may go on.
-func (c *Client) activeMemberFor(ctx context.Context, entry *db.EmailOutbox) (db.User, look) {
-	user, err := c.queries.GetUserByID(ctx, entry.UserID.Int64)
-	if errors.Is(err, sql.ErrNoRows) {
-		return user, c.cancelOutbox(ctx, entry, "uživatel neexistuje")
+// refreshBeforeSend gives a leased entry its last look and acts on it. ok says
+// whether it may go out; when not, out says what became of it.
+func (c *Client) refreshBeforeSend(ctx context.Context, entry *db.EmailOutbox) (out outcome, ok bool) {
+	v := c.lastLook(ctx, entry)
+	switch {
+	case v.err != nil:
+		log.Printf("[Email] cannot re-check outbox #%d, holding it: %v", entry.ID, v.err)
+		return held, false
+	case v.cancel != "":
+		return c.cancelOutbox(ctx, entry, v.cancel), false
+	case v.file != "":
+		c.rerender(ctx, entry, v)
 	}
-	if err != nil {
-		log.Printf("[Email] cannot re-check outbox #%d: %v", entry.ID, err)
-		return user, lookHeld
-	}
-	if user.State != "accepted" {
-		return user, c.cancelOutbox(ctx, entry, "už není aktivní člen")
-	}
-	return user, lookSend
+	return delivered, true
 }
 
-// rerender renders the entry afresh and stores the result, updating the entry
-// in place for delivery. If rendering fails, the version from queue time is
-// still a valid email and goes out unchanged.
-func (c *Client) rerender(ctx context.Context, entry *db.EmailOutbox, templateFile, subject string, data any) {
-	rendered, err := c.renderTemplate(SendParams{TemplateName: templateFile, Data: data})
+// AsItWouldLeave is an outbox entry for the admin to look at: a pending one
+// as the last look would send it now, or with why it would be withdrawn in
+// LastError. Nothing is stored. One that cannot be checked or rendered now,
+// and every entry no longer pending, is shown as it is.
+func (c *Client) AsItWouldLeave(ctx context.Context, entry db.EmailOutbox) db.EmailOutbox {
+	if entry.Status != "pending" {
+		return entry
+	}
+	switch v := c.lastLook(ctx, &entry); {
+	case v.cancel != "":
+		entry.LastError = sql.NullString{String: "Kdyby odcházel teď, zrušil by se: " + v.cancel, Valid: true}
+	case v.err == nil && v.file != "":
+		c.renderAfresh(&entry, v)
+	}
+	return entry
+}
+
+// renderAfresh puts the verdict's fresh version of a reminder into entry,
+// in memory. On failure entry is left as it was.
+func (c *Client) renderAfresh(entry *db.EmailOutbox, v verdict) error {
+	html, err := c.renderTemplate(SendParams{TemplateName: v.file, Data: v.data})
 	if err != nil {
+		return err
+	}
+	entry.Subject, entry.TemplateName = v.subject, v.file
+	entry.RenderedHtml = sql.NullString{String: html, Valid: true}
+	return nil
+}
+
+// rerender renders the entry afresh and stores the result for delivery. If
+// rendering fails, the version from queue time is still a valid email and
+// goes out unchanged.
+func (c *Client) rerender(ctx context.Context, entry *db.EmailOutbox, v verdict) {
+	if err := c.renderAfresh(entry, v); err != nil {
 		log.Printf("[Email] re-render of outbox #%d failed, sending as queued: %v", entry.ID, err)
 		return
 	}
-	dataJSON, _ := json.Marshal(data)
 	if err := c.queries.UpdateEmailOutboxContent(ctx, db.UpdateEmailOutboxContentParams{
-		Subject:      subject,
-		TemplateName: templateFile,
-		TemplateData: sql.NullString{String: string(dataJSON), Valid: true},
-		RenderedHtml: sql.NullString{String: rendered, Valid: true},
+		Subject:      entry.Subject,
+		TemplateName: entry.TemplateName,
+		RenderedHtml: entry.RenderedHtml,
 		ID:           entry.ID,
 	}); err != nil {
 		log.Printf("[Email] failed to store re-render of outbox #%d: %v", entry.ID, err)
 	}
-	entry.Subject = subject
-	entry.TemplateName = templateFile
-	entry.RenderedHtml = sql.NullString{String: rendered, Valid: true}
 }
 
 // cancelOutbox withdraws the leased entry, recording why in last_error so the
 // admin sees the reason in the outbox. When that cannot be stored, the entry
 // is held instead: it must not go out, and the lease brings it back.
-func (c *Client) cancelOutbox(ctx context.Context, entry *db.EmailOutbox, reason string) look {
+func (c *Client) cancelOutbox(ctx context.Context, entry *db.EmailOutbox, reason string) outcome {
 	lastError := sql.NullString{String: cancelledPrefix + reason, Valid: true}
 	if err := c.queries.CancelLeasedEmailOutbox(ctx, db.CancelLeasedEmailOutboxParams{
 		Reason: lastError,
 		ID:     entry.ID,
 	}); err != nil {
 		log.Printf("[Email] failed to cancel outbox #%d: %v", entry.ID, err)
-		return lookHeld
+		return held
 	}
 	entry.Status = "cancelled"
 	entry.LastError = lastError
@@ -135,5 +154,5 @@ func (c *Client) cancelOutbox(ctx context.Context, entry *db.EmailOutbox, reason
 		UserID:    entry.UserID,
 		Message:   fmt.Sprintf("E-mail #%d pro %s zrušen před odesláním: %s", entry.ID, entry.Recipient, reason),
 	})
-	return lookCancelled
+	return withdrawn
 }

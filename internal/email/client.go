@@ -410,9 +410,6 @@ func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 		return fmt.Errorf("failed to render template: %w", err)
 	}
 
-	// The data goes along so a reminder can be checked again before it leaves.
-	dataJSON, _ := json.Marshal(params.Data)
-
 	// UTC matters: the driver serializes a time.Time with its own location's
 	// wall clock, while every due-check in SQL compares against datetime('now'),
 	// which is UTC. Storing local time made every scheduled email fire TZ-offset
@@ -427,7 +424,6 @@ func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 		Recipient:    params.Recipient,
 		Subject:      params.Subject,
 		TemplateName: params.TemplateName,
-		TemplateData: sql.NullString{String: string(dataJSON), Valid: true},
 		RenderedHtml: sql.NullString{String: rendered, Valid: true},
 		Status:       "pending",
 		MaxAttempts:  3,
@@ -587,11 +583,8 @@ func (c *Client) deliver(ctx context.Context, entry *db.EmailOutbox) (outcome, e
 	// answers; the outcome must be recorded all the same.
 	dbCtx := context.WithoutCancel(ctx)
 
-	switch c.refreshBeforeSend(dbCtx, entry) {
-	case lookCancelled:
-		return withdrawn, nil
-	case lookHeld:
-		return held, nil
+	if out, ok := c.refreshBeforeSend(dbCtx, entry); !ok {
+		return out, nil
 	}
 
 	params := SendParams{

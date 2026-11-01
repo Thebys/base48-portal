@@ -159,7 +159,7 @@ func (h *Handler) AdminEmailsHandler(w http.ResponseWriter, r *http.Request) {
 	rows := func(entries []db.EmailOutbox) []outboxRow {
 		out := make([]outboxRow, len(entries))
 		for i, e := range entries {
-			out[i] = newOutboxRow(e, now)
+			out[i] = newOutboxRow(h.emailClient.AsItWouldLeave(ctx, e), now)
 		}
 		return out
 	}
@@ -193,6 +193,7 @@ func (h *Handler) AdminEmailDetailHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	data := h.emailPage(r, "E-mail #"+strconv.FormatInt(id, 10), "/admin/emails")
+	entry = h.emailClient.AsItWouldLeave(r.Context(), entry)
 	data["Email"] = newOutboxRow(entry, time.Now())
 	// A string, not template.HTML: html/template escapes it into the srcdoc
 	// attribute, and the sandboxed frame shows it as the mail client would.

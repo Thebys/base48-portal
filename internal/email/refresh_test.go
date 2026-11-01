@@ -93,7 +93,7 @@ func TestDebtRefreshCancelsWhenPaid(t *testing.T) {
 
 	pay(t, database, user, "payer", 2000) // paid during the 72h review window
 
-	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
+	if _, ok := c.refreshBeforeSend(context.Background(), &entry); ok {
 		t.Fatal("a member who paid up must not get the reminder")
 	}
 	status, lastErr, _ := outboxState(t, database, entry.ID)
@@ -111,7 +111,7 @@ func TestDebtRefreshDowngradesTier(t *testing.T) {
 
 	pay(t, database, user, "partial", 1500) // now -1500: one fee, not two
 
-	if c.refreshBeforeSend(context.Background(), &entry) != lookSend {
+	if _, ok := c.refreshBeforeSend(context.Background(), &entry); !ok {
 		t.Fatal("still in debt, should be sent")
 	}
 	if entry.TemplateName != "negative_balance.html" {
@@ -142,7 +142,7 @@ func TestDebtRefreshCancelsForSuspendedMember(t *testing.T) {
 	if _, err := database.Exec(`UPDATE users SET state = 'suspended' WHERE id = ?`, user); err != nil {
 		t.Fatal(err)
 	}
-	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
+	if _, ok := c.refreshBeforeSend(context.Background(), &entry); ok {
 		t.Fatal("a suspended member must not get a fee reminder")
 	}
 }
@@ -156,7 +156,7 @@ func TestDebtRefreshKeepsPaymentDetails(t *testing.T) {
 	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 
 	worker := New(c.config, c.queries) // what cmd/cron builds for the outbox
-	if worker.refreshBeforeSend(context.Background(), &entry) != lookSend {
+	if _, ok := worker.refreshBeforeSend(context.Background(), &entry); !ok {
 		t.Fatal("still in debt, should be sent")
 	}
 	_, _, html := outboxState(t, database, entry.ID)
@@ -189,10 +189,39 @@ func TestDebtReminderWaitsForPaymentAccount(t *testing.T) {
 		t.Errorf("queueing without an account: err = %v, want bank.ErrUnknown", err)
 	}
 
-	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
+	if _, ok := c.refreshBeforeSend(context.Background(), &entry); ok {
 		t.Fatal("a reminder without payment details must not be sent")
 	}
 	if status, _, _ := outboxState(t, database, entry.ID); status != "pending" {
 		t.Errorf("status = %q, want it left pending for a later pass", status)
+	}
+}
+
+// The outbox shows a pending reminder as the last look would send it now.
+// It used to show the queue-time version, which the last look then replaced.
+// Showing must not store anything: the entry is still the worker's to send.
+func TestAsItWouldLeaveShowsTheReminderAsItWouldGoOut(t *testing.T) {
+	c, database := barTestClient(t)
+	ctx := context.Background()
+	partial := queueDebt(t, c, database, seedDebtor(t, database, "partial", 3), TierDebtWarning)
+	payer := seedDebtor(t, database, "payer", 2)
+	paid := queueDebt(t, c, database, payer, TierNegativeBalance)
+
+	pay(t, database, partial.UserID.Int64, "partial", 1500) // now -1500: one fee, not two
+	pay(t, database, payer, "payer", 2000)
+
+	shown := c.AsItWouldLeave(ctx, partial)
+	if shown.TemplateName != "negative_balance.html" || !strings.Contains(shown.RenderedHtml.String, "−1&nbsp;500&nbsp;Kč") {
+		t.Errorf("shown as %s, want the negative-balance reminder quoting −1 500", shown.TemplateName)
+	}
+	if shown = c.AsItWouldLeave(ctx, paid); !strings.Contains(shown.LastError.String, "zrušil by se: bilance je teď") {
+		t.Errorf("paid reminder shown with last_error %q, want why it would be withdrawn", shown.LastError.String)
+	}
+
+	for _, queued := range []db.EmailOutbox{partial, paid} {
+		status, lastErr, html := outboxState(t, database, queued.ID)
+		if status != "pending" || lastErr != "" || html != queued.RenderedHtml.String {
+			t.Errorf("outbox #%d changed by showing it: status=%q last_error=%q", queued.ID, status, lastErr)
+		}
 	}
 }

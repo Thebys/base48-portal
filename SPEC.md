@@ -37,6 +37,8 @@ konfigurace v `.env.example`, schéma v `migrations/`.
 - Každý e-mail čeká ve frontě a těsně před odesláním (i ručním) dostane poslední kontrolu:
   upomínka se přepočítá nebo zruší, uvítání, registrace a pozastavení se zruší, když člen
   mezitím změnil stav. S `EMAIL_ENABLED=false` se nic nezařazuje ani neodesílá
+- Fronta ukazuje čekající e-mail tak, jak by po té kontrole odešel teď (nic neukládá).
+  Odeslaný zůstává tak, jak odešel: `rendered_html` je záznam toho, co člen dostal
 - Příchozí platby z FIO se párují podle VS na člena, jinak na fundraising projekt
 - Odchozí platby se jen zaznamenají: ke členovi nikdy, k projektu, když nesou jeho VS,
   jinak je k projektu přiřadí admin. Členové u nich vidí datum, částku, projekt a

@@ -242,33 +242,31 @@ func (c *Client) QueueBarDebtReminders(ctx context.Context, s BarDebtSettings) (
 	return res, nil
 }
 
-// refreshBarDebt re-checks a queued bar reminder against the live bar balance.
+// barDebtLook re-checks a queued bar reminder against the live bar balance.
 // A member topping up at the kiosk is the common case — then the reminder is
 // cancelled. Otherwise it is re-rendered, so it quotes today's balance and the
 // current template text rather than what applied when it was queued.
-func (c *Client) refreshBarDebt(ctx context.Context, entry *db.EmailOutbox) look {
+func (c *Client) barDebtLook(ctx context.Context, entry *db.EmailOutbox) verdict {
 	settings := LoadBarDebtSettings(ctx, c.queries)
 	if !settings.Enabled {
-		return c.cancelOutbox(ctx, entry, "barové upomínky byly vypnuty")
+		return verdict{cancel: "barové upomínky byly vypnuty"}
 	}
-	user, verdict := c.activeMemberFor(ctx, entry)
-	if verdict != lookSend {
-		return verdict
+	user, v := c.inState(ctx, entry, "accepted", "už není aktivní člen")
+	if v.cancel != "" || v.err != nil {
+		return v
 	}
 
 	account, err := c.queries.GetRevbankAccountByUserID(ctx, entry.UserID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return c.cancelOutbox(ctx, entry, "barový účet nenalezen")
+		return verdict{cancel: "barový účet nenalezen"}
 	}
 	if err != nil {
-		log.Printf("[Email] bar debt: cannot re-check outbox #%d: %v", entry.ID, err)
-		return lookHeld
+		return verdict{err: err}
 	}
 	if !settings.Warranted(account.BalanceCents) {
-		return c.cancelOutbox(ctx, entry, fmt.Sprintf("zůstatek na baru je teď %s Kč, dluh už nepřesahuje hranici", FormatCZKCents(account.BalanceCents)))
+		return verdict{cancel: fmt.Sprintf("zůstatek na baru je teď %s Kč, dluh už nepřesahuje hranici", FormatCZKCents(account.BalanceCents))}
 	}
 
 	data := c.barDebtData(ctx, &user, account.BalanceCents, settings.ThresholdCZK)
-	c.rerender(ctx, entry, TemplateFileBarDebt, data["Content"].(map[string]string)["subject"], data)
-	return lookSend
+	return verdict{file: TemplateFileBarDebt, subject: data["Content"].(map[string]string)["subject"], data: data}
 }

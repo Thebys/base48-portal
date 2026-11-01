@@ -36,11 +36,11 @@ func TestPrepaidRefreshCancelsWhenPaid(t *testing.T) {
 	pay(t, database, user, "monthly", 1000) // paid for the one month charged
 	entry := queueDebt(t, c, database, user, TierPrepaidEnding)
 
-	if c.refreshBeforeSend(context.Background(), &entry) != lookSend {
+	if _, ok := c.refreshBeforeSend(context.Background(), &entry); !ok {
 		t.Fatal("still paid only to the end of the month, should be sent")
 	}
 	pay(t, database, user, "monthly", 3000)
-	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
+	if _, ok := c.refreshBeforeSend(context.Background(), &entry); ok {
 		t.Fatal("a member who paid ahead got the reminder")
 	}
 	if status, lastErr, _ := outboxState(t, database, entry.ID); status != "cancelled" || !strings.Contains(lastErr, "už má zaplaceno do konce") {
@@ -56,7 +56,7 @@ func TestPrepaidRefreshCancelsWhenSwitchedOff(t *testing.T) {
 	entry := queueDebt(t, c, database, user, TierPrepaidEnding)
 
 	enablePrepaid(t, c, false)
-	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
+	if _, ok := c.refreshBeforeSend(context.Background(), &entry); ok {
 		t.Fatal("sent although switched off")
 	}
 	if _, lastErr, _ := outboxState(t, database, entry.ID); !strings.Contains(lastErr, "vypnuta") {
@@ -73,7 +73,7 @@ func TestDebtReminderNeverTurnsIntoPrepaid(t *testing.T) {
 	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 
 	pay(t, database, user, "late", 1000) // paid exactly the debt: still not paid ahead
-	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
+	if _, ok := c.refreshBeforeSend(context.Background(), &entry); ok {
 		t.Fatal("the debt reminder went out as another email")
 	}
 	if status, lastErr, _ := outboxState(t, database, entry.ID); status != "cancelled" || !strings.Contains(lastErr, "uhrazen") {
