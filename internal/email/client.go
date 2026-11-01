@@ -788,15 +788,9 @@ func NormalizeBlockText(s string) string {
 	return strings.ReplaceAll(s, "\u00a0", " ")
 }
 
-// displayName returns the user's nickname (Username) with fallback to Realname, then email.
+// displayName is how emails address the member: see db.User.DisplayName.
 func displayName(user *db.User) string {
-	if user.Username.Valid && user.Username.String != "" {
-		return user.Username.String
-	}
-	if user.Realname.Valid && user.Realname.String != "" {
-		return user.Realname.String
-	}
-	return user.Email
+	return user.DisplayName()
 }
 
 // SendWelcome sends welcome email to newly accepted member

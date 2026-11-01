@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -50,5 +51,28 @@ func TestOutgoingPaymentsGetANoteFromTheBank(t *testing.T) {
 		if got.String != note {
 			t.Errorf("payment %d note = %q, want %q", id, got.String, note)
 		}
+	}
+}
+
+func TestBlankRealNamesBecomeNull(t *testing.T) {
+	database, err := sql.Open("sqlite", "file:"+t.TempDir()+"/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if err := migrate.Run(database, migrationsBefore(t, "023_")); err != nil {
+		t.Fatal(err)
+	}
+	for i, name := range []interface{}{" ", "  ", "Jan Novák", nil} {
+		if _, err := database.Exec(`INSERT INTO users (email, level_id, realname) VALUES (?, 1, ?)`, i, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := migrate.Run(database, FS); err != nil {
+		t.Fatal(err)
+	}
+	got := rowsOf(t, database, `SELECT COALESCE(realname, 'NULL') FROM users ORDER BY email`)
+	if want := []string{"NULL", "NULL", "Jan Novák", "NULL"}; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("realnames = %v, want %v", got, want)
 	}
 }

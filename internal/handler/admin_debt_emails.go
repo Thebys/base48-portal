@@ -111,13 +111,7 @@ func (h *Handler) buildDebtCandidates(ctx context.Context) ([]DebtCandidate, err
 			continue
 		}
 
-		name := user.Email
-		if user.Realname.Valid && user.Realname.String != "" {
-			name = user.Realname.String
-		}
-		if user.Username.Valid && user.Username.String != "" {
-			name = user.Username.String
-		}
+		name := db.User{Username: user.Username, Realname: user.Realname, Email: user.Email}.DisplayName()
 
 		candidate := DebtCandidate{
 			UserID:     user.ID,
