@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -143,12 +144,11 @@ func (h *Handler) AdminCreateProjectHandler(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// AdminDeleteProjectHandler deletes a project
-// DELETE /api/admin/projects/{id}
+// AdminDeleteProjectHandler deletes a project and its symbols. A project with
+// payments assigned is refused: deleting it would leave them pointing at
+// nothing and drop them from every total.
+// DELETE /api/admin/projects  {"project_id": N}
 func (h *Handler) AdminDeleteProjectHandler(w http.ResponseWriter, r *http.Request) {
-	_ = r // auth enforced by RequireAdmin middleware
-
-	// Parse project ID from URL
 	var req struct {
 		ProjectID int64 `json:"project_id"`
 	}
@@ -158,11 +158,36 @@ func (h *Handler) AdminDeleteProjectHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	ctx := r.Context()
-
-	// Delete project
-	err := h.queries.DeleteProject(ctx, req.ProjectID)
+	n, err := h.queries.CountProjectPayments(ctx, sql.NullInt64{Int64: req.ProjectID, Valid: true})
 	if err != nil {
-		h.jsonError(w, "Failed to delete project: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("[Projects] count payments of project %d: %v", req.ProjectID, err)
+		h.jsonError(w, "Failed to delete project", http.StatusInternalServerError)
+		return
+	}
+	if n > 0 {
+		h.jsonError(w, fmt.Sprintf("Projekt má %d přiřazených plateb. Nejdřív je přeřaď jinam.", n), http.StatusConflict)
+		return
+	}
+
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		h.jsonError(w, "Failed to delete project", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	qtx := h.queries.WithTx(tx)
+	if err := qtx.DeleteProjectVSByProject(ctx, req.ProjectID); err != nil {
+		log.Printf("[Projects] delete symbols of project %d: %v", req.ProjectID, err)
+		h.jsonError(w, "Failed to delete project", http.StatusInternalServerError)
+		return
+	}
+	if err := qtx.DeleteProject(ctx, req.ProjectID); err != nil {
+		log.Printf("[Projects] delete project %d: %v", req.ProjectID, err)
+		h.jsonError(w, "Failed to delete project", http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		h.jsonError(w, "Failed to delete project", http.StatusInternalServerError)
 		return
 	}
 

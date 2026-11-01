@@ -68,3 +68,34 @@ func TestProjectVSBringsEarlierPaymentsAlong(t *testing.T) {
 		t.Fatalf("after removing the VS: %s, want -,-,-,-", got)
 	}
 }
+
+func TestDeleteProjectKeepsPaymentsAttached(t *testing.T) {
+	q, database := testQueries(t)
+	h := &Handler{queries: q, db: database}
+	for _, query := range []string{
+		`INSERT INTO projects (id, name) VALUES (10, 'Garáž'), (11, 'Prázdný')`,
+		`INSERT INTO project_vs (project_id, vs) VALUES (10, '202646'), (11, '555')`,
+		`INSERT INTO payments (project_id, date, amount, kind, kind_id, local_account, remote_account, identification)
+		 VALUES (10, '2026-05-17', '-1560', 'fio', '1', 'FIO', '1/3030', '202646')`,
+	} {
+		if _, err := database.Exec(query); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	del := func(id string) int {
+		rec := httptest.NewRecorder()
+		h.AdminDeleteProjectHandler(rec, httptest.NewRequest(http.MethodDelete, "/api/admin/projects", strings.NewReader(`{"project_id":`+id+`}`)))
+		return rec.Code
+	}
+
+	if code := del("10"); code != http.StatusConflict {
+		t.Fatalf("deleting a project with a payment = %d, want 409", code)
+	}
+	if code := del("11"); code != http.StatusOK {
+		t.Fatalf("deleting an empty project = %d, want 200", code)
+	}
+	// Its symbol goes with it, so another project can take it.
+	if _, err := q.GetProjectVSByVS(context.Background(), "555"); err != sql.ErrNoRows {
+		t.Fatalf("symbol of the deleted project: err = %v, want sql.ErrNoRows", err)
+	}
+}

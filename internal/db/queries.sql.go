@@ -763,6 +763,18 @@ func (q *Queries) DeleteProject(ctx context.Context, id int64) error {
 	return err
 }
 
+const deleteProjectVSByProject = `-- name: DeleteProjectVSByProject :exec
+DELETE FROM project_vs WHERE project_id = ?
+`
+
+// Run with DeleteProject: foreign keys are not enforced on every connection,
+// so ON DELETE CASCADE cannot be relied on, and a symbol left behind would
+// still count as taken.
+func (q *Queries) DeleteProjectVSByProject(ctx context.Context, projectID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteProjectVSByProject, projectID)
+	return err
+}
+
 const dismissPayment = `-- name: DismissPayment :one
 UPDATE payments SET
     dismissed_at = CURRENT_TIMESTAMP,
