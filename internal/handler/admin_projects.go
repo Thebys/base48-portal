@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/base48/member-portal/internal/db"
 )
@@ -91,49 +93,66 @@ type CreateProjectRequest struct {
 	Description string `json:"description"`
 }
 
-// AdminCreateProjectHandler creates a new project
+// AdminCreateProjectHandler creates a project, with its primary VS if given.
 // POST /api/admin/projects
 func (h *Handler) AdminCreateProjectHandler(w http.ResponseWriter, r *http.Request) {
-	_ = r // auth enforced by RequireAdmin middleware
-
 	var req CreateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.jsonError(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-
+	req.Name = strings.TrimSpace(req.Name)
+	req.PaymentsID = strings.TrimSpace(req.PaymentsID)
 	if req.Name == "" {
 		h.jsonError(w, "Project name is required", http.StatusBadRequest)
 		return
 	}
 
 	ctx := r.Context()
+	if req.PaymentsID != "" {
+		if msg, status := h.checkProjectVS(ctx, 0, req.PaymentsID); msg != "" {
+			h.jsonError(w, msg, status)
+			return
+		}
+	}
 
-	// Create project
-	project, err := h.queries.CreateProject(ctx, db.CreateProjectParams{
+	// The project and its symbol go in together: a project whose VS did not
+	// make it into project_vs would never get a payment assigned.
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		h.jsonError(w, "Failed to create project", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	qtx := h.queries.WithTx(tx)
+
+	project, err := qtx.CreateProject(ctx, db.CreateProjectParams{
 		Name:        req.Name,
 		PaymentsID:  sql.NullString{String: req.PaymentsID, Valid: req.PaymentsID != ""},
 		Description: sql.NullString{String: req.Description, Valid: req.Description != ""},
 	})
-
 	if err != nil {
-		h.jsonError(w, "Failed to create project: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("[Projects] create %q: %v", req.Name, err)
+		h.jsonError(w, "Failed to create project (is the name taken?)", http.StatusConflict)
 		return
 	}
-
-	// Add initial VS to project_vs table
 	if req.PaymentsID != "" {
-		_, err = h.queries.AddProjectVS(ctx, db.AddProjectVSParams{
+		if _, err := qtx.AddProjectVS(ctx, db.AddProjectVSParams{
 			ProjectID: project.ID,
 			Vs:        req.PaymentsID,
 			Note:      sql.NullString{String: "primary", Valid: true},
-		})
-		if err != nil {
-			// Log but don't fail - project was created
-			// The VS might already exist from migration
-		} else {
-			h.assignPaymentsByVS(ctx, project.ID, req.PaymentsID)
+		}); err != nil {
+			log.Printf("[Projects] add VS %s to new project: %v", req.PaymentsID, err)
+			h.jsonError(w, "Failed to create project", http.StatusInternalServerError)
+			return
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		h.jsonError(w, "Failed to create project", http.StatusInternalServerError)
+		return
+	}
+	if req.PaymentsID != "" {
+		h.assignPaymentsByVS(ctx, project.ID, req.PaymentsID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -142,6 +161,36 @@ func (h *Handler) AdminCreateProjectHandler(w http.ResponseWriter, r *http.Reque
 		"project": project,
 		"message": "Project created successfully",
 	})
+}
+
+// projectVSPattern is what a VS can be: up to ten digits.
+var projectVSPattern = regexp.MustCompile(`^[0-9]{1,10}$`)
+
+// checkProjectVS says why vs cannot become a symbol of the project, or ""
+// when it can. projectID is 0 for a project not created yet. A VS a member
+// pays with is refused: the sync matches members first, so the project would
+// never see a payment by it.
+func (h *Handler) checkProjectVS(ctx context.Context, projectID int64, vs string) (msg string, status int) {
+	if !projectVSPattern.MatchString(vs) {
+		return "Variabilní symbol musí být 1 až 10 číslic", http.StatusBadRequest
+	}
+	switch _, err := h.queries.GetUserByPaymentsID(ctx, sql.NullString{String: vs, Valid: true}); {
+	case err == nil:
+		return "Tento VS používá člen, platby s ním by šly jemu", http.StatusConflict
+	case err != sql.ErrNoRows:
+		log.Printf("[Projects] check VS %s against members: %v", vs, err)
+		return "Database error", http.StatusInternalServerError
+	}
+	switch existing, err := h.queries.GetProjectVSByVS(ctx, vs); {
+	case err == nil && existing.ProjectID != projectID:
+		return "Tento VS už používá jiný projekt", http.StatusConflict
+	case err == nil:
+		return "Projekt tento VS už má", http.StatusConflict
+	case err != sql.ErrNoRows:
+		log.Printf("[Projects] check VS %s against projects: %v", vs, err)
+		return "Database error", http.StatusInternalServerError
+	}
+	return "", 0
 }
 
 // AdminDeleteProjectHandler deletes a project and its symbols. A project with
@@ -270,22 +319,16 @@ func (h *Handler) AdminAddProjectVSHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if req.VS == "" {
-		h.jsonError(w, "VS is required", http.StatusBadRequest)
-		return
-	}
+	req.VS = strings.TrimSpace(req.VS)
 
 	ctx := r.Context()
 
-	// Check if this VS is already used by another project
-	existing, err := h.queries.GetProjectVSByVS(ctx, req.VS)
-	if err == nil && existing.ProjectID != req.ProjectID {
-		h.jsonError(w, "This VS is already used by another project", http.StatusConflict)
+	if msg, status := h.checkProjectVS(ctx, req.ProjectID, req.VS); msg != "" {
+		h.jsonError(w, msg, status)
 		return
 	}
 
-	// Add VS to project
-	_, err = h.queries.AddProjectVS(ctx, db.AddProjectVSParams{
+	_, err := h.queries.AddProjectVS(ctx, db.AddProjectVSParams{
 		ProjectID: req.ProjectID,
 		Vs:        req.VS,
 		Note:      sql.NullString{String: req.Note, Valid: req.Note != ""},

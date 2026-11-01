@@ -99,3 +99,57 @@ func TestDeleteProjectKeepsPaymentsAttached(t *testing.T) {
 		t.Fatalf("symbol of the deleted project: err = %v, want sql.ErrNoRows", err)
 	}
 }
+
+func TestProjectVSMustBeFreeDigits(t *testing.T) {
+	q, database := testQueries(t)
+	h := &Handler{queries: q, db: database}
+	for _, query := range []string{
+		`INSERT INTO users (id, email, level_id, payments_id, state) VALUES (1, 'm@base48.cz', 1, '4242', 'accepted')`,
+		`INSERT INTO projects (id, name) VALUES (10, 'Dary')`,
+		`INSERT INTO project_vs (project_id, vs) VALUES (10, '1337')`,
+		`INSERT INTO payments (date, amount, kind, kind_id, local_account, remote_account, identification)
+		 VALUES ('2026-05-01', '500', 'fio', '1', 'FIO', '1/0100', '202646')`,
+	} {
+		if _, err := database.Exec(query); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+	create := func(body string) int {
+		rec := httptest.NewRecorder()
+		h.AdminCreateProjectHandler(rec, httptest.NewRequest(http.MethodPost, "/api/admin/projects", strings.NewReader(body)))
+		return rec.Code
+	}
+	addVS := func(body string) int {
+		rec := httptest.NewRecorder()
+		h.AdminAddProjectVSHandler(rec, httptest.NewRequest(http.MethodPost, "/api/admin/projects/vs", strings.NewReader(body)))
+		return rec.Code
+	}
+
+	for body, want := range map[string]int{
+		`{"name":"Garáž","payments_id":"4242"}`:          http.StatusConflict,   // a member's VS
+		`{"name":"Garáž","payments_id":"1337"}`:          http.StatusConflict,   // another project's
+		`{"name":"Garáž","payments_id":"20x"}`:           http.StatusBadRequest, // not a VS
+		`{"name":"Garáž","payments_id":"0123456789012"}`: http.StatusBadRequest,
+	} {
+		if got := create(body); got != want {
+			t.Errorf("create %s = %d, want %d", body, got, want)
+		}
+	}
+	if got := addVS(`{"project_id":10,"vs":"4242"}`); got != http.StatusConflict {
+		t.Errorf("adding a member's VS = %d, want 409", got)
+	}
+
+	// Nothing half-made was left behind by the refusals.
+	if n, _ := q.ListProjects(context.Background()); len(n) != 2 { // Dary + Energie 2024 from migration 005
+		t.Fatalf("projects after refusals = %d, want 2", len(n))
+	}
+
+	// A good one is created with its symbol and picks up the earlier payment.
+	if got := create(`{"name":"Garáž","payments_id":"202646"}`); got != http.StatusOK {
+		t.Fatalf("create with a free VS = %d, want 200", got)
+	}
+	var project sql.NullInt64
+	if err := database.QueryRow(`SELECT project_id FROM payments WHERE kind_id = '1'`).Scan(&project); err != nil || !project.Valid {
+		t.Fatalf("earlier payment with the new VS: project %v (err %v), want assigned", project, err)
+	}
+}
