@@ -20,7 +20,13 @@ konfigurace v `.env.example`, schéma v `migrations/`.
 - Kdo smí co, rozhoduje `internal/access`: stav členství a navíc `access_grants`
   (oprávnění nezávislá na stavu, zatím autodílna)
 - Nový člen dostane VS (`users.payments_id`) hned při prvním přihlášení
-- Fees vznikají 1. v měsíci pro `accepted` členy: `level_actual_amount`, jinak částka úrovně
+- Fees vznikají 1. v měsíci pro `accepted` členy: `level_actual_amount`, jinak částka úrovně.
+  Hned po nich se zařadí upomínky (nejvýš jedna za kalendářní měsíc), odcházejí za tři dny
+  v 10:00. Měsíc posledního běhu si démon pamatuje v `settings` (`membership_fees_month`,
+  `membership_reminders_month`), takže restart běh nezopakuje a výpadek 1. dožene do 7. dne
+- Každý e-mail čeká ve frontě a těsně před odesláním (i ručním) dostane poslední kontrolu:
+  upomínka se přepočítá nebo zruší, uvítání, registrace a pozastavení se zruší, když člen
+  mezitím změnil stav. S `EMAIL_ENABLED=false` se nic nezařazuje ani neodesílá
 - Příchozí platby z FIO se párují podle VS na člena, jinak na fundraising projekt
 - Odchozí platby se jen zaznamenají: ke členovi nikdy, k projektu, když nesou jeho VS,
   jinak je k projektu přiřadí admin. Členové u nich vidí datum, částku, projekt a

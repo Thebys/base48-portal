@@ -173,13 +173,21 @@ func (q *Queries) BumpReservation(ctx context.Context, arg BumpReservationParams
 const cancelEmailOutbox = `-- name: CancelEmailOutbox :one
 UPDATE email_outbox SET
     status = 'cancelled',
-    next_retry_at = NULL
-WHERE id = ? AND status = 'pending'
-RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
+    last_error = ?1,
+    leased_until = NULL
+WHERE id = ?2 AND status = 'pending'
+  AND (leased_until IS NULL OR datetime(leased_until) <= datetime('now'))
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until
 `
 
-func (q *Queries) CancelEmailOutbox(ctx context.Context, id int64) (EmailOutbox, error) {
-	row := q.db.QueryRowContext(ctx, cancelEmailOutbox, id)
+type CancelEmailOutboxParams struct {
+	Reason sql.NullString `json:"reason"`
+	ID     int64          `json:"id"`
+}
+
+// An admin withdraws a pending email. No rows while a worker is sending it.
+func (q *Queries) CancelEmailOutbox(ctx context.Context, arg CancelEmailOutboxParams) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, cancelEmailOutbox, arg.Reason, arg.ID)
 	var i EmailOutbox
 	err := row.Scan(
 		&i.ID,
@@ -196,8 +204,28 @@ func (q *Queries) CancelEmailOutbox(ctx context.Context, id int64) (EmailOutbox,
 		&i.NextRetryAt,
 		&i.SentAt,
 		&i.CreatedAt,
+		&i.LeasedUntil,
 	)
 	return i, err
+}
+
+const cancelLeasedEmailOutbox = `-- name: CancelLeasedEmailOutbox :exec
+UPDATE email_outbox SET
+    status = 'cancelled',
+    last_error = ?1,
+    leased_until = NULL
+WHERE id = ?2 AND status = 'pending'
+`
+
+type CancelLeasedEmailOutboxParams struct {
+	Reason sql.NullString `json:"reason"`
+	ID     int64          `json:"id"`
+}
+
+// The worker holding the lease withdraws the email after its last look.
+func (q *Queries) CancelLeasedEmailOutbox(ctx context.Context, arg CancelLeasedEmailOutboxParams) error {
+	_, err := q.db.ExecContext(ctx, cancelLeasedEmailOutbox, arg.Reason, arg.ID)
+	return err
 }
 
 const cancelOwnReservation = `-- name: CancelOwnReservation :one
@@ -232,20 +260,56 @@ func (q *Queries) CancelOwnReservation(ctx context.Context, arg CancelOwnReserva
 	return i, err
 }
 
+const claimEmailOutbox = `-- name: ClaimEmailOutbox :one
+UPDATE email_outbox SET
+    next_retry_at = datetime('now'),
+    leased_until = datetime('now', '+5 minutes')
+WHERE id = ? AND status = 'pending'
+  AND (leased_until IS NULL OR datetime(leased_until) <= datetime('now'))
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until
+`
+
+// Lease one pending email for an admin's "send now" and make it due at once,
+// so that if the sender dies the worker still delivers it. No rows when the
+// email is not pending or a worker is sending it right now.
+func (q *Queries) ClaimEmailOutbox(ctx context.Context, id int64) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, claimEmailOutbox, id)
+	var i EmailOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.LeasedUntil,
+	)
+	return i, err
+}
+
 const claimScheduledEmails = `-- name: ClaimScheduledEmails :many
 UPDATE email_outbox SET
-    next_retry_at = datetime('now', '+5 minutes')
+    leased_until = datetime('now', '+5 minutes')
 WHERE status = 'pending'
   AND next_retry_at IS NOT NULL
   AND datetime(next_retry_at) <= datetime('now')
-RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
+  AND (leased_until IS NULL OR datetime(leased_until) <= datetime('now'))
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until
 `
 
-// Atomically lease every due email to the calling worker by pushing
-// next_retry_at five minutes out, then hand the rows over. The server and the
-// cron daemon are separate processes on the same database file, so a plain
-// SELECT would let both pick up the same row and mail a member twice. A worker
-// that dies mid-send simply lets its lease expire and the row is retried.
+// Atomically lease every due email to the calling worker for five minutes and
+// hand the rows over. The server and the cron daemon are separate processes on
+// the same database file, so a plain SELECT would let both pick up the same
+// row and mail a member twice. A worker that dies mid-send lets its lease
+// expire and the row is picked up again; next_retry_at stays the schedule.
 func (q *Queries) ClaimScheduledEmails(ctx context.Context) ([]EmailOutbox, error) {
 	rows, err := q.db.QueryContext(ctx, claimScheduledEmails)
 	if err != nil {
@@ -270,6 +334,7 @@ func (q *Queries) ClaimScheduledEmails(ctx context.Context) ([]EmailOutbox, erro
 			&i.NextRetryAt,
 			&i.SentAt,
 			&i.CreatedAt,
+			&i.LeasedUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -447,7 +512,7 @@ INSERT INTO email_outbox (
     ?5, ?6, ?7,
     ?8, substr(?9, 1, 19)
 )
-RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until
 `
 
 type CreateEmailOutboxParams struct {
@@ -494,6 +559,7 @@ func (q *Queries) CreateEmailOutbox(ctx context.Context, arg CreateEmailOutboxPa
 		&i.NextRetryAt,
 		&i.SentAt,
 		&i.CreatedAt,
+		&i.LeasedUntil,
 	)
 	return i, err
 }
@@ -921,7 +987,7 @@ func (q *Queries) GetDistinctSubsystems(ctx context.Context) ([]string, error) {
 }
 
 const getEmailOutbox = `-- name: GetEmailOutbox :one
-SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox WHERE id = ? LIMIT 1
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetEmailOutbox(ctx context.Context, id int64) (EmailOutbox, error) {
@@ -942,6 +1008,7 @@ func (q *Queries) GetEmailOutbox(ctx context.Context, id int64) (EmailOutbox, er
 		&i.NextRetryAt,
 		&i.SentAt,
 		&i.CreatedAt,
+		&i.LeasedUntil,
 	)
 	return i, err
 }
@@ -1018,6 +1085,47 @@ func (q *Queries) GetMaxNumericPaymentsID(ctx context.Context) (int64, error) {
 	var max_vs int64
 	err := row.Scan(&max_vs)
 	return max_vs, err
+}
+
+const getMembershipEmailSince = `-- name: GetMembershipEmailSince :one
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
+WHERE user_id = ?1
+  AND template_name IN ('negative_balance.html', 'debt_warning.html')
+  AND status IN ('pending', 'sent')
+  AND created_at >= CAST(?2 AS TEXT)
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetMembershipEmailSinceParams struct {
+	UserID sql.NullInt64 `json:"user_id"`
+	Since  string        `json:"since"`
+}
+
+// The newest membership-fee reminder queued or sent to the user since the given
+// UTC time, as 'YYYY-MM-DD HH:MM:SS' like created_at. The monthly run sends
+// each member at most one of them a calendar month.
+func (q *Queries) GetMembershipEmailSince(ctx context.Context, arg GetMembershipEmailSinceParams) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, getMembershipEmailSince, arg.UserID, arg.Since)
+	var i EmailOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.LeasedUntil,
+	)
+	return i, err
 }
 
 const getPayment = `-- name: GetPayment :one
@@ -1186,45 +1294,8 @@ func (q *Queries) GetProjectVSByVS(ctx context.Context, vs string) (ProjectV, er
 	return i, err
 }
 
-const getRecentEmailByUserAndTemplate = `-- name: GetRecentEmailByUserAndTemplate :one
-SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox
-WHERE user_id = ? AND template_name = ?
-  AND status IN ('pending', 'sent')
-  AND created_at > datetime('now', '-30 days')
-ORDER BY created_at DESC
-LIMIT 1
-`
-
-type GetRecentEmailByUserAndTemplateParams struct {
-	UserID       sql.NullInt64 `json:"user_id"`
-	TemplateName string        `json:"template_name"`
-}
-
-// Anti-spam: check if an email of this type was already sent/queued for this user within 30 days
-func (q *Queries) GetRecentEmailByUserAndTemplate(ctx context.Context, arg GetRecentEmailByUserAndTemplateParams) (EmailOutbox, error) {
-	row := q.db.QueryRowContext(ctx, getRecentEmailByUserAndTemplate, arg.UserID, arg.TemplateName)
-	var i EmailOutbox
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Recipient,
-		&i.Subject,
-		&i.TemplateName,
-		&i.TemplateData,
-		&i.RenderedHtml,
-		&i.Status,
-		&i.Attempts,
-		&i.MaxAttempts,
-		&i.LastError,
-		&i.NextRetryAt,
-		&i.SentAt,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const getRecentEmailByUserAndTemplateWithin = `-- name: GetRecentEmailByUserAndTemplateWithin :one
-SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
 WHERE user_id = ?1 AND template_name = ?2
   AND status IN ('pending', 'sent')
   AND created_at > datetime('now', ?3)
@@ -1258,6 +1329,7 @@ func (q *Queries) GetRecentEmailByUserAndTemplateWithin(ctx context.Context, arg
 		&i.NextRetryAt,
 		&i.SentAt,
 		&i.CreatedAt,
+		&i.LeasedUntil,
 	)
 	return i, err
 }
@@ -2719,7 +2791,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 }
 
 const listRecentDebtEmails = `-- name: ListRecentDebtEmails :many
-SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
 WHERE user_id IS NOT NULL
   AND template_name IN ('negative_balance.html', 'debt_warning.html')
   AND status IN ('pending', 'sent')
@@ -2754,6 +2826,7 @@ func (q *Queries) ListRecentDebtEmails(ctx context.Context) ([]EmailOutbox, erro
 			&i.NextRetryAt,
 			&i.SentAt,
 			&i.CreatedAt,
+			&i.LeasedUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -2769,7 +2842,7 @@ func (q *Queries) ListRecentDebtEmails(ctx context.Context) ([]EmailOutbox, erro
 }
 
 const listRecentEmailOutbox = `-- name: ListRecentEmailOutbox :many
-SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at FROM email_outbox ORDER BY created_at DESC LIMIT ?
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox ORDER BY created_at DESC LIMIT ?
 `
 
 func (q *Queries) ListRecentEmailOutbox(ctx context.Context, limit int64) ([]EmailOutbox, error) {
@@ -2796,6 +2869,7 @@ func (q *Queries) ListRecentEmailOutbox(ctx context.Context, limit int64) ([]Ema
 			&i.NextRetryAt,
 			&i.SentAt,
 			&i.CreatedAt,
+			&i.LeasedUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -3321,6 +3395,49 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 	return items, nil
 }
 
+const markEmailFailed = `-- name: MarkEmailFailed :exec
+UPDATE email_outbox SET
+    status = 'failed',
+    attempts = ?1,
+    last_error = ?2,
+    leased_until = NULL
+WHERE id = ?3 AND status = 'pending'
+`
+
+type MarkEmailFailedParams struct {
+	Attempts  int64          `json:"attempts"`
+	LastError sql.NullString `json:"last_error"`
+	ID        int64          `json:"id"`
+}
+
+// The last try failed. Only a row still pending turns failed.
+func (q *Queries) MarkEmailFailed(ctx context.Context, arg MarkEmailFailedParams) error {
+	_, err := q.db.ExecContext(ctx, markEmailFailed, arg.Attempts, arg.LastError, arg.ID)
+	return err
+}
+
+const markEmailSent = `-- name: MarkEmailSent :exec
+UPDATE email_outbox SET
+    status = 'sent',
+    attempts = ?1,
+    last_error = NULL,
+    sent_at = datetime('now'),
+    leased_until = NULL
+WHERE id = ?2
+`
+
+type MarkEmailSentParams struct {
+	Attempts int64 `json:"attempts"`
+	ID       int64 `json:"id"`
+}
+
+// The mail has left. Recorded whatever happened to the row meanwhile: it is a
+// fact, and a lease keeps admins from cancelling a row while it is sent.
+func (q *Queries) MarkEmailSent(ctx context.Context, arg MarkEmailSentParams) error {
+	_, err := q.db.ExecContext(ctx, markEmailSent, arg.Attempts, arg.ID)
+	return err
+}
+
 const removeProjectVS = `-- name: RemoveProjectVS :exec
 DELETE FROM project_vs WHERE project_id = ? AND vs = ?
 `
@@ -3332,6 +3449,67 @@ type RemoveProjectVSParams struct {
 
 func (q *Queries) RemoveProjectVS(ctx context.Context, arg RemoveProjectVSParams) error {
 	_, err := q.db.ExecContext(ctx, removeProjectVS, arg.ProjectID, arg.Vs)
+	return err
+}
+
+const requeueFailedEmail = `-- name: RequeueFailedEmail :one
+UPDATE email_outbox SET
+    status = 'pending',
+    attempts = 0,
+    next_retry_at = datetime('now')
+WHERE id = ? AND status = 'failed'
+RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until
+`
+
+// Put a failed email back in the queue, due now, with its tries reset.
+func (q *Queries) RequeueFailedEmail(ctx context.Context, id int64) (EmailOutbox, error) {
+	row := q.db.QueryRowContext(ctx, requeueFailedEmail, id)
+	var i EmailOutbox
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Recipient,
+		&i.Subject,
+		&i.TemplateName,
+		&i.TemplateData,
+		&i.RenderedHtml,
+		&i.Status,
+		&i.Attempts,
+		&i.MaxAttempts,
+		&i.LastError,
+		&i.NextRetryAt,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.LeasedUntil,
+	)
+	return i, err
+}
+
+const rescheduleEmail = `-- name: RescheduleEmail :exec
+UPDATE email_outbox SET
+    attempts = ?1,
+    last_error = ?2,
+    next_retry_at = datetime('now', CAST(?3 AS TEXT)),
+    leased_until = NULL
+WHERE id = ?4 AND status = 'pending'
+`
+
+type RescheduleEmailParams struct {
+	Attempts  int64          `json:"attempts"`
+	LastError sql.NullString `json:"last_error"`
+	Delay     string         `json:"delay"`
+	ID        int64          `json:"id"`
+}
+
+// A delivery attempt failed and the email has tries left: try again after the
+// delay, given as an SQLite modifier such as '+10 minutes'.
+func (q *Queries) RescheduleEmail(ctx context.Context, arg RescheduleEmailParams) error {
+	_, err := q.db.ExecContext(ctx, rescheduleEmail,
+		arg.Attempts,
+		arg.LastError,
+		arg.Delay,
+		arg.ID,
+	)
 	return err
 }
 
@@ -3490,55 +3668,6 @@ func (q *Queries) UpdateEmailOutboxContent(ctx context.Context, arg UpdateEmailO
 		arg.ID,
 	)
 	return err
-}
-
-const updateEmailOutboxStatus = `-- name: UpdateEmailOutboxStatus :one
-UPDATE email_outbox SET
-    status = ?1,
-    attempts = ?2,
-    last_error = ?3,
-    next_retry_at = substr(?4, 1, 19),
-    sent_at = substr(?5, 1, 19)
-WHERE id = ?6
-RETURNING id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at
-`
-
-type UpdateEmailOutboxStatusParams struct {
-	Status      string         `json:"status"`
-	Attempts    int64          `json:"attempts"`
-	LastError   sql.NullString `json:"last_error"`
-	NextRetryAt interface{}    `json:"next_retry_at"`
-	SentAt      interface{}    `json:"sent_at"`
-	ID          int64          `json:"id"`
-}
-
-func (q *Queries) UpdateEmailOutboxStatus(ctx context.Context, arg UpdateEmailOutboxStatusParams) (EmailOutbox, error) {
-	row := q.db.QueryRowContext(ctx, updateEmailOutboxStatus,
-		arg.Status,
-		arg.Attempts,
-		arg.LastError,
-		arg.NextRetryAt,
-		arg.SentAt,
-		arg.ID,
-	)
-	var i EmailOutbox
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Recipient,
-		&i.Subject,
-		&i.TemplateName,
-		&i.TemplateData,
-		&i.RenderedHtml,
-		&i.Status,
-		&i.Attempts,
-		&i.MaxAttempts,
-		&i.LastError,
-		&i.NextRetryAt,
-		&i.SentAt,
-		&i.CreatedAt,
-	)
-	return i, err
 }
 
 const updateLevel = `-- name: UpdateLevel :one

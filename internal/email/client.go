@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -26,15 +27,15 @@ import (
 
 // Client handles email sending with templates, outbox, and logging
 type Client struct {
-	config       *config.Config
-	queries      *db.Queries
-	DefaultDelay time.Duration // If set, emails are scheduled instead of sent immediately
+	config  *config.Config
+	queries *db.Queries
 
-	// alwaysSchedule parks every email in the outbox even when DefaultDelay is
-	// zero, so a caller can ask for "deliver as soon as the worker picks it up"
-	// without that being indistinguishable from "deliver inline right now".
-	// Set via Scheduled().
-	alwaysSchedule bool
+	// DefaultDelay is how long a queued email waits in the outbox before it is
+	// due, so an admin can review or cancel it. Zero means due at once.
+	DefaultDelay time.Duration
+
+	// dueAt, when set (see At), is the time queued emails are due instead.
+	dueAt time.Time
 }
 
 // SendParams contains parameters for sending a templated email
@@ -56,16 +57,34 @@ func New(cfg *config.Config, queries *db.Queries) *Client {
 	}
 }
 
-// Scheduled returns a shallow copy of the client that always parks emails in the
-// outbox instead of delivering them inline, due after the given delay. A zero
-// delay is legal and means "due immediately" — the entry still lands in the
-// outbox with a real status, it is just picked up on the next worker pass.
-// Used by the manual debt-reminder sender, where the admin picks the timer.
+// Scheduled returns a shallow copy of the client whose emails are due after the
+// given delay. A zero delay means "due immediately": the entry still lands in
+// the outbox and is picked up on the next worker pass. Used where an admin
+// picks the timer, and for bar reminders.
 func (c *Client) Scheduled(delay time.Duration) *Client {
 	clone := *c
 	clone.DefaultDelay = delay
-	clone.alwaysSchedule = true
+	clone.dueAt = time.Time{}
 	return &clone
+}
+
+// At returns a shallow copy of the client whose emails are due at t.
+func (c *Client) At(t time.Time) *Client {
+	clone := *c
+	clone.dueAt = t
+	return &clone
+}
+
+// LocalHourAfter is the first time at or after t when the local clock shows
+// the given full hour. Reminders leave at a daytime hour rather than at
+// whatever time of night the job that queued them ran.
+func LocalHourAfter(t time.Time, hour int) time.Time {
+	t = t.Local()
+	at := time.Date(t.Year(), t.Month(), t.Day(), hour, 0, 0, 0, time.Local)
+	if at.Before(t) {
+		at = time.Date(t.Year(), t.Month(), t.Day()+1, hour, 0, 0, 0, time.Local)
+	}
+	return at
 }
 
 // Czech typography: non-breaking space after prepositions/conjunctions and before "Kč".
@@ -231,65 +250,77 @@ var allDefaultContentBlocks = map[string]map[string]map[string]string{
 func EmailLabels(lang string) map[string]string {
 	if lang == "en" {
 		return map[string]string{
-			"greeting_prefix":      "Hi",
-			"credentials_heading":  "Your login credentials:",
-			"username_label":       "Username:",
-			"payment_heading":      "Payment details:",
-			"account_label":        "Account number:",
-			"iban_label":           "IBAN:",
-			"vs_label":             "Variable symbol:",
+			"greeting_prefix":       "Hi",
+			"credentials_heading":   "Your login credentials:",
+			"username_label":        "Username:",
+			"payment_heading":       "Payment details:",
+			"account_label":         "Account number:",
+			"iban_label":            "IBAN:",
+			"vs_label":              "Variable symbol:",
 			"payment_message_label": "Payment reference:",
-			"payment_ref_text":     "Base48 membership fee",
-			"qr_instruction":       "Tap the QR code to open in your banking app",
-			"button_portal":        "Open Member Portal",
-			"button_wiki":          "Browse the wiki",
-			"button_view_profile":  "View details in portal",
-			"button_my_profile":    "View my profile",
-			"reason_heading":       "Reason for suspension:",
-			"amount_due_label":     "Amount due:",
-			"current_debt_label":   "Current debt:",
-			"monthly_fee_label":    "Monthly fee:",
-			"or_partial":           "(or at least a portion)",
-			"vs_reminder":          "Important: Use your variable symbol (%s) so we can automatically match the payment to your account.",
-			"debt_payment_ref":     "Membership fee payment",
-			"bar_balance_label":    "Bar balance:",
-			"bar_threshold_note":   "We send this reminder once your bar debt goes above %s CZK.",
+			"payment_ref_text":      "Base48 membership fee",
+			"qr_instruction":        "Tap the QR code to open in your banking app",
+			"button_portal":         "Open Member Portal",
+			"button_wiki":           "Browse the wiki",
+			"button_view_profile":   "View details in portal",
+			"button_my_profile":     "View my profile",
+			"reason_heading":        "Reason for suspension:",
+			"amount_due_label":      "Amount due:",
+			"current_debt_label":    "Current debt:",
+			"monthly_fee_label":     "Monthly fee:",
+			"or_partial":            "(or at least a portion)",
+			"vs_reminder":           "Important: Use your variable symbol (%s) so we can automatically match the payment to your account.",
+			"debt_payment_ref":      "Membership fee payment",
+			"bar_balance_label":     "Bar balance:",
+			"bar_threshold_note":    "We send this reminder once your bar debt goes above %s CZK.",
 		}
 	}
 	// Czech (default)
 	return map[string]string{
-		"greeting_prefix":      "Ahoj",
-		"credentials_heading":  "Tvé přihlašovací údaje:",
-		"username_label":       "Uživatelské jméno:",
-		"payment_heading":      "Platební údaje:",
-		"account_label":        "Číslo účtu:",
-		"iban_label":           "IBAN:",
-		"vs_label":             "Variabilní symbol:",
+		"greeting_prefix":       "Ahoj",
+		"credentials_heading":   "Tvé přihlašovací údaje:",
+		"username_label":        "Uživatelské jméno:",
+		"payment_heading":       "Platební údaje:",
+		"account_label":         "Číslo účtu:",
+		"iban_label":            "IBAN:",
+		"vs_label":              "Variabilní symbol:",
 		"payment_message_label": "Zpráva pro příjemce:",
-		"payment_ref_text":     "Členský příspěvek Base48",
-		"qr_instruction":       "Klikni na QR kód pro otevření v\u00a0bankovní aplikaci",
-		"button_portal":        "Otevřít členský portál",
-		"button_wiki":          "Prohlédnout wiki",
-		"button_view_profile":  "Zobrazit detail v\u00a0portálu",
-		"button_my_profile":    "Zobrazit můj profil",
-		"reason_heading":       "Důvod pozastavení:",
-		"amount_due_label":     "Částka k\u00a0úhradě:",
-		"current_debt_label":   "Aktuální dluh:",
-		"monthly_fee_label":    "Měsíční příspěvek:",
-		"or_partial":           "(nebo alespoň část)",
-		"vs_reminder":          "Důležité: Použij svůj variabilní symbol (%s), ať můžeme platbu automaticky přiřadit k\u00a0tvému účtu.",
-		"debt_payment_ref":     "Úhrada členského příspěvku",
-		"bar_balance_label":    "Zůstatek na baru:",
-		"bar_threshold_note":   "Tuto upomínku posíláme, když dluh na baru stoupne nad %s\u00a0Kč.",
+		"payment_ref_text":      "Členský příspěvek Base48",
+		"qr_instruction":        "Klikni na QR kód pro otevření v\u00a0bankovní aplikaci",
+		"button_portal":         "Otevřít členský portál",
+		"button_wiki":           "Prohlédnout wiki",
+		"button_view_profile":   "Zobrazit detail v\u00a0portálu",
+		"button_my_profile":     "Zobrazit můj profil",
+		"reason_heading":        "Důvod pozastavení:",
+		"amount_due_label":      "Částka k\u00a0úhradě:",
+		"current_debt_label":    "Aktuální dluh:",
+		"monthly_fee_label":     "Měsíční příspěvek:",
+		"or_partial":            "(nebo alespoň část)",
+		"vs_reminder":           "Důležité: Použij svůj variabilní symbol (%s), ať můžeme platbu automaticky přiřadit k\u00a0tvému účtu.",
+		"debt_payment_ref":      "Úhrada členského příspěvku",
+		"bar_balance_label":     "Zůstatek na baru:",
+		"bar_threshold_note":    "Tuto upomínku posíláme, když dluh na baru stoupne nad %s\u00a0Kč.",
 	}
 }
 
-// userLang returns the user's locale, defaulting to "cs".
+// userLang is the language the user gets emails in, "cs" unless it is English.
 func userLang(user *db.User) string {
-	if user.Locale != "" && (user.Locale == "cs" || user.Locale == "en") {
-		return user.Locale
+	if NormalizeLocale(user.Locale) == "en" {
+		return "en"
 	}
 	return "cs"
+}
+
+// NormalizeLocale maps a locale such as "en-US" or "cs_CZ" to one of the
+// languages emails are written in, "cs" or "en", and anything else to "".
+func NormalizeLocale(locale string) string {
+	lang, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(locale)), "-")
+	lang, _, _ = strings.Cut(lang, "_")
+	switch lang {
+	case "cs", "en":
+		return lang
+	}
+	return ""
 }
 
 // GetDefaultContentBlocks returns the default content blocks for all templates in a given language.
@@ -301,38 +332,52 @@ func GetDefaultContentBlocks(lang string) map[string]map[string]string {
 	return defaultContentBlocks
 }
 
-// QueueEmail creates an outbox entry and attempts immediate delivery with retry.
-// If DefaultDelay is set, the email is scheduled for later delivery instead.
-// All email sending should go through this method.
+// ErrEmailDisabled is what queueing and sending return while EMAIL_ENABLED is
+// off, so that no caller reports an email that never reached the outbox.
+var ErrEmailDisabled = errors.New("e-maily jsou vypnuté (EMAIL_ENABLED=false)")
+
+// ErrBusy means another process holds the email: a worker is sending it.
+var ErrBusy = errors.New("e-mail se právě odesílá")
+
+// retryDelays is how long an email waits after each failed try before the
+// next one, as SQLite modifiers. With max_attempts 3 a relay that is down
+// gets ten minutes, then an hour, before the email is marked failed.
+var retryDelays = []string{"+10 minutes", "+1 hour"}
+
+// smtpTimeout bounds one whole SMTP conversation. It is well under the
+// five-minute lease: a relay that stops answering must not keep an email
+// past it, or another worker would claim the email and send it again.
+const smtpTimeout = time.Minute
+
+// QueueEmail renders an email and parks it in the outbox, due after the
+// client's delay (or at the time set with At). Nothing is sent inline: the
+// worker (ProcessPendingEmails) delivers it once due, after a last look. All
+// email sending goes through this method.
 func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 	if !c.config.EmailEnabled {
-		log.Printf("[Email] Email disabled (EMAIL_ENABLED=false), skipping: %s -> %s", params.TemplateName, params.Recipient)
-		return nil
+		log.Printf("[Email] Email disabled (EMAIL_ENABLED=false), not queued: %s -> %s", params.TemplateName, params.Recipient)
+		return ErrEmailDisabled
 	}
 
-	// Render the template to get preview HTML
 	rendered, err := c.renderTemplate(params)
 	if err != nil {
 		c.logEmail(ctx, params, fmt.Errorf("render failed: %w", err))
 		return fmt.Errorf("failed to render template: %w", err)
 	}
 
-	// Serialize template data to JSON for re-rendering capability
+	// The data goes along so a reminder can be checked again before it leaves.
 	dataJSON, _ := json.Marshal(params.Data)
 
-	// Schedule for later delivery instead of sending inline.
 	// UTC matters: the driver serializes a time.Time with its own location's
 	// wall clock, while every due-check in SQL compares against datetime('now'),
 	// which is UTC. Storing local time made every scheduled email fire TZ-offset
 	// hours late (2h in CEST).
-	scheduled := c.alwaysSchedule || c.DefaultDelay > 0
-	var nextRetryAt sql.NullTime
-	if scheduled {
-		nextRetryAt = sql.NullTime{Time: time.Now().UTC().Add(c.DefaultDelay), Valid: true}
+	due := c.dueAt
+	if due.IsZero() {
+		due = time.Now().Add(c.DefaultDelay)
 	}
 
-	// Insert into outbox
-	outboxEntry, err := c.queries.CreateEmailOutbox(ctx, db.CreateEmailOutboxParams{
+	entry, err := c.queries.CreateEmailOutbox(ctx, db.CreateEmailOutboxParams{
 		UserID:       params.UserID,
 		Recipient:    params.Recipient,
 		Subject:      params.Subject,
@@ -341,38 +386,24 @@ func (c *Client) QueueEmail(ctx context.Context, params SendParams) error {
 		RenderedHtml: sql.NullString{String: rendered, Valid: true},
 		Status:       "pending",
 		MaxAttempts:  3,
-		NextRetryAt:  nextRetryAt,
+		NextRetryAt:  sql.NullTime{Time: due.UTC(), Valid: true},
 	})
 	if err != nil {
 		c.logEmail(ctx, params, fmt.Errorf("outbox insert failed: %w", err))
 		return fmt.Errorf("failed to create outbox entry: %w", err)
 	}
 
-	// If scheduled, don't send now — will be picked up by ProcessPendingEmails
-	if scheduled {
-		log.Printf("[Email] Scheduled for delivery in %v (outbox #%d): %s -> %s",
-			c.DefaultDelay, outboxEntry.ID, params.TemplateName, params.Recipient)
-		return nil
-	}
-
-	// Skip SMTP if not configured
-	if c.config.SMTPHost == "" {
-		log.Printf("[Email] SMTP not configured, email queued but not sent (outbox #%d)", outboxEntry.ID)
-		return nil
-	}
-
-	// Attempt immediate delivery with retry
-	c.attemptDelivery(ctx, outboxEntry, params)
-
+	log.Printf("[Email] Queued outbox #%d, due %s: %s -> %s",
+		entry.ID, due.Local().Format("2006-01-02 15:04"), params.TemplateName, params.Recipient)
 	return nil
 }
 
-// SendTemplated sends an email directly (bypasses outbox).
-// Used for test emails from admin settings.
+// SendTemplated renders and sends an email straight away, outside the outbox
+// and regardless of EMAIL_ENABLED. Only for test emails, which go to the admin
+// who asked for them.
 func (c *Client) SendTemplated(ctx context.Context, params SendParams) error {
 	if c.config.SMTPHost == "" {
-		log.Printf("[Email] SMTP not configured, skipping email to %s (template: %s)", params.Recipient, params.TemplateName)
-		return nil
+		return errors.New("SMTP není nastavené (SMTP_HOST)")
 	}
 
 	rendered, err := c.renderTemplate(params)
@@ -388,96 +419,88 @@ func (c *Client) SendTemplated(ctx context.Context, params SendParams) error {
 // Returns nil if reachable, error otherwise.
 func (c *Client) checkSMTP() error {
 	if c.config.SMTPHost == "" {
-		return fmt.Errorf("SMTP not configured")
+		return errors.New("SMTP není nastavené (SMTP_HOST)")
 	}
 	addr := net.JoinHostPort(c.config.SMTPHost, strconv.Itoa(c.config.SMTPPort))
 	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 	if err != nil {
-		return fmt.Errorf("SMTP unreachable (%s): %w", addr, err)
+		return fmt.Errorf("SMTP server %s je nedostupný: %w", addr, err)
 	}
 	conn.Close()
 	return nil
 }
 
-// RetryEmail retries a failed outbox entry.
-func (c *Client) RetryEmail(ctx context.Context, outboxID int64) error {
-	entry, err := c.queries.GetEmailOutbox(ctx, outboxID)
-	if err != nil {
-		return fmt.Errorf("outbox entry not found: %w", err)
+// canDeliver says why an admin's send-now or retry cannot go out right now.
+func (c *Client) canDeliver() error {
+	if !c.config.EmailEnabled {
+		return ErrEmailDisabled
 	}
-	if entry.Status != "failed" {
-		return fmt.Errorf("can only retry failed emails, current status: %s", entry.Status)
-	}
-
-	// Quick SMTP check before attempting delivery
-	if err := c.checkSMTP(); err != nil {
-		return fmt.Errorf("nelze odeslat: %w", err)
-	}
-
-	// Reset to pending for retry
-	entry, err = c.queries.UpdateEmailOutboxStatus(ctx, db.UpdateEmailOutboxStatusParams{
-		Status:   "pending",
-		Attempts: 0,
-		ID:       entry.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to reset outbox entry: %w", err)
-	}
-
-	params := SendParams{
-		UserID:       entry.UserID,
-		Recipient:    entry.Recipient,
-		Subject:      entry.Subject,
-		TemplateName: entry.TemplateName,
-	}
-
-	return c.attemptDelivery(ctx, entry, params)
+	return c.checkSMTP()
 }
 
-// SendNow forces immediate delivery of a pending scheduled email.
+// RetryEmail puts a failed email back in the queue and sends it now.
+func (c *Client) RetryEmail(ctx context.Context, outboxID int64) error {
+	if err := c.canDeliver(); err != nil {
+		return err
+	}
+	if _, err := c.queries.RequeueFailedEmail(ctx, outboxID); errors.Is(err, sql.ErrNoRows) {
+		return errors.New("znovu lze poslat jen e-mail, jehož odeslání selhalo")
+	} else if err != nil {
+		return fmt.Errorf("vrácení do fronty selhalo: %w", err)
+	}
+	return c.sendClaimed(ctx, outboxID)
+}
+
+// SendNow delivers a pending email without waiting for its time.
 func (c *Client) SendNow(ctx context.Context, outboxID int64) error {
-	entry, err := c.queries.GetEmailOutbox(ctx, outboxID)
+	if err := c.canDeliver(); err != nil {
+		return err
+	}
+	return c.sendClaimed(ctx, outboxID)
+}
+
+// sendClaimed leases one pending email and delivers it through the same path
+// as the worker, last look included: a reminder for a member who has paid
+// since is withdrawn, not sent.
+func (c *Client) sendClaimed(ctx context.Context, outboxID int64) error {
+	entry, err := c.queries.ClaimEmailOutbox(ctx, outboxID)
+	if errors.Is(err, sql.ErrNoRows) {
+		current, getErr := c.queries.GetEmailOutbox(ctx, outboxID)
+		if getErr != nil {
+			return fmt.Errorf("e-mail #%d neexistuje", outboxID)
+		}
+		if current.Status == "pending" {
+			return ErrBusy
+		}
+		return fmt.Errorf("e-mail už nečeká na odeslání (stav %s)", current.Status)
+	}
 	if err != nil {
-		return fmt.Errorf("outbox entry not found: %w", err)
-	}
-	if entry.Status != "pending" {
-		return fmt.Errorf("can only send pending emails, current status: %s", entry.Status)
+		return fmt.Errorf("e-mail #%d nejde zamknout: %w", outboxID, err)
 	}
 
-	// Quick SMTP check before attempting delivery
-	if err := c.checkSMTP(); err != nil {
-		return fmt.Errorf("nelze odeslat: %w", err)
+	switch outcome, err := c.deliver(ctx, &entry); outcome {
+	case delivered:
+		return nil
+	case withdrawn:
+		return fmt.Errorf("zrušeno před odesláním: %s", strings.TrimPrefix(entry.LastError.String, cancelledPrefix))
+	case held:
+		return errors.New("teď ho nejde ověřit, odešle se samo během několika minut")
+	default:
+		return err
 	}
-
-	// Clear schedule and reset attempts
-	entry, err = c.queries.UpdateEmailOutboxStatus(ctx, db.UpdateEmailOutboxStatusParams{
-		Status:   "pending",
-		Attempts: 0,
-		ID:       entry.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to reset outbox entry: %w", err)
-	}
-
-	params := SendParams{
-		UserID:       entry.UserID,
-		Recipient:    entry.Recipient,
-		Subject:      entry.Subject,
-		TemplateName: entry.TemplateName,
-	}
-
-	return c.attemptDelivery(ctx, entry, params)
 }
 
 // ProcessPendingEmails sends scheduled emails whose delivery time has arrived.
-// Called from sync_fio_payments (runs every 2 min) and right after the admin
-// queues manual reminders with a zero timer.
+// Runs on every sync tick of the cron daemon (every 2 min) and right after an
+// admin queues reminders with a zero timer. Returns how many went out.
 //
 // Entries are claimed with a lease rather than merely listed: the server and the
 // cron daemon are separate processes against the same SQLite file, so a plain
 // list-then-send would let both grab the same row and mail a member twice.
 func (c *Client) ProcessPendingEmails(ctx context.Context) int {
-	if c.config.SMTPHost == "" {
+	// Pending rows in a copy of the production database must not reach real
+	// members from a test instance, so the switch stops the worker too.
+	if !c.config.EmailEnabled || c.config.SMTPHost == "" {
 		return 0
 	}
 
@@ -489,91 +512,99 @@ func (c *Client) ProcessPendingEmails(ctx context.Context) int {
 
 	sent := 0
 	for _, entry := range entries {
-		if !c.refreshBeforeSend(ctx, &entry) {
-			continue
+		if outcome, _ := c.deliver(ctx, &entry); outcome == delivered {
+			sent++
 		}
-		params := SendParams{
-			UserID:       entry.UserID,
-			Recipient:    entry.Recipient,
-			Subject:      entry.Subject,
-			TemplateName: entry.TemplateName,
-		}
-		c.attemptDelivery(ctx, entry, params)
-		sent++
 	}
 
 	if sent > 0 {
-		log.Printf("[Email] Processed %d scheduled emails", sent)
+		log.Printf("[Email] Sent %d scheduled emails", sent)
 	}
 	return sent
 }
 
-// attemptDelivery tries to send an email with exponential backoff retry.
-// Backoff schedule: attempt 1 = immediate, attempt 2 = 1s, attempt 3 = 5s
-// Returns nil on success, error if all attempts fail.
-// Uses context.Background() for DB updates so they survive HTTP context cancellation.
-func (c *Client) attemptDelivery(ctx context.Context, entry db.EmailOutbox, params SendParams) error {
-	backoffDurations := []time.Duration{0, 1 * time.Second, 5 * time.Second}
+// outcome is what became of one leased email.
+type outcome int
 
-	// Use a background context for DB updates — the HTTP request context may be
-	// cancelled before delivery finishes, but we must always record the outcome.
-	dbCtx := context.Background()
+const (
+	delivered outcome = iota
+	withdrawn         // cancelled by the last look
+	held              // the last look could not be made; the lease brings it back
+	retrying          // the try failed, another one is scheduled
+	failed            // the last try failed
+)
 
-	var lastErr error
-	for attempt := 0; attempt < int(entry.MaxAttempts); attempt++ {
-		if attempt > 0 && attempt < len(backoffDurations) {
-			time.Sleep(backoffDurations[attempt])
-		}
+// deliver gives a leased email its last look, then one SMTP try. A failed try
+// is rescheduled while tries are left (see retryDelays); after the last one the
+// email is marked failed. The error says why it did not go out.
+func (c *Client) deliver(ctx context.Context, entry *db.EmailOutbox) (outcome, error) {
+	// The request that asked for a send-now may end before the SMTP server
+	// answers; the outcome must be recorded all the same.
+	dbCtx := context.WithoutCancel(ctx)
 
-		lastErr = c.sendSMTP(entry.Recipient, entry.Subject, entry.RenderedHtml.String)
-
-		if lastErr == nil {
-			// Success. UTC for the same reason as next_retry_at — the "sent today"
-			// count compares substr(sent_at,1,10) against SQLite's DATE('now').
-			now := time.Now().UTC()
-			c.queries.UpdateEmailOutboxStatus(dbCtx, db.UpdateEmailOutboxStatusParams{
-				Status:   "sent",
-				Attempts: int64(attempt + 1),
-				SentAt:   sql.NullTime{Time: now, Valid: true},
-				ID:       entry.ID,
-			})
-			c.logEmail(dbCtx, params, nil)
-			return nil
-		}
-
-		log.Printf("[Email] Attempt %d/%d failed for %s: %v", attempt+1, entry.MaxAttempts, entry.Recipient, lastErr)
+	switch c.refreshBeforeSend(dbCtx, entry) {
+	case lookCancelled:
+		return withdrawn, nil
+	case lookHeld:
+		return held, nil
 	}
 
-	// All attempts exhausted
-	c.queries.UpdateEmailOutboxStatus(dbCtx, db.UpdateEmailOutboxStatusParams{
-		Status:    "failed",
-		Attempts:  entry.MaxAttempts,
-		LastError: sql.NullString{String: lastErr.Error(), Valid: true},
-		ID:        entry.ID,
-	})
-	deliveryErr := fmt.Errorf("failed after %d attempts: %w", entry.MaxAttempts, lastErr)
+	params := SendParams{
+		UserID:       entry.UserID,
+		Recipient:    entry.Recipient,
+		Subject:      entry.Subject,
+		TemplateName: entry.TemplateName,
+	}
+	attempts := entry.Attempts + 1
+
+	sendErr := c.sendSMTP(entry.Recipient, entry.Subject, entry.RenderedHtml.String)
+	if sendErr == nil {
+		if err := c.queries.MarkEmailSent(dbCtx, db.MarkEmailSentParams{Attempts: attempts, ID: entry.ID}); err != nil {
+			log.Printf("[Email] outbox #%d went out but could not be marked sent: %v", entry.ID, err)
+		}
+		c.logEmail(dbCtx, params, nil)
+		return delivered, nil
+	}
+
+	log.Printf("[Email] Try %d/%d of outbox #%d to %s failed: %v", attempts, entry.MaxAttempts, entry.ID, entry.Recipient, sendErr)
+	lastError := sql.NullString{String: sendErr.Error(), Valid: true}
+	if attempts < entry.MaxAttempts && int(attempts) <= len(retryDelays) {
+		delay := retryDelays[attempts-1]
+		if err := c.queries.RescheduleEmail(dbCtx, db.RescheduleEmailParams{
+			Attempts: attempts, LastError: lastError, Delay: delay, ID: entry.ID,
+		}); err != nil {
+			log.Printf("[Email] failed to reschedule outbox #%d: %v", entry.ID, err)
+		}
+		return retrying, fmt.Errorf("odeslání selhalo, další pokus za %s: %w", strings.TrimPrefix(delay, "+"), sendErr)
+	}
+
+	if err := c.queries.MarkEmailFailed(dbCtx, db.MarkEmailFailedParams{
+		Attempts: attempts, LastError: lastError, ID: entry.ID,
+	}); err != nil {
+		log.Printf("[Email] failed to mark outbox #%d failed: %v", entry.ID, err)
+	}
+	deliveryErr := fmt.Errorf("odeslání selhalo i na %d. pokus: %w", attempts, sendErr)
 	c.logEmail(dbCtx, params, deliveryErr)
-	return deliveryErr
+	return failed, deliveryErr
 }
 
-// sendSMTP sends a pre-rendered email via SMTP.
-// When SMTPSkipTLS is set, it connects without STARTTLS and skips authentication
-// (suitable for local relays like Postfix that don't require TLS or auth).
+// sendSMTP sends a pre-rendered email via SMTP. STARTTLS is used whenever the
+// server offers it. When SMTPSkipTLS is set (a local relay such as Postfix),
+// its certificate is not checked, a failed STARTTLS is not fatal, and AUTH is
+// used only with credentials and only if offered; otherwise authentication is
+// required, as net/smtp.SendMail does it.
 func (c *Client) sendSMTP(recipient, subject, htmlBody string) error {
 	addr := net.JoinHostPort(c.config.SMTPHost, strconv.Itoa(c.config.SMTPPort))
 	message := c.formatMessage(recipient, subject, htmlBody)
 
-	if !c.config.SMTPSkipTLS {
-		auth := smtp.PlainAuth("", c.config.SMTPUsername, c.config.SMTPPassword, c.config.SMTPHost)
-		return smtp.SendMail(addr, auth, c.config.SMTPFrom, []string{recipient}, []byte(message))
-	}
-
-	// Plain TCP connection without TLS — for local relays
 	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("smtp dial: %w", err)
 	}
 	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(smtpTimeout)); err != nil {
+		return fmt.Errorf("smtp deadline: %w", err)
+	}
 
 	client, err := smtp.NewClient(conn, c.config.SMTPHost)
 	if err != nil {
@@ -581,24 +612,30 @@ func (c *Client) sendSMTP(recipient, subject, htmlBody string) error {
 	}
 	defer client.Close()
 
-	// Try STARTTLS with InsecureSkipVerify — if the server supports it, use it;
-	// if not, continue without TLS.
 	if ok, _ := client.Extension("STARTTLS"); ok {
-		if err := client.StartTLS(&tls.Config{InsecureSkipVerify: true}); err != nil {
+		tlsConfig := &tls.Config{ServerName: c.config.SMTPHost}
+		if c.config.SMTPSkipTLS {
+			tlsConfig.InsecureSkipVerify = true
+		}
+		if err := client.StartTLS(tlsConfig); err != nil {
+			if !c.config.SMTPSkipTLS {
+				return fmt.Errorf("smtp STARTTLS: %w", err)
+			}
 			log.Printf("[Email] STARTTLS failed (continuing without TLS): %v", err)
 		}
 	}
 
-	// Authenticate only if credentials are provided and server supports it
-	if c.config.SMTPUsername != "" {
-		if ok, _ := client.Extension("AUTH"); ok {
-			auth := smtp.PlainAuth("", c.config.SMTPUsername, c.config.SMTPPassword, c.config.SMTPHost)
-			if err := client.Auth(auth); err != nil {
-				return fmt.Errorf("smtp auth: %w", err)
-			}
-		} else {
-			log.Printf("[Email] Server does not advertise AUTH, skipping authentication")
+	hasAuth, _ := client.Extension("AUTH")
+	switch {
+	case !c.config.SMTPSkipTLS && !hasAuth:
+		return errors.New("smtp: server doesn't support AUTH")
+	case !c.config.SMTPSkipTLS || (c.config.SMTPUsername != "" && hasAuth):
+		auth := smtp.PlainAuth("", c.config.SMTPUsername, c.config.SMTPPassword, c.config.SMTPHost)
+		if err := client.Auth(auth); err != nil {
+			return fmt.Errorf("smtp auth: %w", err)
 		}
+	case c.config.SMTPUsername != "":
+		log.Printf("[Email] Server does not advertise AUTH, skipping authentication")
 	}
 
 	if err := client.Mail(c.config.SMTPFrom); err != nil {

@@ -81,7 +81,7 @@ func TestDebtRefreshCancelsWhenPaid(t *testing.T) {
 
 	pay(t, database, user, "payer", 2000) // paid during the 72h review window
 
-	if c.refreshBeforeSend(context.Background(), &entry) {
+	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
 		t.Fatal("a member who paid up must not get the reminder")
 	}
 	status, lastErr, _ := outboxState(t, database, entry.ID)
@@ -99,7 +99,7 @@ func TestDebtRefreshDowngradesTier(t *testing.T) {
 
 	pay(t, database, user, "partial", 1500) // now -1500: one fee, not two
 
-	if !c.refreshBeforeSend(context.Background(), &entry) {
+	if c.refreshBeforeSend(context.Background(), &entry) != lookSend {
 		t.Fatal("still in debt, should be sent")
 	}
 	if entry.TemplateName != "negative_balance.html" {
@@ -130,7 +130,7 @@ func TestDebtRefreshCancelsForSuspendedMember(t *testing.T) {
 	if _, err := database.Exec(`UPDATE users SET state = 'suspended' WHERE id = ?`, user); err != nil {
 		t.Fatal(err)
 	}
-	if c.refreshBeforeSend(context.Background(), &entry) {
+	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
 		t.Fatal("a suspended member must not get a fee reminder")
 	}
 }
@@ -144,7 +144,7 @@ func TestDebtRefreshKeepsPaymentDetails(t *testing.T) {
 	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
 
 	worker := New(c.config, c.queries) // what cmd/cron builds for the outbox
-	if !worker.refreshBeforeSend(context.Background(), &entry) {
+	if worker.refreshBeforeSend(context.Background(), &entry) != lookSend {
 		t.Fatal("still in debt, should be sent")
 	}
 	_, _, html := outboxState(t, database, entry.ID)
@@ -177,7 +177,7 @@ func TestDebtReminderWaitsForPaymentAccount(t *testing.T) {
 		t.Errorf("queueing without an account: err = %v, want bank.ErrUnknown", err)
 	}
 
-	if c.refreshBeforeSend(context.Background(), &entry) {
+	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
 		t.Fatal("a reminder without payment details must not be sent")
 	}
 	if status, _, _ := outboxState(t, database, entry.ID); status != "pending" {

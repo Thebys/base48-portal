@@ -12,35 +12,47 @@ import (
 	"github.com/base48/member-portal/internal/money"
 )
 
-// runFees creates monthly membership fee records for all accepted members.
-// It sends no email: debt reminders are runDebtEmails' job, which the daemon
-// runs right after this.
+// runFees creates this month's membership fee for every accepted member and
+// records the month as charged (see monthlyDue). It sends no email: the
+// membership reminders are runDebtEmails' job, which the daemon runs right
+// after this.
 //
 // Usage:
 //
 //	portal-cron fees
-//
-// Crontab (first day of month):
-//
-//	0 0 1 * * cd /path/to/portal && ./portal-cron fees >> logs/fees.log 2>&1
-func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
-	// Získáme první den aktuálního měsíce
-	now := time.Now()
+func runFees(ctx context.Context, _ *config.Config, queries *db.Queries) int {
+	errors, err := chargeMonthlyFees(ctx, queries, time.Now())
+	if err != nil {
+		log.Printf("✗ Fees not created: %v", err)
+		return 1
+	}
+	if errors > 0 {
+		log.Println("Job completed with errors")
+		return 1
+	}
+	log.Println("✓ Job completed successfully")
+	return 0
+}
+
+// chargeMonthlyFees creates the fees for the month of now. Members who already
+// have one for it are skipped, so a second run changes nothing. The error is
+// set only when the run as a whole could not happen; members it failed for are
+// counted and logged, and the month is recorded as charged all the same, as
+// another run would fail for them the same way.
+func chargeMonthlyFees(ctx context.Context, queries *db.Queries, now time.Time) (errors int, err error) {
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 
 	log.Printf("Creating fees for period: %s", periodStart.Format("2006-01"))
 
-	// Načteme všechny accepted členy s jejich úrovněmi
 	users, err := queries.ListAcceptedUsersForFees(ctx)
 	if err != nil {
-		log.Fatalf("Failed to list users: %v", err)
+		return 0, fmt.Errorf("list members: %w", err)
 	}
 
 	log.Printf("Processing %d accepted members...", len(users))
 
 	created := 0
 	skipped := 0
-	errors := 0
 
 	for _, user := range users {
 		// Zkontrolujeme, jestli už fee pro tento měsíc neexistuje
@@ -110,11 +122,8 @@ func runFees(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 		Metadata:  sql.NullString{String: fmt.Sprintf(`{"period":"%s","created":%d,"skipped":%d,"errors":%d}`, periodStart.Format("2006-01"), created, skipped, errors), Valid: true},
 	})
 
-	if errors > 0 {
-		log.Println("Job completed with errors")
-		return 1
+	if err := recordMonth(ctx, queries, settingFeesMonth, now); err != nil {
+		return errors, err
 	}
-
-	log.Println("✓ Job completed successfully")
-	return 0
+	return errors, nil
 }

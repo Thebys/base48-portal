@@ -17,7 +17,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: portal-cron <command>\n\nCommands:\n  daemon       Run all jobs on schedule (sync every 2min, fees on 1st of month)\n  sync         Sync FIO payments, update debt/roles, send pending emails\n  fees         Create monthly membership fees\n  debt-emails  Queue debt warning emails for members with negative balance\n  bar-debt-emails  Queue bar debt reminders (settings in admin)\n  report       Report unmatched payments\n  fio-backfill Record older outgoing FIO payments (fio-backfill YYYY-MM-DD, or - < statement.json)\n  fio-balances Load account balances from a saved FIO statement (fio-balances - < statement.json)\n")
+		fmt.Fprintf(os.Stderr, "Usage: portal-cron <command>\n\nCommands:\n  daemon       Run all jobs on schedule (sync every 2min, fees and reminders monthly)\n  sync         Sync FIO payments, update debt/roles, send pending emails\n  fees         Create monthly membership fees\n  debt-emails  Queue this month's membership reminders (-dry-run: only list them)\n  bar-debt-emails  Queue bar debt reminders (settings in admin)\n  report       Report unmatched payments\n  fio-backfill Record older outgoing FIO payments (fio-backfill YYYY-MM-DD, or - < statement.json)\n  fio-balances Load account balances from a saved FIO statement (fio-balances - < statement.json)\n")
 		os.Exit(1)
 	}
 
@@ -51,7 +51,7 @@ func main() {
 	case "fees":
 		os.Exit(runFees(ctx, cfg, queries))
 	case "debt-emails":
-		os.Exit(runDebtEmails(ctx, cfg, queries))
+		os.Exit(runDebtEmails(ctx, cfg, queries, os.Args[2:], os.Stdout))
 	case "bar-debt-emails":
 		os.Exit(runBarDebtEmails(ctx, cfg, queries))
 	case "report":

@@ -190,6 +190,9 @@ func (c *Client) QueueBarDebtReminders(ctx context.Context, s BarDebtSettings) (
 	if !s.Enabled {
 		return res, nil
 	}
+	if !c.config.EmailEnabled {
+		return res, ErrEmailDisabled
+	}
 	if err := s.Validate(); err != nil {
 		return res, err
 	}
@@ -243,32 +246,29 @@ func (c *Client) QueueBarDebtReminders(ctx context.Context, s BarDebtSettings) (
 // A member topping up at the kiosk is the common case — then the reminder is
 // cancelled. Otherwise it is re-rendered, so it quotes today's balance and the
 // current template text rather than what applied when it was queued.
-func (c *Client) refreshBarDebt(ctx context.Context, entry *db.EmailOutbox) bool {
+func (c *Client) refreshBarDebt(ctx context.Context, entry *db.EmailOutbox) look {
 	settings := LoadBarDebtSettings(ctx, c.queries)
 	if !settings.Enabled {
-		c.cancelOutbox(ctx, entry, "barové upomínky byly vypnuty")
-		return false
+		return c.cancelOutbox(ctx, entry, "barové upomínky byly vypnuty")
 	}
-	user, ok := c.activeMemberFor(ctx, entry)
-	if !ok {
-		return false
+	user, verdict := c.activeMemberFor(ctx, entry)
+	if verdict != lookSend {
+		return verdict
 	}
 
 	account, err := c.queries.GetRevbankAccountByUserID(ctx, entry.UserID)
 	if errors.Is(err, sql.ErrNoRows) {
-		c.cancelOutbox(ctx, entry, "barový účet nenalezen")
-		return false
+		return c.cancelOutbox(ctx, entry, "barový účet nenalezen")
 	}
 	if err != nil {
 		log.Printf("[Email] bar debt: cannot re-check outbox #%d: %v", entry.ID, err)
-		return false
+		return lookHeld
 	}
 	if !settings.Warranted(account.BalanceCents) {
-		c.cancelOutbox(ctx, entry, fmt.Sprintf("zůstatek na baru je teď %s Kč, dluh už nepřesahuje hranici", FormatCZKCents(account.BalanceCents)))
-		return false
+		return c.cancelOutbox(ctx, entry, fmt.Sprintf("zůstatek na baru je teď %s Kč, dluh už nepřesahuje hranici", FormatCZKCents(account.BalanceCents)))
 	}
 
 	data := c.barDebtData(ctx, &user, account.BalanceCents, settings.ThresholdCZK)
 	c.rerender(ctx, entry, TemplateFileBarDebt, data)
-	return true
+	return lookSend
 }

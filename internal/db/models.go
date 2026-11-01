@@ -39,6 +39,7 @@ type EmailOutbox struct {
 	NextRetryAt  sql.NullTime   `json:"next_retry_at"`
 	SentAt       sql.NullTime   `json:"sent_at"`
 	CreatedAt    time.Time      `json:"created_at"`
+	LeasedUntil  sql.NullTime   `json:"leased_until"`
 }
 
 type EmailTemplateContent struct {

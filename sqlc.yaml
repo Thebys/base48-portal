@@ -21,6 +21,7 @@ sql:
       - "migrations/022_outgoing_payments.sql"
       - "migrations/024_bank_balances.sql"
       - "migrations/025_project_archive.sql"
+      - "migrations/026_email_outbox_lease.sql"
     gen:
       go:
         package: "db"

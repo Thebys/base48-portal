@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -112,22 +113,22 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"Title":          "Nastavení",
-		"User":           user,
-		"DBUser":         dbUser,
-		"SMTPConfigured": smtpConfigured,
-		"SMTPReachable":  smtpReachable,
-		"SMTPSkipTLS":    h.config.SMTPSkipTLS,
-		"EmailEnabled":   h.config.EmailEnabled,
-		"RecentEmails":   emailViews,
-		"OutboxCounts":   countsMap,
-		"SentToday":      sentToday,
-		"CurrentBannerText":       bannerText,
-		"CurrentBannerEnabled":    bannerEnabled,
-		"CurrentBannerColor":      bannerColor,
-		"CurrentAwaitingMessage":  awaitingMessage,
-		"BarDebt":                 barDebt,
-		"BarDebtorsNow":           len(barDebtors),
+		"Title":                  "Nastavení",
+		"User":                   user,
+		"DBUser":                 dbUser,
+		"SMTPConfigured":         smtpConfigured,
+		"SMTPReachable":          smtpReachable,
+		"SMTPSkipTLS":            h.config.SMTPSkipTLS,
+		"EmailEnabled":           h.config.EmailEnabled,
+		"RecentEmails":           emailViews,
+		"OutboxCounts":           countsMap,
+		"SentToday":              sentToday,
+		"CurrentBannerText":      bannerText,
+		"CurrentBannerEnabled":   bannerEnabled,
+		"CurrentBannerColor":     bannerColor,
+		"CurrentAwaitingMessage": awaitingMessage,
+		"BarDebt":                barDebt,
+		"BarDebtorsNow":          len(barDebtors),
 	}
 	h.addPaymentAccountView(ctx, data, time.Now())
 
@@ -145,94 +146,61 @@ func (h *Handler) addPaymentAccountView(ctx context.Context, data map[string]int
 	data["PaymentAccountCheckedAt"] = acc.CheckedAt.Local().Format("2. 1. 2006 15:04")
 }
 
-// AdminTestEmailHandler sends test email (uses SendTemplated — bypasses outbox and EMAIL_ENABLED)
+// AdminTestEmailHandler sends a test email to the admin who asks for it, and
+// only to them: rendered with the admin's own name and VS, it goes straight to
+// SMTP, outside the outbox and regardless of EMAIL_ENABLED, and says [TEST] in
+// the subject. An address typed into the form used to be honoured, so one
+// click could mail a real member a made-up debt notice.
 func (h *Handler) AdminTestEmailHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
 
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	ctx := r.Context()
-
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		http.Error(w, "Formulář nejde přečíst", http.StatusBadRequest)
 		return
 	}
-
 	emailType := r.FormValue("type")
-	recipient := r.FormValue("email")
 	lang := r.FormValue("lang")
-	if lang == "" {
+	if lang != "en" {
 		lang = "cs"
 	}
 
-	if recipient == "" {
-		http.Error(w, "Email address is required", http.StatusBadRequest)
+	admin, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{String: user.ID, Valid: true})
+	if err != nil {
+		http.Error(w, "Tvůj účet v portálu nejde načíst", http.StatusInternalServerError)
 		return
 	}
 
-	// Get user by email for template data (use admin user as fallback)
-	testUser, err := h.queries.GetUserByEmail(ctx, recipient)
-	if err != nil {
-		dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
-			String: user.ID,
-			Valid:  true,
-		})
-		if err != nil {
-			http.Error(w, "Failed to get user data", http.StatusInternalServerError)
-			return
-		}
-		testUser = dbUser
-	}
-
-	// Use nickname (username) for greeting, fall back to realname, then email
-	testName := testUser.Username.String
-	if testName == "" {
-		testName = testUser.Realname.String
-	}
-	if testName == "" {
-		testName = testUser.Email
-	}
-
-	templateName, data, err := h.buildEmailTestData(ctx, emailType, lang, testName, testUser.Username.String, testUser.PaymentsID.String)
+	templateName, data, err := h.buildEmailTestData(ctx, emailType, lang, admin.DisplayName(), admin.Username.String, admin.PaymentsID.String)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	subject := data["Content"].(map[string]string)["subject"]
+	subject := "[TEST] " + data["Content"].(map[string]string)["subject"]
 
-	// Use SendTemplated (direct SMTP, bypasses outbox + EMAIL_ENABLED)
 	sendErr := h.emailClient.SendTemplated(ctx, email.SendParams{
-		UserID:       sql.NullInt64{Int64: testUser.ID, Valid: true},
-		Recipient:    recipient,
+		UserID:       sql.NullInt64{Int64: admin.ID, Valid: true},
+		Recipient:    admin.Email,
 		Subject:      subject,
 		TemplateName: templateName,
 		Data:         data,
 	})
 
+	level, message := "success", fmt.Sprintf("Testovací e-mail %s (%s) odeslán na %s", emailType, lang, admin.Email)
 	if sendErr != nil {
-		// best-effort audit log
-		h.queries.CreateLog(ctx, db.CreateLogParams{
-			Subsystem: "email",
-			Level:     "error",
-			UserID:    sql.NullInt64{Int64: testUser.ID, Valid: true},
-			Message:   "Test email failed: " + sendErr.Error(),
-		})
-		http.Error(w, "Failed to send test email: "+sendErr.Error(), http.StatusInternalServerError)
-		return
+		level, message = "error", fmt.Sprintf("Testovací e-mail %s (%s) na %s se nepodařilo odeslat: %v", emailType, lang, admin.Email, sendErr)
 	}
-
-	// best-effort audit log
 	h.queries.CreateLog(ctx, db.CreateLogParams{
 		Subsystem: "email",
-		Level:     "success",
-		UserID:    sql.NullInt64{Int64: testUser.ID, Valid: true},
-		Message:   "Test email sent: " + emailType + " (" + lang + ") to " + recipient,
+		Level:     level,
+		UserID:    sql.NullInt64{Int64: admin.ID, Valid: true},
+		Message:   message,
 	})
-
-	h.jsonSuccess(w, "Email odeslán na "+recipient)
+	if sendErr != nil {
+		http.Error(w, "Testovací e-mail se nepodařilo odeslat: "+sendErr.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.jsonSuccess(w, "Testovací e-mail odeslán na "+admin.Email)
 }
 
 // AdminGetTemplateContentHandler returns editable content blocks for a template.
@@ -359,95 +327,118 @@ func (h *Handler) saveTemplateBlocks(ctx context.Context, templateName, lang str
 	return nil
 }
 
-// AdminRetryEmailHandler retries a failed outbox email.
-// POST /api/admin/email/retry
-func (h *Handler) AdminRetryEmailHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
+// outboxID reads the outbox entry an admin acts on, from a JSON body
+// {"id": N} or a form field id.
+func outboxID(r *http.Request) (int64, error) {
 	var req struct {
 		ID int64 `json:"id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		idStr := r.FormValue("id")
-		if idStr == "" {
-			h.jsonError(w, "Invalid request body", http.StatusBadRequest)
-			return
-		}
-		var err2 error
-		req.ID, err2 = strconv.ParseInt(idStr, 10, 64)
-		if err2 != nil {
-			h.jsonError(w, "Invalid ID", http.StatusBadRequest)
-			return
-		}
+	if err := json.NewDecoder(r.Body).Decode(&req); err == nil && req.ID > 0 {
+		return req.ID, nil
 	}
+	id, err := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errors.New("chybí číslo e-mailu")
+	}
+	return id, nil
+}
 
-	if err := h.emailClient.RetryEmail(ctx, req.ID); err != nil {
-		h.jsonError(w, "Retry failed: "+err.Error(), http.StatusInternalServerError)
+// adminEmail is the signed-in admin, for audit lines and test emails.
+// RequireAdmin has let them in.
+func (h *Handler) adminEmail(r *http.Request) string {
+	if admin := h.auth.GetUser(r); admin != nil {
+		return admin.Email
+	}
+	return ""
+}
+
+// auditOutbox records an admin's action on an outbox entry.
+func (h *Handler) auditOutbox(r *http.Request, id int64, action string) {
+	h.queries.CreateLog(context.WithoutCancel(r.Context()), db.CreateLogParams{
+		Subsystem: "email",
+		Level:     "info",
+		Message:   fmt.Sprintf("E-mail #%d: %s (%s)", id, action, h.adminEmail(r)),
+	})
+}
+
+// outboxActionError answers a send-now or retry that did not go out.
+func (h *Handler) outboxActionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, email.ErrBusy):
+		h.jsonError(w, "E-mail se právě odesílá, zkus to za pár minut", http.StatusConflict)
+	case errors.Is(err, email.ErrEmailDisabled):
+		h.jsonError(w, "E-maily jsou vypnuté (EMAIL_ENABLED=false)", http.StatusConflict)
+	default:
+		h.jsonError(w, "Neodesláno: "+err.Error(), http.StatusUnprocessableEntity)
+	}
+}
+
+// AdminRetryEmailHandler sends a failed outbox email again.
+// POST /api/admin/email/retry
+func (h *Handler) AdminRetryEmailHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := outboxID(r)
+	if err != nil {
+		h.jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	h.jsonSuccess(w, "Email znovu odeslán")
+	sendErr := h.emailClient.RetryEmail(r.Context(), id)
+	h.auditOutbox(r, id, "znovu odeslat: "+outcomeText(sendErr))
+	if sendErr != nil {
+		h.outboxActionError(w, sendErr)
+		return
+	}
+	h.jsonSuccess(w, "E-mail odeslán")
 }
 
 // AdminCancelEmailHandler cancels a pending outbox email.
 // POST /api/admin/email/cancel
 func (h *Handler) AdminCancelEmailHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	var req struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		idStr := r.FormValue("id")
-		if idStr == "" {
-			h.jsonError(w, "Invalid request body", http.StatusBadRequest)
-			return
-		}
-		var err2 error
-		req.ID, err2 = strconv.ParseInt(idStr, 10, 64)
-		if err2 != nil {
-			h.jsonError(w, "Invalid ID", http.StatusBadRequest)
-			return
-		}
+	id, err := outboxID(r)
+	if err != nil {
+		h.jsonError(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	_, err := h.queries.CancelEmailOutbox(ctx, req.ID)
+	_, err = h.queries.CancelEmailOutbox(ctx, db.CancelEmailOutboxParams{
+		Reason: sql.NullString{String: "Zrušil(a) " + h.adminEmail(r), Valid: true},
+		ID:     id,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		h.jsonError(w, "E-mail už nečeká na odeslání, nebo se právě odesílá", http.StatusConflict)
+		return
+	}
 	if err != nil {
 		h.jsonError(w, "Zrušení selhalo: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	h.jsonSuccess(w, "Email zrušen")
+	h.auditOutbox(r, id, "zrušen")
+	h.jsonSuccess(w, "E-mail zrušen")
 }
 
-// AdminSendNowEmailHandler forces immediate delivery of a pending outbox email.
+// AdminSendNowEmailHandler delivers a pending outbox email without waiting
+// for its time, after the same last look as the worker gives it.
 // POST /api/admin/email/send-now
 func (h *Handler) AdminSendNowEmailHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var req struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		idStr := r.FormValue("id")
-		if idStr == "" {
-			h.jsonError(w, "Invalid request body", http.StatusBadRequest)
-			return
-		}
-		var err2 error
-		req.ID, err2 = strconv.ParseInt(idStr, 10, 64)
-		if err2 != nil {
-			h.jsonError(w, "Invalid ID", http.StatusBadRequest)
-			return
-		}
-	}
-
-	if err := h.emailClient.SendNow(ctx, req.ID); err != nil {
-		h.jsonError(w, "Odeslání selhalo: "+err.Error(), http.StatusInternalServerError)
+	id, err := outboxID(r)
+	if err != nil {
+		h.jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	sendErr := h.emailClient.SendNow(r.Context(), id)
+	h.auditOutbox(r, id, "odeslat hned: "+outcomeText(sendErr))
+	if sendErr != nil {
+		h.outboxActionError(w, sendErr)
+		return
+	}
+	h.jsonSuccess(w, "E-mail odeslán")
+}
 
-	h.jsonSuccess(w, "Email odeslán")
+func outcomeText(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return "odesláno"
 }
 
 // buildEmailTestData builds template data and resolves the template filename

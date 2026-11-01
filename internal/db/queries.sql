@@ -410,15 +410,35 @@ SELECT * FROM email_outbox WHERE id = ? LIMIT 1;
 -- name: ListRecentEmailOutbox :many
 SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT ?;
 
--- name: UpdateEmailOutboxStatus :one
+-- name: MarkEmailSent :exec
+-- The mail has left. Recorded whatever happened to the row meanwhile: it is a
+-- fact, and a lease keeps admins from cancelling a row while it is sent.
 UPDATE email_outbox SET
-    status = sqlc.arg(status),
+    status = 'sent',
+    attempts = sqlc.arg(attempts),
+    last_error = NULL,
+    sent_at = datetime('now'),
+    leased_until = NULL
+WHERE id = sqlc.arg(id);
+
+-- name: RescheduleEmail :exec
+-- A delivery attempt failed and the email has tries left: try again after the
+-- delay, given as an SQLite modifier such as '+10 minutes'.
+UPDATE email_outbox SET
     attempts = sqlc.arg(attempts),
     last_error = sqlc.arg(last_error),
-    next_retry_at = substr(sqlc.arg(next_retry_at), 1, 19),
-    sent_at = substr(sqlc.arg(sent_at), 1, 19)
-WHERE id = sqlc.arg(id)
-RETURNING *;
+    next_retry_at = datetime('now', CAST(sqlc.arg(delay) AS TEXT)),
+    leased_until = NULL
+WHERE id = sqlc.arg(id) AND status = 'pending';
+
+-- name: MarkEmailFailed :exec
+-- The last try failed. Only a row still pending turns failed.
+UPDATE email_outbox SET
+    status = 'failed',
+    attempts = sqlc.arg(attempts),
+    last_error = sqlc.arg(last_error),
+    leased_until = NULL
+WHERE id = sqlc.arg(id) AND status = 'pending';
 
 -- name: CountEmailOutboxByStatus :many
 SELECT status, COUNT(*) as count FROM email_outbox GROUP BY status;
@@ -428,16 +448,37 @@ SELECT COUNT(*) as count FROM email_outbox
 WHERE status = 'sent' AND substr(sent_at, 1, 10) = DATE('now');
 
 -- name: ClaimScheduledEmails :many
--- Atomically lease every due email to the calling worker by pushing
--- next_retry_at five minutes out, then hand the rows over. The server and the
--- cron daemon are separate processes on the same database file, so a plain
--- SELECT would let both pick up the same row and mail a member twice. A worker
--- that dies mid-send simply lets its lease expire and the row is retried.
+-- Atomically lease every due email to the calling worker for five minutes and
+-- hand the rows over. The server and the cron daemon are separate processes on
+-- the same database file, so a plain SELECT would let both pick up the same
+-- row and mail a member twice. A worker that dies mid-send lets its lease
+-- expire and the row is picked up again; next_retry_at stays the schedule.
 UPDATE email_outbox SET
-    next_retry_at = datetime('now', '+5 minutes')
+    leased_until = datetime('now', '+5 minutes')
 WHERE status = 'pending'
   AND next_retry_at IS NOT NULL
   AND datetime(next_retry_at) <= datetime('now')
+  AND (leased_until IS NULL OR datetime(leased_until) <= datetime('now'))
+RETURNING *;
+
+-- name: ClaimEmailOutbox :one
+-- Lease one pending email for an admin's "send now" and make it due at once,
+-- so that if the sender dies the worker still delivers it. No rows when the
+-- email is not pending or a worker is sending it right now.
+UPDATE email_outbox SET
+    next_retry_at = datetime('now'),
+    leased_until = datetime('now', '+5 minutes')
+WHERE id = ? AND status = 'pending'
+  AND (leased_until IS NULL OR datetime(leased_until) <= datetime('now'))
+RETURNING *;
+
+-- name: RequeueFailedEmail :one
+-- Put a failed email back in the queue, due now, with its tries reset.
+UPDATE email_outbox SET
+    status = 'pending',
+    attempts = 0,
+    next_retry_at = datetime('now')
+WHERE id = ? AND status = 'failed'
 RETURNING *;
 
 -- name: ListRecentDebtEmails :many
@@ -452,18 +493,32 @@ WHERE user_id IS NOT NULL
 ORDER BY created_at DESC;
 
 -- name: CancelEmailOutbox :one
+-- An admin withdraws a pending email. No rows while a worker is sending it.
 UPDATE email_outbox SET
     status = 'cancelled',
-    next_retry_at = NULL
-WHERE id = ? AND status = 'pending'
+    last_error = sqlc.arg(reason),
+    leased_until = NULL
+WHERE id = sqlc.arg(id) AND status = 'pending'
+  AND (leased_until IS NULL OR datetime(leased_until) <= datetime('now'))
 RETURNING *;
 
--- name: GetRecentEmailByUserAndTemplate :one
--- Anti-spam: check if an email of this type was already sent/queued for this user within 30 days
+-- name: CancelLeasedEmailOutbox :exec
+-- The worker holding the lease withdraws the email after its last look.
+UPDATE email_outbox SET
+    status = 'cancelled',
+    last_error = sqlc.arg(reason),
+    leased_until = NULL
+WHERE id = sqlc.arg(id) AND status = 'pending';
+
+-- name: GetMembershipEmailSince :one
+-- The newest membership-fee reminder queued or sent to the user since the given
+-- UTC time, as 'YYYY-MM-DD HH:MM:SS' like created_at. The monthly run sends
+-- each member at most one of them a calendar month.
 SELECT * FROM email_outbox
-WHERE user_id = ? AND template_name = ?
+WHERE user_id = sqlc.arg(user_id)
+  AND template_name IN ('negative_balance.html', 'debt_warning.html')
   AND status IN ('pending', 'sent')
-  AND created_at > datetime('now', '-30 days')
+  AND created_at >= CAST(sqlc.arg(since) AS TEXT)
 ORDER BY created_at DESC
 LIMIT 1;
 

@@ -283,7 +283,7 @@ func TestRefreshCancelsWhenMemberToppedUp(t *testing.T) {
 
 	setBarBalance(t, database, user, 5000) // topped up at the kiosk meanwhile
 
-	if c.refreshBeforeSend(context.Background(), &entry) {
+	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
 		t.Fatal("a member back above the line must not be mailed")
 	}
 	status, lastErr, _ := outboxState(t, database, entry.ID)
@@ -303,7 +303,7 @@ func TestRefreshCancelsWhenSwitchedOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if c.refreshBeforeSend(ctx, &entry) {
+	if c.refreshBeforeSend(ctx, &entry) == lookSend {
 		t.Fatal("switching the reminder off must stop reminders already queued")
 	}
 	if status, _, _ := outboxState(t, database, entry.ID); status != "cancelled" {
@@ -318,7 +318,7 @@ func TestRefreshCancelsWhenNoLongerAMember(t *testing.T) {
 	if _, err := database.Exec(`UPDATE users SET state = 'suspended' WHERE id = ?`, user); err != nil {
 		t.Fatal(err)
 	}
-	if c.refreshBeforeSend(context.Background(), &entry) {
+	if c.refreshBeforeSend(context.Background(), &entry) == lookSend {
 		t.Fatal("a suspended member must not get the bar reminder")
 	}
 }
@@ -329,7 +329,7 @@ func TestRefreshRerendersWithCurrentBalance(t *testing.T) {
 
 	setBarBalance(t, database, user, -25000) // paid a little, still below the line
 
-	if !c.refreshBeforeSend(context.Background(), &entry) {
+	if c.refreshBeforeSend(context.Background(), &entry) != lookSend {
 		t.Fatal("still below the line, should be sent")
 	}
 	if !strings.Contains(entry.RenderedHtml.String, "-250&nbsp;Kč") {
@@ -345,7 +345,7 @@ func TestRefreshRerendersWithCurrentBalance(t *testing.T) {
 func TestRefreshIgnoresOtherTemplates(t *testing.T) {
 	c, _ := barTestClient(t)
 	entry := db.EmailOutbox{ID: 1, TemplateName: "welcome.html"}
-	if !c.refreshBeforeSend(context.Background(), &entry) {
+	if c.refreshBeforeSend(context.Background(), &entry) != lookSend {
 		t.Error("non-bar emails must not be held back")
 	}
 }

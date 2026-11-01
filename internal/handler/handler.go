@@ -140,8 +140,11 @@ const unverifiedEmailMessage = "Tvůj e-mail v Base48 SSO zatím není ověřen�
 func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User, error) {
 	ctx := r.Context()
 
-	// Resolve locale from Keycloak (fallback to "cs")
-	locale := kcUser.Locale
+	// The language emails go out in, from Keycloak ("en-US" counts as en).
+	// When Keycloak has none, a known user keeps theirs: an admin may have set
+	// it by hand, and a login must not quietly turn it back to Czech.
+	kcLocale := email.NormalizeLocale(kcUser.Locale)
+	locale := kcLocale
 	if locale == "" {
 		locale = "cs"
 	}
@@ -150,6 +153,10 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 	dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{String: kcUser.ID, Valid: true})
 	if err == nil {
 		// Sync username + locale from Keycloak on every login
+		locale := dbUser.Locale
+		if kcLocale != "" {
+			locale = kcLocale
+		}
 		needsUpdate := dbUser.Locale != locale
 		newUsername := dbUser.Username
 		if kcUser.PreferredName != "" && dbUser.Username.String != kcUser.PreferredName {
@@ -203,8 +210,8 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 			Subsystem: "keycloak",
 			Level:     "success",
 			UserID:    sql.NullInt64{Int64: linkedUser.ID, Valid: true},
-			Message:  fmt.Sprintf("Keycloak ID associated: %s", kcUser.Email),
-			Metadata: logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email}),
+			Message:   fmt.Sprintf("Keycloak ID associated: %s", kcUser.Email),
+			Metadata:  logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email}),
 		})
 
 		// If claimed user is already accepted, sync active_member role
@@ -232,9 +239,13 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		if kcUser.PreferredName != "" && linkedUser.Username.String != kcUser.PreferredName {
 			newUsername = sql.NullString{String: kcUser.PreferredName, Valid: true}
 		}
+		linkedLocale := linkedUser.Locale
+		if kcLocale != "" {
+			linkedLocale = kcLocale
+		}
 		updatedUser, err := h.queries.UpdateUserKeycloakInfo(ctx, db.UpdateUserKeycloakInfoParams{
 			Username: newUsername,
-			Locale:   locale,
+			Locale:   linkedLocale,
 			ID:       linkedUser.ID,
 		})
 		if err == nil {
@@ -282,8 +293,8 @@ func (h *Handler) getOrCreateUser(r *http.Request, kcUser *auth.User) (*db.User,
 		Subsystem: "auth",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: newUser.ID, Valid: true},
-		Message:  fmt.Sprintf("New user registered: %s (VS: %s)", kcUser.Email, paymentsID.String),
-		Metadata: logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email, "payments_id": paymentsID.String}),
+		Message:   fmt.Sprintf("New user registered: %s (VS: %s)", kcUser.Email, paymentsID.String),
+		Metadata:  logMetadata(map[string]interface{}{"keycloak_id": kcUser.ID, "email": kcUser.Email, "payments_id": paymentsID.String}),
 	})
 
 	// Send registration confirmation email (non-blocking, 30s timeout)
@@ -378,8 +389,8 @@ func (h *Handler) ProfileHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Add user-specific data
 	data["Title"] = "My Profile"
-	data["User"] = data["ViewedUser"]  // For own profile, ViewedUser = current user
-	data["DBUser"] = dbUser             // For layout compatibility (current user)
+	data["User"] = data["ViewedUser"] // For own profile, ViewedUser = current user
+	data["DBUser"] = dbUser           // For layout compatibility (current user)
 	data["Access"] = acc
 	data["Success"] = r.URL.Query().Get("success") == "1"
 
@@ -432,8 +443,8 @@ func (h *Handler) handleCustomFeeUpdate(w http.ResponseWriter, r *http.Request, 
 		Subsystem: "membership",
 		Level:     "info",
 		UserID:    sql.NullInt64{Int64: dbUser.ID, Valid: true},
-		Message:  fmt.Sprintf("Custom fee amount updated: %.0f Kč (minimum: %s Kč)", customFee, level.Amount),
-		Metadata: logMetadata(map[string]interface{}{"old_amount": dbUser.LevelActualAmount, "new_amount": fmt.Sprintf("%.0f", customFee), "level_minimum": level.Amount}),
+		Message:   fmt.Sprintf("Custom fee amount updated: %.0f Kč (minimum: %s Kč)", customFee, level.Amount),
+		Metadata:  logMetadata(map[string]interface{}{"old_amount": dbUser.LevelActualAmount, "new_amount": fmt.Sprintf("%.0f", customFee), "level_minimum": level.Amount}),
 	})
 
 	http.Redirect(w, r, "/profile?success=1", http.StatusSeeOther)

@@ -19,9 +19,9 @@ import (
 // well past the point where the balance it quotes is still current.
 const maxManualDelay = 7 * 24 * time.Hour
 
-// recentReminderWindow mirrors the nightly cron's anti-spam window. A member
-// reminded inside it is pre-unchecked in the picker, but an admin can still
-// override — a manual resend is a deliberate act, unlike the cron's sweep.
+// recentReminderWindow is how recent a reminder leaves a member unchecked in
+// the picker. An admin can still override: a manual resend is a deliberate act.
+// The monthly run has its own rule, one membership reminder a calendar month.
 const recentReminderWindow = 30 * 24 * time.Hour
 
 // DebtCandidate is one member the admin may remind about a negative balance,

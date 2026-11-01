@@ -85,9 +85,6 @@ func TestScheduledIsACopy(t *testing.T) {
 	base := &Client{DefaultDelay: 24 * time.Hour}
 
 	now := base.Scheduled(0)
-	if !now.alwaysSchedule {
-		t.Error("Scheduled(0) must still park the email in the outbox, not send it inline")
-	}
 	if now.DefaultDelay != 0 {
 		t.Errorf("Scheduled(0).DefaultDelay = %v, want 0", now.DefaultDelay)
 	}
@@ -97,10 +94,41 @@ func TestScheduledIsACopy(t *testing.T) {
 		t.Errorf("Scheduled(72h).DefaultDelay = %v, want 72h", later.DefaultDelay)
 	}
 
+	at := time.Date(2026, 12, 4, 10, 0, 0, 0, time.Local)
+	if fixed := base.At(at); !fixed.dueAt.Equal(at) {
+		t.Errorf("At(%v).dueAt = %v", at, fixed.dueAt)
+	}
+
 	// The shared client is reused by every other caller in the process, so a
 	// per-request timer must never leak back into it.
-	if base.DefaultDelay != 24*time.Hour || base.alwaysSchedule {
-		t.Errorf("Scheduled mutated the receiver: delay=%v alwaysSchedule=%v",
-			base.DefaultDelay, base.alwaysSchedule)
+	if base.DefaultDelay != 24*time.Hour || !base.dueAt.IsZero() {
+		t.Errorf("Scheduled or At mutated the receiver: delay=%v dueAt=%v", base.DefaultDelay, base.dueAt)
+	}
+}
+
+// Reminders queued by the run on the 1st leave on the 4th at 10:00 local
+// time, whichever offset the zone has that day.
+func TestLocalHourAfter(t *testing.T) {
+	prague, err := time.LoadLocation("Europe/Prague")
+	if err != nil {
+		t.Skip("no tzdata:", err)
+	}
+	local := time.Local
+	time.Local = prague
+	t.Cleanup(func() { time.Local = local })
+
+	for _, tc := range []struct {
+		queued time.Time
+		want   string // UTC
+	}{
+		{time.Date(2026, 11, 1, 0, 1, 0, 0, prague), "2026-11-04 09:00"},  // CET
+		{time.Date(2026, 4, 1, 0, 1, 0, 0, prague), "2026-04-04 08:00"},   // CEST
+		{time.Date(2026, 3, 1, 15, 30, 0, 0, prague), "2026-03-05 09:00"}, // after 10:00: next day
+		{time.Date(2026, 11, 28, 10, 0, 0, 0, prague), "2026-12-01 09:00"},
+	} {
+		got := LocalHourAfter(tc.queued.Add(72*time.Hour), 10).UTC().Format("2006-01-02 15:04")
+		if got != tc.want {
+			t.Errorf("queued %v: due %s UTC, want %s", tc.queued, got, tc.want)
+		}
 	}
 }
