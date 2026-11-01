@@ -1152,3 +1152,36 @@ main :has(> table) {
     outline: 2px solid var(--accent-indigo);
     outline-offset: 2px;
 }
+
+/* ===== E-mail admin ===== */
+
+/* An email shown as the mail client would: the frame is the page's width and
+   tall enough for the longest email without a second scrollbar on phones. */
+.email-frame {
+    display: block;
+    width: 100%;
+    height: 75vh;
+    min-height: 480px;
+    border: 0;
+    /* Emails set their own light colours; the frame keeps them on white. */
+    background: #fff;
+}
+
+.email-template-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    color: var(--ink-2);
+    text-decoration: none;
+}
+.email-template-link:hover {
+    color: var(--ink);
+}
+.email-template-link.is-active {
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: inset 3px 0 0 var(--ink);
+}

@@ -34,6 +34,23 @@ type Client struct {
 
 	// dueAt, when set (see At), is the time queued emails are due instead.
 	dueAt time.Time
+
+	// draft, when set (see WithDraft), is unsaved text an admin is trying
+	// out: it stands in for the saved blocks of one template and language.
+	draft *draft
+}
+
+type draft struct {
+	template, lang string
+	blocks         map[string]string
+}
+
+// WithDraft returns a copy of the client that renders template in lang with
+// blocks in place of the saved texts, for the editor's preview and test email.
+func (c *Client) WithDraft(template, lang string, blocks map[string]string) *Client {
+	clone := *c
+	clone.draft = &draft{template: template, lang: lang, blocks: blocks}
+	return &clone
 }
 
 // SendParams contains parameters for sending a templated email
@@ -825,6 +842,13 @@ func (c *Client) LoadRawContentBlocks(ctx context.Context, templateName string, 
 
 	for _, override := range overrides {
 		result[override.BlockName] = NormalizeBlockText(override.Content)
+	}
+	if d := c.draft; d != nil && d.template == templateName && d.lang == lang {
+		for name, text := range d.blocks {
+			if _, ok := result[name]; ok {
+				result[name] = NormalizeBlockText(text)
+			}
+		}
 	}
 	return result
 }

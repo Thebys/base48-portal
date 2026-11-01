@@ -121,21 +121,6 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		return feePreview[i].BalanceAfterFee < feePreview[j].BalanceAfterFee
 	})
 
-	// === Admin-only: manual debt reminder picker ===
-	// Separate from the fee-run preview above: that one projects balances after
-	// the upcoming fee, while a reminder quotes what the member owes right now.
-	debtCandidates, err := h.buildDebtCandidates(ctx)
-	if err != nil {
-		http.Error(w, "Failed to load debt candidates", http.StatusInternalServerError)
-		return
-	}
-	debtSendable := 0
-	for _, c := range debtCandidates {
-		if !c.Blocked {
-			debtSendable++
-		}
-	}
-
 	// === Admin-only: Unmatched payments ===
 	pending, err := unmatched.List(ctx, h.queries)
 	if err != nil {
@@ -166,11 +151,6 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		"PrepaidEnabled":     policy.Prepaid,
 		"PreviewNegBalance":  previewNegBalance,
 		"PreviewDebtWarning": previewDebtWarning,
-
-		// Manual debt reminders (admin-only)
-		"DebtCandidates": debtCandidates,
-		"DebtSendable":   debtSendable,
-		"EmailEnabled":   h.config.EmailEnabled,
 
 		// Unmatched payments (admin-only)
 		"UnmatchedCount":    unmatchedCount,

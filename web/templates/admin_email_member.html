@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="px-4 sm:px-6 lg:px-8">
+    {{template "email-admin-head" .}}
+    <p class="mb-4 text-sm"><a href="/admin/emails/reminders" class="hover:underline">← Zpět na upozornění</a></p>
+
+    <section class="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-medium text-gray-900"><a href="/admin/users/{{.Member.ID}}" class="hover:underline">{{.Member.DisplayName}}</a> <span class="text-sm font-normal text-gray-500">{{.Member.Email}}</span></h2>
+        <dl class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 text-sm">
+            <div>
+                <dt class="font-medium text-gray-500">Bilance</dt>
+                <dd class="mt-1 text-gray-900">{{fmtNum .Standing.Balance}} Kč</dd>
+            </div>
+            <div>
+                <dt class="font-medium text-gray-500">Měsíční příspěvek</dt>
+                <dd class="mt-1 text-gray-900">{{fmtNum .Standing.Fee}} Kč</dd>
+            </div>
+            <div>
+                <dt class="font-medium text-gray-500">Zaplaceno do konce</dt>
+                <dd class="mt-1 text-gray-900">{{if .Standing.Known}}{{.PaidThrough}}{{else}}–{{end}}</dd>
+            </div>
+        </dl>
+        <p class="mt-4 text-sm text-gray-700">
+            {{if not .Accepted}}Upozornění na příspěvky chodí jen přijatým členům; tento člen je ve stavu {{.Member.State}}.
+            {{else if not .Tier}}Teď by nedostal žádné upozornění.
+            {{else}}Teď by dostal: {{template "reminder-tier" .Tier}}{{if .SwitchedOff}} Upozornění před koncem předplatného je ale vypnuté, takže nedostane nic.{{end}}
+            {{end}}
+        </p>
+        {{if .Problem}}<p class="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800" role="alert">{{.Problem}}</p>{{end}}
+    </section>
+
+    {{if .HTML}}
+    <section class="bg-white shadow rounded-lg overflow-hidden mb-6">
+        <p class="px-6 py-3 border-b border-gray-200 text-sm"><span class="text-gray-500">Předmět:</span> <strong>{{.Subject}}</strong></p>
+        <iframe sandbox title="Náhled e-mailu" srcdoc="{{.HTML}}" class="email-frame"></iframe>
+    </section>
+    {{end}}
+</div>
+{{end}}

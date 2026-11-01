@@ -1,0 +1,47 @@
+{{define "content"}}
+<div class="px-4 sm:px-6 lg:px-8">
+    {{template "email-admin-head" .}}
+    {{with .Email}}
+    <p class="mb-4 text-sm"><a href="/admin/emails" class="hover:underline">← Zpět do fronty</a></p>
+    <p id="outbox-status" class="hidden mb-4 rounded-md p-3 text-sm" role="status"></p>
+
+    <section class="bg-white shadow rounded-lg mb-6 p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div>
+                <h2 class="text-lg font-medium text-gray-900">{{.Type}} <span class="text-sm font-normal text-gray-500">#{{.ID}}</span></h2>
+                <p class="mt-1 text-sm text-gray-700">{{.Subject}}</p>
+            </div>
+            <div class="flex items-center gap-1">{{template "outbox-actions" .}}</div>
+        </div>
+        <dl class="grid grid-cols-1 gap-4 sm:grid-cols-3 text-sm">
+            <div>
+                <dt class="font-medium text-gray-500">Komu</dt>
+                <dd class="mt-1 text-gray-900">{{if .UserID.Valid}}<a href="/admin/users/{{.UserID.Int64}}" class="hover:underline">{{.Recipient}}</a>{{else}}{{.Recipient}}{{end}}</dd>
+            </div>
+            <div>
+                <dt class="font-medium text-gray-500">Stav</dt>
+                <dd class="mt-1"><span class="badge {{.StatusClass}}">{{.StatusLabel}}</span> <span class="text-gray-500">{{.When}}</span></dd>
+            </div>
+            <div>
+                <dt class="font-medium text-gray-500">Zařazeno</dt>
+                <dd class="mt-1 text-gray-900">{{.CreatedAt.Local.Format "2. 1. 2006 15:04"}} · pokusů {{.Attempts}} z {{.MaxAttempts}}</dd>
+            </div>
+            {{if .LastError.Valid}}
+            <div class="sm:col-span-3">
+                <dt class="font-medium text-gray-500">Důvod nebo chyba</dt>
+                <dd class="mt-1 text-gray-900">{{.LastError.String}}</dd>
+            </div>
+            {{end}}
+        </dl>
+        {{if eq .Status "pending"}}
+        <p class="mt-4 text-xs text-gray-500">Upomínky se těsně před odesláním vykreslí znovu s aktuální bilancí a texty, takže to, co odejde, se může od tohoto náhledu lišit.</p>
+        {{end}}
+    </section>
+    {{end}}
+
+    <section class="bg-white shadow rounded-lg overflow-hidden mb-6">
+        <iframe sandbox title="Obsah e-mailu" srcdoc="{{.HTML}}" class="email-frame"></iframe>
+    </section>
+</div>
+<script src="{{asset "js/admin-emails.js"}}" defer></script>
+{{end}}

@@ -2,37 +2,11 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
 )
-
-type templateBlocksResponse struct {
-	Blocks []struct {
-		Name       string `json:"name"`
-		Current    string `json:"current"`
-		IsModified bool   `json:"is_modified"`
-	} `json:"blocks"`
-}
-
-func getTemplateBlocks(t *testing.T, h *Handler, template, lang string) templateBlocksResponse {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/email/templates?template="+template+"&lang="+lang, nil)
-	rec := httptest.NewRecorder()
-	h.AdminGetTemplateContentHandler(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
-	}
-	var resp templateBlocksResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	return resp
-}
 
 func countOverrides(t *testing.T, h *Handler, template string) int {
 	t.Helper()
@@ -47,9 +21,10 @@ func countOverrides(t *testing.T, h *Handler, template string) int {
 // compare those against the plain defaults and flag every block as edited.
 func TestTemplateEditorShowsUntouchedCzechBlocksAsDefault(t *testing.T) {
 	h, _ := testHandlerWithEmail(t)
-	for _, b := range getTemplateBlocks(t, h, "debt_warning", "cs").Blocks {
-		if b.IsModified {
-			t.Errorf("block %s flagged as modified on a fresh database", b.Name)
+	defaults := email.GetDefaultContentBlocks("cs")["debt_warning"]
+	for name, text := range h.emailClient.LoadRawContentBlocks(context.Background(), "debt_warning", "cs") {
+		if text != defaults[name] {
+			t.Errorf("block %s reads as modified on a fresh database", name)
 		}
 	}
 }
@@ -69,12 +44,9 @@ func TestTemplateSaveStoresOnlyRealEdits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	blocks := map[string]string{}
-	for _, b := range getTemplateBlocks(t, h, "debt_warning", "cs").Blocks {
-		if b.IsModified {
-			t.Errorf("legacy override of %s equal to the default shows as modified", b.Name)
-		}
-		blocks[b.Name] = b.Current
+	blocks := h.emailClient.LoadRawContentBlocks(ctx, "debt_warning", "cs")
+	if blocks["footer"] != def {
+		t.Errorf("legacy override equal to the default reads as modified")
 	}
 	blocks["heading"] = "Vlastní nadpis"
 

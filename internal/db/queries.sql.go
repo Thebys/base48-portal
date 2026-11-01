@@ -425,6 +425,20 @@ func (q *Queries) CountFeesByLevel(ctx context.Context) ([]CountFeesByLevelRow, 
 	return items, nil
 }
 
+const countPendingEmailsByTemplate = `-- name: CountPendingEmailsByTemplate :one
+SELECT COUNT(*) FROM email_outbox
+WHERE status = 'pending' AND template_name = ?
+`
+
+// How many waiting emails a change of the template's texts would reach: the
+// last look renders the reminders again, with the texts saved by then.
+func (q *Queries) CountPendingEmailsByTemplate(ctx context.Context, templateName string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countPendingEmailsByTemplate, templateName)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countProjectPayments = `-- name: CountProjectPayments :one
 SELECT COUNT(*) FROM payments WHERE project_id = ?
 `
@@ -2298,6 +2312,58 @@ func (q *Queries) ListDismissedPayments(ctx context.Context) ([]Payment, error) 
 	return items, nil
 }
 
+const listEmailOutboxWithStatus = `-- name: ListEmailOutboxWithStatus :many
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
+WHERE status = ?
+ORDER BY created_at DESC, id DESC
+LIMIT ?
+`
+
+type ListEmailOutboxWithStatusParams struct {
+	Status string `json:"status"`
+	Limit  int64  `json:"limit"`
+}
+
+// Emails in one state, newest first.
+func (q *Queries) ListEmailOutboxWithStatus(ctx context.Context, arg ListEmailOutboxWithStatusParams) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listEmailOutboxWithStatus, arg.Status, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmailOutbox{}
+	for rows.Next() {
+		var i EmailOutbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Recipient,
+			&i.Subject,
+			&i.TemplateName,
+			&i.TemplateData,
+			&i.RenderedHtml,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.SentAt,
+			&i.CreatedAt,
+			&i.LeasedUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEmailTemplateContentByTemplateLang = `-- name: ListEmailTemplateContentByTemplateLang :many
 
 SELECT id, template_name, block_name, lang, content, updated_by, updated_at FROM email_template_content
@@ -2363,6 +2429,53 @@ func (q *Queries) ListFeesByUser(ctx context.Context, userID int64) ([]Fee, erro
 			&i.PeriodStart,
 			&i.Amount,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFinishedEmailOutbox = `-- name: ListFinishedEmailOutbox :many
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
+WHERE status <> 'pending'
+ORDER BY created_at DESC, id DESC
+LIMIT ?
+`
+
+// Sent, failed and cancelled emails, newest first.
+func (q *Queries) ListFinishedEmailOutbox(ctx context.Context, limit int64) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listFinishedEmailOutbox, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmailOutbox{}
+	for rows.Next() {
+		var i EmailOutbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Recipient,
+			&i.Subject,
+			&i.TemplateName,
+			&i.TemplateData,
+			&i.RenderedHtml,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.SentAt,
+			&i.CreatedAt,
+			&i.LeasedUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -2722,6 +2835,53 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) 
 			&i.DismissedBy,
 			&i.DismissedReason,
 			&i.PublicNote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingEmailOutbox = `-- name: ListPendingEmailOutbox :many
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
+WHERE status = 'pending'
+ORDER BY next_retry_at IS NULL, next_retry_at, id
+`
+
+// Everything still waiting, the next to leave first. Never cut short: the
+// admin must see every email that is going to go out.
+func (q *Queries) ListPendingEmailOutbox(ctx context.Context) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingEmailOutbox)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EmailOutbox{}
+	for rows.Next() {
+		var i EmailOutbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Recipient,
+			&i.Subject,
+			&i.TemplateName,
+			&i.TemplateData,
+			&i.RenderedHtml,
+			&i.Status,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.NextRetryAt,
+			&i.SentAt,
+			&i.CreatedAt,
+			&i.LeasedUntil,
 		); err != nil {
 			return nil, err
 		}

@@ -13,7 +13,7 @@ import (
 
 // runBarDebtEmails queues bar debt reminders for accepted members whose kiosk
 // debt is above the admin-set threshold. Everything — on/off,
-// threshold, interval, outbox delay — comes from the admin settings page.
+// threshold, interval, outbox delay — comes from the e-mail admin (/admin/emails/reminders).
 // Safe to run repeatedly: a member reminded within the interval is skipped.
 //
 // Usage:

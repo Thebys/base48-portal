@@ -174,7 +174,7 @@ type debtNotifyResult struct {
 // POST /api/admin/email/debt-notify
 //
 // Every reminder goes into the outbox with a timer, so the admin can still
-// review or cancel it from the settings page before it leaves. A zero timer
+// review or cancel it in the outbox (/admin/emails) before it leaves. A zero timer
 // means "due now": the entry is still recorded, it is just delivered on the
 // spot by a background pass rather than inline, which keeps a large batch from
 // running into the request timeout.

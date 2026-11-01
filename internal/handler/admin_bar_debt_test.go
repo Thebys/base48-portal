@@ -11,16 +11,16 @@ import (
 	"github.com/base48/member-portal/internal/email"
 )
 
-// The admin preview and test-send both go through buildEmailTestData; the bar
+// The admin preview and test-send both go through buildEmailSample; the bar
 // reminder must render there in both languages.
 func TestBarDebtPreviewRenders(t *testing.T) {
 	h, _ := testHandlerWithEmail(t)
 	for _, lang := range []string{"cs", "en"} {
-		file, _, data, err := h.buildEmailTestData(context.Background(), email.TemplateBarDebt, lang, previewMember(lang))
+		sample, err := h.buildEmailSample(context.Background(), h.emailClient, email.TemplateBarDebt, "", lang, previewMember(lang))
 		if err != nil {
 			t.Fatalf("%s: %v", lang, err)
 		}
-		html, err := h.emailClient.RenderPreview(email.SendParams{TemplateName: file, Data: data})
+		html, err := h.emailClient.RenderPreview(email.SendParams{TemplateName: sample.File, Data: sample.Data})
 		if err != nil {
 			t.Fatalf("%s: render: %v", lang, err)
 		}

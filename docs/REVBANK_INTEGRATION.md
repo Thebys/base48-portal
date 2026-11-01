@@ -48,7 +48,7 @@ Odpověď: `{"accounts_synced", "transactions_synced", "users_matched", "users_u
 - **Profil**: zůstatek a poslední nákupy (box *Bar / Kiosek*).
 - **Správa → Bar** (`/admin/bar`): účty, transakce, analytika, generátor
   kartiček s čárovými kódy a tisknutelné návody (nákup, dobíjení).
-- **Správa → Nastavení**: upomínky dluhu na baru (práh, interval, zpoždění),
+- **Správa → E-maily → Upozornění**: upomínky dluhu na baru (práh, interval, zpoždění),
   posílá je `portal-cron bar-debt-emails`.
 
 Neimplementováno: správa produktů z portálu, VS pro dobíjení baru, storno.

@@ -21,9 +21,16 @@ konfigurace v `.env.example`, schéma v `migrations/`.
   (oprávnění nezávislá na stavu, zatím autodílna)
 - Nový člen dostane VS (`users.payments_id`) hned při prvním přihlášení
 - Fees vznikají 1. v měsíci pro `accepted` členy: `level_actual_amount`, jinak částka úrovně.
-  Hned po nich se zařadí upomínky (nejvýš jedna za kalendářní měsíc), odcházejí za tři dny
-  v 10:00. Měsíc posledního běhu si démon pamatuje v `settings` (`membership_fees_month`,
-  `membership_reminders_month`), takže restart běh nezopakuje a výpadek 1. dožene do 7. dne
+  Hned po nich se zařadí upozornění na příspěvky (nejvýš jedno za kalendářní měsíc),
+  odcházejí za tři dny v 10:00. Měsíc posledního běhu si démon pamatuje v `settings`
+  (`membership_fees_month`, `membership_reminders_month`), takže restart běh nezopakuje
+  a výpadek 1. dožene do 7. dne
+- Kde člen stojí s příspěvkem, říká `internal/dues`: měsíční příspěvek, do kdy má zaplaceno,
+  jaké upozornění mu patří a co doporučit zaplatit (dluh + N měsíců, výchozí 3). Upozornění:
+  před koncem předplatného (nemá zaplacený další měsíc; zapíná admin), záporná bilance
+  (dluží aspoň jeden příspěvek), upozornění na dluh (aspoň dva)
+- E-maily spravuje `/admin/emails`: fronta, šablony (texty v `email_template_content`,
+  výchozí v `internal/email`, seznam bloků v `internal/email/registry.go`) a upozornění
 - Každý e-mail čeká ve frontě a těsně před odesláním (i ručním) dostane poslední kontrolu:
   upomínka se přepočítá nebo zruší, uvítání, registrace a pozastavení se zruší, když člen
   mezitím změnil stav. S `EMAIL_ENABLED=false` se nic nezařazuje ani neodesílá

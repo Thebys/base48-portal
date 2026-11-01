@@ -456,6 +456,33 @@ UPDATE email_outbox SET
     leased_until = NULL
 WHERE id = sqlc.arg(id) AND status = 'pending';
 
+-- name: ListPendingEmailOutbox :many
+-- Everything still waiting, the next to leave first. Never cut short: the
+-- admin must see every email that is going to go out.
+SELECT * FROM email_outbox
+WHERE status = 'pending'
+ORDER BY next_retry_at IS NULL, next_retry_at, id;
+
+-- name: ListFinishedEmailOutbox :many
+-- Sent, failed and cancelled emails, newest first.
+SELECT * FROM email_outbox
+WHERE status <> 'pending'
+ORDER BY created_at DESC, id DESC
+LIMIT ?;
+
+-- name: ListEmailOutboxWithStatus :many
+-- Emails in one state, newest first.
+SELECT * FROM email_outbox
+WHERE status = ?
+ORDER BY created_at DESC, id DESC
+LIMIT ?;
+
+-- name: CountPendingEmailsByTemplate :one
+-- How many waiting emails a change of the template's texts would reach: the
+-- last look renders the reminders again, with the texts saved by then.
+SELECT COUNT(*) FROM email_outbox
+WHERE status = 'pending' AND template_name = ?;
+
 -- name: CountEmailOutboxByStatus :many
 SELECT status, COUNT(*) as count FROM email_outbox GROUP BY status;
 

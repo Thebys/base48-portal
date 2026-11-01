@@ -1,0 +1,93 @@
+{{define "content"}}
+<div class="px-4 sm:px-6 lg:px-8">
+    {{template "email-admin-head" .}}
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div class="bg-yellow-50 px-4 py-3 rounded-md text-center">
+            <div class="text-lg font-bold text-yellow-900">{{index .Counts "pending"}}</div>
+            <div class="text-xs text-yellow-700">Čeká</div>
+        </div>
+        <div class="bg-green-50 px-4 py-3 rounded-md text-center">
+            <div class="text-lg font-bold text-green-900">{{.SentToday}}</div>
+            <div class="text-xs text-green-700">Odesláno dnes</div>
+        </div>
+        <div class="bg-red-50 px-4 py-3 rounded-md text-center">
+            <div class="text-lg font-bold text-red-900">{{index .Counts "failed"}}</div>
+            <div class="text-xs text-red-700">Selhalo</div>
+        </div>
+        <div class="bg-gray-50 px-4 py-3 rounded-md text-center">
+            <div class="text-lg font-bold text-gray-900">{{index .Counts "cancelled"}}</div>
+            <div class="text-xs text-gray-600">Zrušeno</div>
+        </div>
+    </div>
+
+    <p id="outbox-status" class="hidden mb-4 rounded-md p-3 text-sm" role="status"></p>
+
+    <section class="bg-white shadow rounded-lg mb-6">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-medium text-gray-900">Čeká na odeslání</h2>
+            <p class="mt-1 text-sm text-gray-500">Těsně před odesláním každý e-mail dostane poslední kontrolu: upomínka se přepočítá, nebo zruší, když člen mezitím zaplatil nebo změnil stav.</p>
+        </div>
+        {{if .Pending}}
+        {{template "outbox-table" .Pending}}
+        {{else}}
+        <p class="px-6 py-4 text-sm text-gray-500">Nic nečeká.</p>
+        {{end}}
+    </section>
+
+    <section class="bg-white shadow rounded-lg mb-6">
+        <div class="px-6 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-lg font-medium text-gray-900">Vyřízené <span class="text-sm font-normal text-gray-500">(posledních 100)</span></h2>
+            <nav class="flex flex-wrap gap-2" aria-label="Filtr stavu">
+                {{range .Filters}}<a href="/admin/emails{{if .Status}}?status={{.Status}}{{end}}" class="btn btn-sm {{if eq .Status $.Filter}}btn-primary{{else}}btn-secondary{{end}}"{{if eq .Status $.Filter}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+            </nav>
+        </div>
+        {{if .Finished}}
+        {{template "outbox-table" .Finished}}
+        {{else}}
+        <p class="px-6 py-4 text-sm text-gray-500">Žádné e-maily.</p>
+        {{end}}
+    </section>
+</div>
+<script src="{{asset "js/admin-emails.js"}}" defer></script>
+{{end}}
+
+{{define "outbox-table"}}
+<div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Kdy</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Komu</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">E-mail</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stav</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Akce</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            {{range .}}
+            <tr>
+                <td class="px-4 py-2 text-sm text-gray-500 whitespace-nowrap">{{.When}}</td>
+                <td class="px-4 py-2 text-sm text-gray-900">
+                    {{if .UserID.Valid}}<a href="/admin/users/{{.UserID.Int64}}" class="hover:underline">{{.Recipient}}</a>{{else}}{{.Recipient}}{{end}}
+                </td>
+                <td class="px-4 py-2 text-sm text-gray-900">
+                    <a href="/admin/emails/{{.ID}}" class="hover:underline">{{.Type}}</a>
+                    <div class="text-xs text-gray-500 max-w-xs truncate" title="{{.Subject}}">{{.Subject}}</div>
+                </td>
+                <td class="px-4 py-2 text-sm">
+                    <span class="badge {{.StatusClass}}">{{.StatusLabel}}</span>
+                    {{if .LastError.Valid}}<div class="mt-1 text-xs text-gray-500 max-w-xs">{{.LastError.String}}</div>{{end}}
+                </td>
+                <td class="px-4 py-2 text-sm whitespace-nowrap">
+                    <div class="flex items-center gap-1">
+                        <a href="/admin/emails/{{.ID}}" class="btn btn-sm btn-view">Zobrazit</a>
+                        {{template "outbox-actions" .}}
+                    </div>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

@@ -67,6 +67,13 @@ func newAccessEnv(t *testing.T) *accessEnv {
 	r.Get("/admin/projects", h.RequireAdmin(h.AdminProjectsHandler))
 	r.Post("/api/admin/projects/archive", h.RequireAdmin(h.AdminArchiveProjectHandler))
 	r.Post("/api/admin/payments/outgoing", h.RequireAdmin(h.AdminAssignOutgoingHandler))
+	r.Get("/admin/emails", h.RequireAdmin(h.AdminEmailsHandler))
+	r.Get("/admin/emails/templates", h.RequireAdmin(h.AdminEmailTemplatesHandler))
+	r.Post("/admin/emails/templates", h.RequireAdmin(h.AdminEmailTemplatesHandler))
+	r.Get("/admin/emails/reminders", h.RequireAdmin(h.AdminEmailRemindersHandler))
+	r.Get("/admin/emails/member/{id}", h.RequireAdmin(h.AdminEmailMemberPreviewHandler))
+	r.Get("/admin/emails/{id}", h.RequireAdmin(h.AdminEmailDetailHandler))
+	r.Post("/api/admin/email/cancel", h.RequireAdmin(h.AdminCancelEmailHandler))
 
 	return &accessEnv{t: t, h: h, sessions: store, database: database, router: r}
 }

@@ -1,0 +1,417 @@
+{{define "content"}}
+<div class="px-4 sm:px-6 lg:px-8">
+    {{template "email-admin-head" .}}
+
+    <!-- Membership Reminder Section -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex flex-wrap justify-between items-center gap-2 p-6 hover:bg-gray-50 transition-colors">
+                    <div>
+                        <h2 class="text-lg font-medium text-gray-900">Upozornění na členské příspěvky</h2>
+                        <p class="mt-1 text-sm text-gray-500">Jednou měsíčně po předpisu: před koncem předplatného, na zápornou bilanci a na dluh</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{if .Membership.PrepaidEnabled}}
+                        <span class="badge badge-success">Před koncem předplatného zapnuto</span>
+                        {{else}}
+                        <span class="badge badge-gray">Před koncem předplatného vypnuto</span>
+                        {{end}}
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="membership-prepaid-enabled" class="sr-only peer" {{if .Membership.PrepaidEnabled}}checked{{end}}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                        <span class="text-sm text-gray-700">Posílat upozornění před koncem předplatného</span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="membership-months-ahead" class="block text-sm font-medium text-gray-700 mb-1">Upozornit, když nemá zaplaceno (měsíců dopředu)</label>
+                            <input type="number" id="membership-months-ahead" min="1" max="3" step="1" value="{{.Membership.MonthsAhead}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">1: má zaplaceno nejvýš do konce tohoto měsíce (nebo mu chybí jen část)</p>
+                        </div>
+                        <div>
+                            <label for="membership-suggest-months" class="block text-sm font-medium text-gray-700 mb-1">Doporučená platba (měsíců dopředu)</label>
+                            <input type="number" id="membership-suggest-months" min="1" max="12" step="1" value="{{.Membership.SuggestMonths}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">QR ve všech upozorněních a v profilu nabízí dluh a tolik měsíců</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Upozornění se počítají 1. v měsíci hned po předpisu a odcházejí 4. v 10:00. Každý člen dostane nejvýš jedno za měsíc:
+                        před koncem předplatného, při dluhu aspoň jednoho příspěvku zápornou bilanci, při dluhu aspoň dvou upozornění na dluh.
+                        Těsně před odesláním se vše ověří znovu, takže kdo mezitím zaplatí, e-mail nedostane. Texty se upravují v záložce <a href="/admin/emails/templates?t=prepaid_ending" class="underline">Šablony</a>.
+                    </p>
+                    <p class="text-sm text-gray-600">
+                        Upozornění před koncem předplatného by teď dostalo <strong id="membership-prepaid-count">{{.PrepaidNow}}</strong> členů.
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <button onclick="saveMembershipSettings()" class="btn btn-sm btn-primary">Uložit</button>
+                        <span id="membership-status" class="text-sm hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    <!-- Bar Debt Reminder Section -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex flex-wrap justify-between items-center gap-2 p-6 hover:bg-gray-50 transition-colors">
+                    <div>
+                        <h2 class="text-lg font-medium text-gray-900">Upozornění na dluh na baru</h2>
+                        <p class="mt-1 text-sm text-gray-500">Automatický e-mail členům, jejichž dluh na barovém kiosku přesáhne nastavenou hranici</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{if .BarDebt.Enabled}}
+                        <span class="badge badge-success">Zapnuto</span>
+                        {{else}}
+                        <span class="badge badge-gray">Vypnuto</span>
+                        {{end}}
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="bar-debt-enabled" class="sr-only peer" {{if .BarDebt.Enabled}}checked{{end}}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                        <span class="text-sm text-gray-700">Posílat upozornění</span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div>
+                            <label for="bar-debt-threshold" class="block text-sm font-medium text-gray-700 mb-1">Hranice dluhu (Kč)</label>
+                            <input type="number" id="bar-debt-threshold" min="1" max="100000" step="1" value="{{.BarDebt.ThresholdCZK}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">Upozornit, když dluh přesáhne {{.BarDebt.ThresholdCZK}}&nbsp;Kč</p>
+                        </div>
+                        <div>
+                            <label for="bar-debt-interval" class="block text-sm font-medium text-gray-700 mb-1">Opakovat nejdříve po (dnech)</label>
+                            <input type="number" id="bar-debt-interval" min="1" max="365" step="1" value="{{.BarDebt.IntervalDays}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">Dokud dluh trvá</p>
+                        </div>
+                        <div>
+                            <label for="bar-debt-delay" class="block text-sm font-medium text-gray-700 mb-1">Čekání ve frontě (hodin)</label>
+                            <input type="number" id="bar-debt-delay" min="0" max="168" step="1" value="{{.BarDebt.DelayHours}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">Čas na zrušení před odesláním</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Kontrola běží jednou denně od 10:00. Těsně před odesláním se zůstatek ověří znovu: kdo mezitím dobil, tomu se e-mail zruší, ostatním odejde s aktuální částkou.
+                        Posílá se jen aktivním členům s propojeným barovým účtem. Text e-mailu se upravuje v záložce <a href="/admin/emails/templates?t=bar_debt" class="underline">Šablony</a>.
+                    </p>
+                    <p class="text-sm text-gray-600">
+                        Nad aktuální hranicí je teď <strong id="bar-debt-count">{{.BarDebtorsNow}}</strong> členů.
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <button onclick="saveBarDebtSettings()" class="btn btn-sm btn-primary">Uložit</button>
+                        <span id="bar-debt-status" class="text-sm hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    <!-- Manual debt reminders -->
+    <details class="bg-white shadow rounded-lg mb-6" id="debt-reminders" open>
+        <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 inline">Ruční upozornění na příspěvky</h2>
+                <span class="ml-2 text-sm text-gray-500">zařadí e-mail do fronty s časovačem</span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                {{ if .DebtCandidates }}
+                <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 whitespace-nowrap">{{len .DebtCandidates}} k upozornění</span>
+                {{ end }}
+                {{ if gt .DebtSendable 0 }}
+                <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 whitespace-nowrap">{{.DebtSendable}} k odeslání</span>
+                {{ end }}
+            </div>
+        </summary>
+        <div class="border-t border-gray-200">
+            {{ if .DebtCandidates }}
+            <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-wrap items-end gap-4">
+                <div>
+                    <label for="debt-delay" class="block text-xs font-medium text-gray-700 mb-1">Časovač</label>
+                    <select id="debt-delay" class="block w-40 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="0">Ihned</option>
+                        <option value="1">za 1 hodinu</option>
+                        <option value="6">za 6 hodin</option>
+                        <option value="24" selected>za 24 hodin</option>
+                        <option value="48">za 48 hodin</option>
+                        <option value="72">za 72 hodin</option>
+                        <option value="custom">vlastní…</option>
+                    </select>
+                </div>
+                <div id="debt-delay-custom-wrap" class="hidden">
+                    <label for="debt-delay-custom" class="block text-xs font-medium text-gray-700 mb-1">Hodin (max 168)</label>
+                    <input type="number" id="debt-delay-custom" min="0" max="168" step="1" value="24"
+                           class="block w-28 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+                <label class="flex items-center gap-2 text-sm text-gray-700 pb-2">
+                    <input type="checkbox" id="debt-force" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    Poslat i těm, kteří už upozornění dostali
+                </label>
+                <div class="flex items-center gap-3 ml-auto">
+                    <span id="debt-selection-count" class="text-sm text-gray-500">vybráno 0</span>
+                    <button onclick="queueDebtEmails()" id="debt-submit" class="btn btn-sm btn-primary" disabled
+                            {{ if not .EmailEnabled }}data-email-disabled="true" title="E-maily jsou vypnuté"{{ end }}>Zařadit do fronty</button>
+                </div>
+            </div>
+            <div id="debt-status" class="hidden px-6 py-3 border-b border-gray-200"></div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left">
+                                <input type="checkbox" id="debt-select-all" onchange="toggleAllDebt(this)"
+                                       class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            </th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Člen</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Bilance</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Příspěvek</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Šablona</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Naposledy</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {{ range .DebtCandidates }}
+                        <tr class="{{ template "reminder-row" .Tier }}">
+                            <td class="px-4 py-2">
+                                <input type="checkbox" class="debt-check rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                       value="{{.UserID}}" data-blocked="{{.Blocked}}" onchange="updateDebtSelection()">
+                            </td>
+                            <td class="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">
+                                <a href="/admin/users/{{.UserID}}" class="hover:underline">{{.UserID}} - {{.Name}}</a>
+                                <a href="/admin/emails/member/{{.UserID}}" class="ml-1 text-xs underline">náhled</a>
+                                <span class="text-xs text-gray-400 ml-1">{{.Email}}{{ if eq .Locale "en" }} · EN{{ end }}</span>
+                            </td>
+                            <td class="px-4 py-2 text-sm text-right whitespace-nowrap {{ if lt .Balance 0 }}text-red-600 font-medium{{ else }}text-gray-900{{ end }}">{{.Balance}} Kč <span class="block text-xs text-gray-500 font-normal">zaplaceno do konce {{.PaidThrough}}</span></td>
+                            <td class="px-4 py-2 text-sm text-right text-gray-500 whitespace-nowrap">{{.MonthlyFee}} Kč</td>
+                            <td class="px-4 py-2 text-sm whitespace-nowrap">
+                                {{ template "reminder-tier" .Tier }}
+                            </td>
+                            <td class="px-4 py-2 text-sm whitespace-nowrap">
+                                {{ if .Blocked }}
+                                <span class="text-amber-700">⚠ {{.BlockReason}}</span>
+                                {{ else if .LastRemindedAt.IsZero }}
+                                <span class="text-gray-400">–</span>
+                                {{ else }}
+                                <span class="text-gray-500">před {{.LastRemindedDays}} dny</span>
+                                {{ end }}
+                            </td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            {{ else }}
+            <p class="px-6 py-4 text-sm text-gray-500">Teď nikomu nepatří žádné upozornění.</p>
+            {{ end }}
+        </div>
+    </details>
+
+    {{ template "finance-history" .Finance }}
+
+</div>
+
+<script>
+function saveMembershipSettings() {
+    const status = document.getElementById('membership-status');
+    fetch('/api/admin/membership-email-settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            prepaid_enabled: document.getElementById('membership-prepaid-enabled').checked,
+            months_ahead: parseInt(document.getElementById('membership-months-ahead').value, 10) || 0,
+            suggest_months: parseInt(document.getElementById('membership-suggest-months').value, 10) || 0,
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        status.classList.remove('hidden', 'text-green-600', 'text-red-600');
+        if (data.success) {
+            status.classList.add('text-green-600');
+            status.textContent = data.message || 'Uloženo';
+            document.getElementById('membership-prepaid-count').textContent = data.prepaid;
+        } else {
+            status.classList.add('text-red-600');
+            status.textContent = data.error || 'Chyba';
+        }
+    })
+    .catch(err => {
+        status.classList.remove('hidden', 'text-green-600');
+        status.classList.add('text-red-600');
+        status.textContent = 'Chyba: ' + err.message;
+    });
+}
+
+function saveBarDebtSettings() {
+    const status = document.getElementById('bar-debt-status');
+    fetch('/api/admin/bar-debt-settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            enabled: document.getElementById('bar-debt-enabled').checked,
+            threshold_czk: parseInt(document.getElementById('bar-debt-threshold').value, 10) || 0,
+            interval_days: parseInt(document.getElementById('bar-debt-interval').value, 10) || 0,
+            delay_hours: parseInt(document.getElementById('bar-debt-delay').value, 10),
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        status.classList.remove('hidden', 'text-green-600', 'text-red-600');
+        if (data.success) {
+            status.classList.add('text-green-600');
+            status.textContent = data.message || 'Uloženo';
+            document.getElementById('bar-debt-count').textContent = data.debtors;
+        } else {
+            status.classList.add('text-red-600');
+            status.textContent = data.error || 'Chyba';
+        }
+    })
+    .catch(err => {
+        status.classList.remove('hidden', 'text-green-600');
+        status.classList.add('text-red-600');
+        status.textContent = 'Chyba: ' + err.message;
+    });
+}
+</script>
+<script>
+// Manual reminders: pick members, pick a timer, park the emails in the outbox.
+// Rows flagged as already reminded (or with a reminder still pending) stay
+// unchecked unless the admin ticks the override switch.
+function debtChecks() {
+    return Array.from(document.querySelectorAll('.debt-check'));
+}
+
+function debtSelectedIds() {
+    return debtChecks().filter(c => c.checked).map(c => parseInt(c.value, 10));
+}
+
+function forceEnabled() {
+    const el = document.getElementById('debt-force');
+    return !!(el && el.checked);
+}
+
+function updateDebtSelection() {
+    const selected = debtSelectedIds();
+    const countEl = document.getElementById('debt-selection-count');
+    const submitEl = document.getElementById('debt-submit');
+    if (countEl) countEl.textContent = 'vybráno ' + selected.length;
+    if (submitEl) {
+        const emailOff = submitEl.dataset.emailDisabled === 'true';
+        submitEl.disabled = emailOff || selected.length === 0;
+        submitEl.textContent = selected.length > 0
+            ? 'Zařadit ' + selected.length + ' do fronty'
+            : 'Zařadit do fronty';
+    }
+}
+
+// Select-all skips blocked rows unless the force switch is on, so the common
+// "remind everyone who is due" case cannot accidentally double-mail anyone.
+function toggleAllDebt(master) {
+    const force = forceEnabled();
+    debtChecks().forEach(c => {
+        const blocked = c.dataset.blocked === 'true';
+        c.checked = master.checked && (force || !blocked);
+    });
+    updateDebtSelection();
+}
+
+document.getElementById('debt-force')?.addEventListener('change', () => {
+    const master = document.getElementById('debt-select-all');
+    if (master && master.checked) toggleAllDebt(master);
+    else updateDebtSelection();
+});
+
+document.getElementById('debt-delay')?.addEventListener('change', (e) => {
+    const wrap = document.getElementById('debt-delay-custom-wrap');
+    if (wrap) wrap.classList.toggle('hidden', e.target.value !== 'custom');
+});
+
+function debtDelayHours() {
+    const select = document.getElementById('debt-delay');
+    if (select.value !== 'custom') return parseFloat(select.value);
+    const custom = parseFloat(document.getElementById('debt-delay-custom').value);
+    return isNaN(custom) ? 24 : custom;
+}
+
+function showDebtStatus(type, html) {
+    const el = document.getElementById('debt-status');
+    if (!el) return;
+    const colors = {
+        success: 'bg-green-50 text-green-800',
+        error: 'bg-red-50 text-red-800',
+        info: 'bg-blue-50 text-blue-800',
+    };
+    el.className = 'px-6 py-3 border-b border-gray-200 text-sm rounded-none ' + (colors[type] || colors.info);
+    el.innerHTML = html;
+    el.classList.remove('hidden');
+}
+
+function queueDebtEmails() {
+    const ids = debtSelectedIds();
+    if (ids.length === 0) return;
+
+    const hours = debtDelayHours();
+    if (hours < 0 || hours > 168) {
+        showDebtStatus('error', 'Časovač musí být mezi 0 a 168 hodinami.');
+        return;
+    }
+
+    const when = hours === 0 ? 'ihned' : 'za ' + hours + ' h';
+    if (!confirm('Zařadit ' + ids.length + ' upozornění do fronty (' + when + ')?')) return;
+
+    const btn = document.getElementById('debt-submit');
+    btn.disabled = true;
+    btn.textContent = 'Zařazuji…';
+    showDebtStatus('info', 'Zařazuji e-maily…');
+
+    fetch('/api/admin/email/debt-notify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_ids: ids, delay_hours: hours, force: forceEnabled()})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            showDebtStatus('error', 'Chyba: ' + esc(data.error || 'Neznámá chyba'));
+            updateDebtSelection();
+            return;
+        }
+        let html = `<strong>${esc(data.message)}</strong>`;
+        if (data.skipped && data.skipped.length > 0) {
+            html += '<ul class="mt-2 list-disc list-inside">';
+            data.skipped.forEach(s => {
+                html += `<li>${esc(s.email || ('#' + s.user_id))}: ${esc(s.reason)}</li>`;
+            });
+            html += '</ul>';
+        }
+        html += '<p class="mt-2"><a class="underline" href="/admin/emails">Zkontrolovat frontu →</a></p>';
+        showDebtStatus((data.queued && data.queued.length > 0) ? 'success' : 'error', html);
+        // Re-render so the "Naposledy" column and the blocked flags reflect the send.
+        setTimeout(() => location.reload(), 2500);
+    })
+    .catch(err => {
+        showDebtStatus('error', 'Chyba: ' + esc(err.message));
+        updateDebtSelection();
+    });
+}
+
+updateDebtSelection();
+</script>
+{{end}}

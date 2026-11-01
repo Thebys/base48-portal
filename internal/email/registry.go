@@ -146,3 +146,47 @@ func (t TemplateSpec) CheckPlaceholders(text string) error {
 	sort.Strings(names)
 	return fmt.Errorf("neznámé %s, šablona zná %s", strings.Join(unknown, ", "), strings.Join(names, ", "))
 }
+
+// TemplateLabel is the Czech name of the email an outbox template_name
+// stands for, or the file name when it is none of the registry's.
+func TemplateLabel(file string) string {
+	for _, t := range Templates {
+		if t.File() == file {
+			return t.Label
+		}
+	}
+	return file
+}
+
+// Scenario is a situation the admin can preview an email in.
+type Scenario struct {
+	Key   string
+	Label string
+	// Balance in monthly fees, for the membership reminders.
+	Balance float64
+}
+
+// Scenarios lists what the admin can preview each email in; the first is the
+// default. The membership reminders get standings their real rule would pick
+// them for, so a preview cannot show a case the monthly run never sends.
+func Scenarios(template string) []Scenario {
+	switch template {
+	case TierPrepaidEnding:
+		return []Scenario{
+			{"paid", "Zaplaceno do konce měsíce", 0},
+			{"credit", "Zaplaceno a půl měsíce navíc", 0.5},
+			{"short", "Na tento měsíc chybí část", -0.3},
+		}
+	case TierNegativeBalance:
+		return []Scenario{
+			{"one", "Dluží jeden příspěvek", -1},
+			{"more", "Dluží jeden a půl příspěvku", -1.5},
+		}
+	case TierDebtWarning:
+		return []Scenario{
+			{"two", "Dluží dva příspěvky", -2},
+			{"more", "Dluží čtyři a půl příspěvku", -4.5},
+		}
+	}
+	return []Scenario{{"sample", "Ukázka", 0}}
+}

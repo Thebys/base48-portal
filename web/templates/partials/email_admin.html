@@ -1,0 +1,35 @@
+{{/* Shared by the pages of the e-mail admin (/admin/emails): the heading
+     with the tabs and whether mail can leave at all. Takes the page data. */}}
+{{ define "email-admin-head" }}
+<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900">E-maily</h1>
+        <p class="mt-1 text-sm text-gray-500">Fronta, texty šablon a upozornění na příspěvky</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+        {{if .EmailEnabled}}<span class="badge badge-success">E-maily zapnuté</span>{{else}}<span class="badge badge-warning" title="EMAIL_ENABLED=false: nic se nezařazuje ani neodesílá">E-maily vypnuté</span>{{end}}
+        {{if not .SMTPConfigured}}<span class="badge badge-warning">SMTP chybí</span>
+        {{else if .SMTPReachable}}<span class="badge badge-success">SMTP dostupné</span>{{if .SMTPSkipTLS}} <span class="badge badge-gray" title="SMTP_SKIP_TLS: místní relay bez ověření certifikátu">místní relay</span>{{end}}
+        {{else}}<span class="badge badge-danger">SMTP nedostupné</span>{{end}}
+    </div>
+</div>
+<nav class="tabs">
+    {{range .Tabs}}<a href="{{.Path}}"{{if .Active}} class="active" aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+</nav>
+{{if not .EmailEnabled}}
+<div class="rounded-md bg-yellow-50 p-4 mb-6 text-sm text-yellow-800">
+    E-maily jsou vypnuté (<code>EMAIL_ENABLED=false</code>). Nic se nezařazuje ani neodesílá, ani to, co už ve frontě čeká. Testovací e-mail ze šablon odejde.
+</div>
+{{end}}
+{{ end }}
+
+{{/* The actions on one outbox entry; takes an outboxRow. js/admin-emails.js
+     sends them. */}}
+{{ define "outbox-actions" }}
+{{if and (eq .Status "pending") (not .Busy)}}
+<button type="button" class="btn btn-sm btn-primary" data-outbox-action="send-now" data-id="{{.ID}}" data-confirm="Odeslat e-mail #{{.ID}} hned? Předtím se ještě ověří, že pořád platí.">Odeslat hned</button>
+<button type="button" class="btn btn-sm btn-quiet" data-outbox-action="cancel" data-id="{{.ID}}" data-confirm="Zrušit e-mail #{{.ID}}? Vrátit to nejde.">Zrušit</button>
+{{else if eq .Status "failed"}}
+<button type="button" class="btn btn-sm btn-primary" data-outbox-action="retry" data-id="{{.ID}}" data-confirm="Poslat e-mail #{{.ID}} znovu? Předtím se ještě ověří, že pořád platí.">Znovu</button>
+{{end}}
+{{ end }}

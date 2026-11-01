@@ -1,6 +1,7 @@
 package email
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -8,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/base48/member-portal/internal/dues"
 )
 
 var (
@@ -120,5 +123,38 @@ func TestCheckPlaceholders(t *testing.T) {
 	welcome, _ := TemplateByKey("welcome")
 	if err := welcome.CheckPlaceholders("{cokoli}"); err != nil {
 		t.Errorf("a template without placeholders refused text: %v", err)
+	}
+}
+
+// Every scenario of a membership reminder classifies as that reminder, so a
+// preview shows what the run would send.
+func TestScenariosMatchTheirReminder(t *testing.T) {
+	policy := DefaultMembershipSettings().Policy()
+	policy.Prepaid = true
+	for _, tier := range MembershipTiers {
+		for _, sc := range Scenarios(tier) {
+			st := dues.Standing{Fee: 1000, Balance: sc.Balance * 1000, Anchor: dues.Month{Year: 2026, Month: 11}}
+			if got := dues.Classify(st, st.Anchor, policy); got != tier {
+				t.Errorf("%s / %s classifies as %q", tier, sc.Key, got)
+			}
+		}
+	}
+}
+
+func TestDraftStandsInForSavedText(t *testing.T) {
+	c, _ := barTestClient(t)
+	ctx := context.Background()
+	draft := c.WithDraft("welcome", "cs", map[string]string{"heading": "Zkušební nadpis", "unknown": "x"})
+	if got := draft.LoadRawContentBlocks(ctx, "welcome", "cs")["heading"]; got != "Zkušební nadpis" {
+		t.Errorf("draft heading %q", got)
+	}
+	if _, ok := draft.LoadRawContentBlocks(ctx, "welcome", "cs")["unknown"]; ok {
+		t.Error("a block the template lacks came in with the draft")
+	}
+	if got := draft.LoadRawContentBlocks(ctx, "welcome", "en")["heading"]; got == "Zkušební nadpis" {
+		t.Error("the Czech draft showed in English")
+	}
+	if got := c.LoadRawContentBlocks(ctx, "welcome", "cs")["heading"]; got == "Zkušební nadpis" {
+		t.Error("the draft leaked into the shared client")
 	}
 }

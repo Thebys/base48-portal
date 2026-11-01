@@ -49,7 +49,7 @@ portal-cron daemon   # Vše na jednom místě (sync á 2 min, poplatky a upomín
 portal-cron sync     # Synchronizace plateb + role sync (každé 2 min)
 portal-cron fees     # Měsíční poplatky (1. den v měsíci)
 portal-cron debt-emails      # Upomínky na členské příspěvky za tento měsíc (-dry-run jen vypíše, kdo by co dostal)
-portal-cron bar-debt-emails  # Upomínky dluhu na baru (zapíná se a nastavuje v Admin → Nastavení)
+portal-cron bar-debt-emails  # Upomínky dluhu na baru (zapíná se a nastavuje v Správa → E-maily → Upozornění)
 portal-cron report   # Report nespárovaných plateb (ad-hoc)
 ```
 
