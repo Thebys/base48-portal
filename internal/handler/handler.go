@@ -680,6 +680,10 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 		filepath.Join(h.webRoot, "templates", "layout.html"),
 		filepath.Join(h.webRoot, "templates", name),
 	)
+	if err == nil {
+		// Blocks more than one page uses, e.g. "payment-qr".
+		_, err = tmpl.ParseGlob(filepath.Join(h.webRoot, "templates", "partials", "*.html"))
+	}
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Template parse error: %v", err), http.StatusInternalServerError)
 		return

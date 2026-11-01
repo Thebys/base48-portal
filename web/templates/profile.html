@@ -146,31 +146,7 @@
 
         {{if .DBUser.PaymentsID.Valid}}
         {{if .PaymentQRCode}}
-        <!-- QR Payment Code -->
-        <div class="mt-6 pt-6 border-t border-gray-200">
-            <div class="flex flex-col sm:flex-row items-center gap-4">
-                <div class="flex-shrink-0">
-                    <a href="/api/qr?vs={{.TargetDBUser.PaymentsID.String}}&amount={{printf "%.0f" .QRAmount}}" target="_blank" title="Otevřít QR kód pro sdílení do bankovní aplikace">
-                        <img src="{{.PaymentQRCode}}" alt="QR platba" width="150" height="150" class="rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
-                    </a>
-                </div>
-                <div class="text-center sm:text-left">
-                    <h3 class="text-sm font-medium text-gray-900">QR kód pro členský příspěvek</h3>
-                    <p class="mt-1 text-sm text-gray-500">
-                        Klikni na QR kód pro otevření v bankovní aplikaci.
-                    </p>
-                    <p class="mt-2 text-sm {{if lt .Balance 0.0}}text-red-600 font-medium{{else}}text-gray-600{{end}}">
-                        Částka: {{printf "%.0f" .QRAmount}} Kč{{if lt .Balance 0.0}} (doplatek dluhu){{end}}
-                    </p>
-                    {{with .PaymentAccount}}
-                    <p class="mt-2 text-sm text-gray-600">
-                        Číslo účtu: <span class="font-mono font-medium text-gray-900">{{.Domestic}}</span><br>
-                        IBAN: <span class="font-mono">{{.PrettyIBAN}}</span>
-                    </p>
-                    {{end}}
-                </div>
-            </div>
-        </div>
+        {{template "payment-qr" .}}
         {{end}}
         {{end}}
         {{else if eq .DBUser.State "external"}}
@@ -197,22 +173,14 @@
         <h2 class="text-lg font-medium text-gray-900 mb-4">Členství a platby</h2>
 
         <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <div class="bg-gray-50 px-4 py-3 rounded-md text-center">
-                <div class="text-2xl font-bold text-gray-900">{{.Level.Name}}</div>
-                <div class="text-xs text-gray-500">Úroveň · {{.Level.Amount}} Kč/měsíc</div>
+            <div class="bg-indigo-50 px-4 py-3 rounded-md text-center">
+                <div class="text-2xl font-bold text-indigo-900">{{.Level.Name}}</div>
+                <div class="text-xs text-indigo-600">{{.Level.Amount}} Kč/měsíc ·
+                    {{if .DBUser.PaymentsID.Valid}}VS <span class="font-mono font-semibold">{{.DBUser.PaymentsID.String}}</span>{{else}}VS nepřiřazen{{end}}</div>
             </div>
             <div class="bg-purple-50 px-4 py-3 rounded-md text-center">
                 <div class="text-2xl font-bold text-purple-900">{{.DBUser.DateJoined.Format "02. 01. 2006"}}</div>
                 <div class="text-xs text-purple-600">Členem od</div>
-            </div>
-            <div class="bg-indigo-50 px-4 py-3 rounded-md text-center">
-                {{if .DBUser.PaymentsID.Valid}}
-                <div class="text-2xl font-bold text-indigo-900 font-mono tracking-wider">{{.DBUser.PaymentsID.String}}</div>
-                <div class="text-xs text-indigo-600">VS · bez něj vyžaduje platba manuální zásah</div>
-                {{else}}
-                <div class="text-2xl font-bold text-indigo-300">–</div>
-                <div class="text-xs text-indigo-400">VS · nepřiřazen</div>
-                {{end}}
             </div>
             <div class="bg-blue-50 px-4 py-3 rounded-md text-center">
                 <div class="text-2xl font-bold text-blue-900">{{fmtNum .TotalPaid}} Kč</div>
@@ -235,31 +203,7 @@
         </dl>
 
         {{if .PaymentQRCode}}
-        <!-- QR Payment Code -->
-        <div class="mt-6 pt-6 border-t border-gray-200">
-            <div class="flex flex-col sm:flex-row items-center gap-4">
-                <div class="flex-shrink-0">
-                    <a href="/api/qr?vs={{.TargetDBUser.PaymentsID.String}}&amount={{printf "%.0f" .QRAmount}}" target="_blank" title="Otevřít QR kód pro sdílení do bankovní aplikace">
-                        <img src="{{.PaymentQRCode}}" alt="QR platba" width="150" height="150" class="rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
-                    </a>
-                </div>
-                <div class="text-center sm:text-left">
-                    <h3 class="text-sm font-medium text-gray-900">QR kód pro členský příspěvek</h3>
-                    <p class="mt-1 text-sm text-gray-500">
-                        Klikni na QR kód pro otevření v bankovní aplikaci.
-                    </p>
-                    <p class="mt-2 text-sm {{if lt .Balance 0.0}}text-red-600 font-medium{{else}}text-gray-600{{end}}">
-                        Částka: {{printf "%.0f" .QRAmount}} Kč{{if lt .Balance 0.0}} (doplatek dluhu){{end}}
-                    </p>
-                    {{with .PaymentAccount}}
-                    <p class="mt-2 text-sm text-gray-600">
-                        Číslo účtu: <span class="font-mono font-medium text-gray-900">{{.Domestic}}</span><br>
-                        IBAN: <span class="font-mono">{{.PrettyIBAN}}</span>
-                    </p>
-                    {{end}}
-                </div>
-            </div>
-        </div>
+        {{template "payment-qr" .}}
         {{end}}
 
         {{if .User.Roles}}

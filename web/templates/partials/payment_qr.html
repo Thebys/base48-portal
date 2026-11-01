@@ -1,0 +1,30 @@
+{{/* How to pay the member's fee: QR code, amount, account and VS. Used by the
+     member's own profile and the admin's view of it; expects .PaymentQRCode,
+     .TargetDBUser, .QRAmount, .Balance and .PaymentAccount. */}}
+{{ define "payment-qr" }}
+<div class="mt-6 pt-6 border-t border-gray-200">
+    <div class="flex flex-col sm:flex-row items-center gap-4">
+        <div class="flex-shrink-0">
+            <a href="/api/qr?vs={{.TargetDBUser.PaymentsID.String}}&amount={{printf "%.0f" .QRAmount}}" target="_blank" title="Otevřít QR kód pro sdílení do bankovní aplikace">
+                <img src="{{.PaymentQRCode}}" alt="QR platba" width="150" height="150" class="rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
+            </a>
+        </div>
+        <div class="text-center sm:text-left">
+            <h3 class="text-sm font-medium text-gray-900">QR kód pro členský příspěvek</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                Klikni na QR kód pro otevření v bankovní aplikaci.
+            </p>
+            <p class="mt-2 text-sm {{if lt .Balance 0.0}}text-red-600 font-medium{{else}}text-gray-600{{end}}">
+                Částka: {{printf "%.0f" .QRAmount}} Kč{{if lt .Balance 0.0}} (doplatek dluhu){{end}}
+            </p>
+            <p class="mt-2 text-sm text-gray-600">
+                {{with .PaymentAccount}}
+                Číslo účtu: <span class="font-mono font-medium text-gray-900">{{.Domestic}}</span><br>
+                IBAN: <span class="font-mono">{{.PrettyIBAN}}</span><br>
+                {{end}}
+                Variabilní symbol: <span class="font-mono font-medium text-gray-900">{{.TargetDBUser.PaymentsID.String}}</span>
+            </p>
+        </div>
+    </div>
+</div>
+{{ end }}

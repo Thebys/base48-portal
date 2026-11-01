@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
@@ -113,5 +114,30 @@ func TestRecentPaymentsShowWhatMoneyWentOn(t *testing.T) {
 		if strings.Contains(page, leak) {
 			t.Errorf("page shows %q", leak)
 		}
+	}
+}
+
+func TestProfileShowsTheVSWithThePaymentDetails(t *testing.T) {
+	e := newAccessEnv(t)
+	recordPaymentAccount(t, e.h.queries, time.Now())
+	member, memberID := e.user("member", "accepted", nil)
+	var vs string
+	e.database.QueryRow(`SELECT payments_id FROM users WHERE id = ?`, memberID).Scan(&vs)
+	// A level with a fee, or there is nothing to pay and no QR code.
+	e.database.Exec(`UPDATE users SET level_id = (SELECT id FROM levels WHERE name = 'Regular') WHERE id = ?`, memberID)
+
+	page := e.do(member, http.MethodGet, "/profile", "").Body.String()
+	for _, want := range []string{
+		"2003436319/2010",
+		"CZ66 2010 0000 0020 0343 6319",
+		`Variabilní symbol: <span class="font-mono font-medium text-gray-900">` + vs + `</span>`,
+		`Kč/měsíc ·`, // the VS sits in the level tile, not a tile of its own
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("profile lacks %q", want)
+		}
+	}
+	if strings.Contains(page, "VS · bez něj") {
+		t.Error("profile still has the separate VS tile")
 	}
 }
