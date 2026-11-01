@@ -16,6 +16,6 @@
 !web/
 
 # Excluded from the re-included directories above.
+# testdata/ stays in: golden e-mails are compared in the test stage.
 # Test files are kept: the optional `test` build stage runs `go test ./...`.
 cmd/test/
-**/testdata/
