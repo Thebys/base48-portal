@@ -1,92 +1,80 @@
 {{ define "content" }}
+<style>
+/* One line per payment; the rest (our account, raw FIO data) opens below it
+   across the whole table instead of widening a column. */
+    .statement td, .statement th { padding: 8px 10px; font-size: 13px; text-align: left; white-space: nowrap; }
+    .statement th { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); background: var(--surface-sunken); }
+    .statement tbody { border-top: 1px solid var(--line); }
+    .statement tbody:hover .main { background: var(--surface-muted); }
+    .statement .num { text-align: right; font-weight: 600; }
+    .statement .in { color: var(--money-positive); }
+    .statement .out { color: var(--money-negative); }
+    .statement .vs { font-family: 'Courier New', monospace; font-size: 12px; }
+    .statement .clip { max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
+    .statement .muted { color: var(--ink-4); }
+    .statement .detail td { white-space: normal; background: var(--surface-sunken); color: var(--ink-2); }
+    .statement .detail dl { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-bottom: 8px; }
+    .statement .detail dt { display: inline; color: var(--ink-3); }
+    .statement .detail dd { display: inline; margin: 0 0 0 4px; }
+    .statement pre { max-height: 20rem; overflow: auto; padding: 8px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 4px; background: var(--surface-muted); }
+    .statement .toggle { color: var(--accent-blue); background: none; border: 0; cursor: pointer; font-size: 12px; }
+</style>
+
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="mb-6">
-        <div class="flex items-center justify-between">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-900">Výpis plateb</h1>
-                <p class="mt-1 text-sm text-gray-500">Kompletní bankovní výpis za aktuální a minulý měsíc</p>
-            </div>
-            <a href="/admin/finance" class="text-sm text-blue-600 hover:text-blue-800">&larr; Zpět na finanční přehled</a>
+    <div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Výpis plateb</h1>
+            <p class="mt-1 text-sm text-gray-500">Bankovní výpis za aktuální a minulý měsíc</p>
+        </div>
+        <div class="flex flex-wrap gap-4 text-sm">
+            <a href="/admin/payments/outgoing?unassigned=1" class="text-blue-600 hover:text-blue-800">Odchozí platby a projekty</a>
+            <a href="/admin/finance" class="text-blue-600 hover:text-blue-800">&larr; Zpět na finanční přehled</a>
         </div>
     </div>
 
-    <div class="bg-white shadow rounded-lg overflow-hidden">
+    <div class="bg-white shadow rounded-lg">
         {{ if .Payments }}
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+            <table class="statement w-full">
+                <thead>
                     <tr>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Datum</th>
-                        <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Částka</th>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VS</th>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Typ</th>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Náš účet</th>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Protiúčet</th>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Přiřazeno</th>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Komentář</th>
-                        <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raw data</th>
+                        <th>Datum</th>
+                        <th class="num">Částka</th>
+                        <th>VS</th>
+                        <th>Protiúčet</th>
+                        <th>Přiřazeno</th>
+                        <th>Komentář</th>
+                        <th></th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {{ range .Payments }}
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
-                            {{.ID}}
+                {{ range .Payments }}
+                <tbody>
+                    <tr class="main">
+                        <td>{{.Date.Format "02.01.2006"}}</td>
+                        <td class="num {{ if lt .Value 0.0 }}out{{ else }}in{{ end }}">{{ if gt .Value 0.0 }}+{{ end }}{{fmtKc .Value}} Kč</td>
+                        <td class="vs">{{ if .Identification }}{{.Identification}}{{ else }}<span class="muted">–</span>{{ end }}</td>
+                        <td>{{ if .RemoteAccount }}{{.RemoteAccount}}{{ else }}<span class="muted">–</span>{{ end }}</td>
+                        <td class="clip">
+                            {{ if .UserName }}<a href="/admin/users/{{.UserID.Int64}}" class="text-blue-600 hover:text-blue-800">{{.UserName}}</a>
+                            {{ else if .ProjectName }}<span class="badge badge-purple">{{.ProjectName}}</span>
+                            {{ else }}<span class="muted">–</span>{{ end }}
                         </td>
-                        <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
-                            {{.Date.Format "02.01.2006"}}
-                        </td>
-                        <td class="px-3 py-3 whitespace-nowrap text-sm text-right font-medium {{ if .IsNegative }}text-red-600{{ else }}text-green-600{{ end }}">
-                            {{.Amount}} Kč
-                        </td>
-                        <td class="px-3 py-3 whitespace-nowrap text-sm">
-                            {{ if .Identification }}
-                            <span class="font-mono bg-gray-100 px-2 py-1 rounded text-xs">{{.Identification}}</span>
-                            {{ else }}
-                            <span class="text-gray-400">–</span>
-                            {{ end }}
-                        </td>
-                        <td class="px-3 py-3 whitespace-nowrap text-sm">
-                            {{ if eq .Kind "fio" }}
-                            <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">fio</span>
-                            {{ else if eq .Kind "manual" }}
-                            <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">manual</span>
-                            {{ else }}
-                            <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">{{.Kind}}</span>
-                            {{ end }}
-                        </td>
-                        <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{.LocalAccount}}">
-                            {{ if .LocalAccount }}{{.LocalAccount}}{{ else }}<span class="text-gray-400">–</span>{{ end }}
-                        </td>
-                        <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{.RemoteAccount}}">
-                            {{ if .RemoteAccount }}{{.RemoteAccount}}{{ else }}<span class="text-gray-400">–</span>{{ end }}
-                        </td>
-                        <td class="px-3 py-3 whitespace-nowrap text-sm">
-                            {{ if .UserName }}
-                            <a href="/admin/users/{{.UserID.Int64}}" class="text-blue-600 hover:text-blue-800">{{.UserName}}</a>
-                            {{ else if .ProjectName }}
-                            <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">{{.ProjectName}}</span>
-                            {{ else }}
-                            <span class="text-gray-400">–</span>
-                            {{ end }}
-                        </td>
-                        <td class="px-3 py-3 text-sm text-gray-500 max-w-[150px] truncate" title="{{ if .StaffComment.Valid }}{{.StaffComment.String}}{{ end }}">
-                            {{ if .StaffComment.Valid }}{{.StaffComment.String}}{{ else }}<span class="text-gray-400">–</span>{{ end }}
-                        </td>
-                        <td class="px-3 py-3 text-sm">
-                            {{ if .RawData.Valid }}
-                            <details class="cursor-pointer">
-                                <summary class="text-blue-600 hover:text-blue-800 text-xs">JSON</summary>
-                                <pre class="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto max-w-[300px] max-h-[200px]">{{.RawData.String}}</pre>
-                            </details>
-                            {{ else }}
-                            <span class="text-gray-400">–</span>
-                            {{ end }}
+                        <td class="clip" {{ if .StaffComment.Valid }}title="{{.StaffComment.String}}"{{ end }}>{{ if .StaffComment.Valid }}{{.StaffComment.String}}{{ else }}<span class="muted">–</span>{{ end }}</td>
+                        <td><button type="button" class="toggle" aria-expanded="false" onclick="toggleDetail(this)">detail</button></td>
+                    </tr>
+                    <tr class="detail" hidden>
+                        <td colspan="7">
+                            <dl>
+                                <div><dt>ID</dt><dd>#{{.ID}}</dd></div>
+                                <div><dt>Náš účet</dt><dd>{{.LocalAccount}}</dd></div>
+                                <div><dt>Zdroj</dt><dd>{{.Kind}} {{.KindID}}</dd></div>
+                                {{ if .PublicNote.Valid }}<div><dt>Popis pro členy</dt><dd>{{.PublicNote.String}}</dd></div>{{ end }}
+                            </dl>
+                            {{ if .RawPretty }}<pre>{{.RawPretty}}</pre>{{ end }}
                         </td>
                     </tr>
-                    {{ end }}
                 </tbody>
+                {{ end }}
             </table>
         </div>
         {{ else }}
@@ -96,4 +84,13 @@
         {{ end }}
     </div>
 </div>
+
+<script>
+function toggleDetail(button) {
+    const detail = button.closest('tbody').querySelector('.detail');
+    detail.hidden = !detail.hidden;
+    button.setAttribute('aria-expanded', String(!detail.hidden));
+    button.textContent = detail.hidden ? 'detail' : 'skrýt';
+}
+</script>
 {{ end }}

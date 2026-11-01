@@ -1,7 +1,8 @@
 package handler
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,14 +10,6 @@ import (
 	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/db"
 )
-
-// RecentPaymentView holds payment data for display in recent payments list.
-type RecentPaymentView struct {
-	db.Payment
-	UserName    string // For admin view: assigned user name
-	ProjectName string // For admin view: assigned project name
-	IsNegative  bool   // True if amount is negative (outgoing payment)
-}
 
 // memberRecentPayment is a bank payment as members see it: a payment in with
 // its VS, or a payment out with what it was for.
@@ -88,82 +81,74 @@ func (h *Handler) MemberRecentPaymentsHandler(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// AdminRecentPaymentsHandler shows full bank statement for admins.
-// Displays all payment details including raw JSON data.
+// statementRow is one line of the admins' bank statement.
+type statementRow struct {
+	db.Payment
+	Value       float64
+	UserName    string
+	ProjectName string
+	RawPretty   string // raw_data indented for reading
+}
+
+// AdminRecentPaymentsHandler shows the bank statement of this and last month
+// with everything the portal knows about each payment.
 // GET /admin/payments/recent
 func (h *Handler) AdminRecentPaymentsHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/login", http.StatusTemporaryRedirect)
-		return
-	}
-
+	user := h.auth.GetUser(r) // RequireAdmin let them in
 	dbUser, err := h.getOrCreateUser(r, user)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-
 	ctx := r.Context()
 
-	// Get all recent payments
 	payments, err := h.queries.ListRecentPayments(ctx)
 	if err != nil {
 		http.Error(w, "Failed to load payments", http.StatusInternalServerError)
 		return
 	}
-
-	// Build user and project maps for displaying assigned payment info
-	users, _ := h.queries.ListUsers(ctx)
-	userMap := make(map[int64]db.User)
+	users, err := h.queries.ListUsers(ctx)
+	if err != nil {
+		http.Error(w, "Failed to load payments", http.StatusInternalServerError)
+		return
+	}
+	projects, err := h.queries.ListProjects(ctx)
+	if err != nil {
+		http.Error(w, "Failed to load payments", http.StatusInternalServerError)
+		return
+	}
+	userNames := make(map[int64]string, len(users))
 	for _, u := range users {
-		userMap[u.ID] = u
+		userNames[u.ID] = u.DisplayName()
 	}
-
-	projects, _ := h.queries.ListProjects(ctx)
-	projectMap := make(map[int64]db.Project)
+	projectNames := make(map[int64]string, len(projects))
 	for _, p := range projects {
-		projectMap[p.ID] = p
+		projectNames[p.ID] = p.Name
 	}
 
-	// Enrich payments with user/project names
-	var paymentViews []RecentPaymentView
+	rows := make([]statementRow, 0, len(payments))
 	for _, p := range payments {
-		view := RecentPaymentView{Payment: p}
-
-		// Check if amount is negative
-		var amount float64
-		if _, err := fmt.Sscanf(p.Amount, "%f", &amount); err == nil && amount < 0 {
-			view.IsNegative = true
-		}
-
+		row := statementRow{Payment: p}
+		row.Value, _ = strconv.ParseFloat(p.Amount, 64)
 		if p.UserID.Valid {
-			if u, ok := userMap[p.UserID.Int64]; ok {
-				if u.Realname.Valid && u.Realname.String != "" {
-					view.UserName = u.Realname.String
-				} else if u.Username.Valid && u.Username.String != "" {
-					view.UserName = u.Username.String
-				} else {
-					view.UserName = u.Email
-				}
-			}
+			row.UserName = userNames[p.UserID.Int64]
 		}
-
 		if p.ProjectID.Valid {
-			if proj, ok := projectMap[p.ProjectID.Int64]; ok {
-				view.ProjectName = proj.Name
-			}
+			row.ProjectName = projectNames[p.ProjectID.Int64]
 		}
-
-		paymentViews = append(paymentViews, view)
+		var pretty bytes.Buffer
+		if p.RawData.Valid && json.Indent(&pretty, []byte(p.RawData.String), "", "  ") == nil {
+			row.RawPretty = pretty.String()
+		} else {
+			row.RawPretty = p.RawData.String
+		}
+		rows = append(rows, row)
 	}
 
-	data := map[string]interface{}{
+	h.render(w, "admin_payments_recent.html", map[string]interface{}{
 		"Title":    "Výpis plateb",
 		"User":     user,
 		"DBUser":   dbUser,
-		"Payments": paymentViews,
-	}
-
-	h.render(w, "admin_payments_recent.html", data)
+		"Payments": rows,
+	})
 }
