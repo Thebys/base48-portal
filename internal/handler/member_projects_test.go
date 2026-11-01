@@ -37,9 +37,9 @@ func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
 		"vybráno 50" + nbsp + "000 Kč",     // raised
 		"utraceno 24" + nbsp + "537,90 Kč", // spent
 		"-22" + nbsp + "977,90 Kč",
-		"Doplatek zvedáku<", // the approved note
-		">výdaj<",           // an expense without a note
-		"123456789/0800",    // members see donors' accounts
+		"Doplatek zvedáku", // the approved note
+		">výdaj<",          // an expense without a note
+		"123456789/0800",   // members see donors' accounts
 		"Zvedák a vybavení",
 		`data-vs="202646"`,
 	} {
@@ -48,9 +48,29 @@ func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
 		}
 	}
 	// Who was paid and what the bank said stay with the admins.
-	for _, leak := range []string{"330981999", "1832792017", "Dodavatel zvedáků", "260908"} {
+	for _, leak := range []string{"330981999", "1832792017", "Dodavatel zvedáků", "260908", "Smazat projekt", "Přidat VS"} {
 		if strings.Contains(page, leak) {
-			t.Errorf("page shows %q of an expense", leak)
+			t.Errorf("page shows %q", leak)
+		}
+	}
+
+	// The admin page is the same page with the controls and what members do
+	// not see of an expense: whom it was paid to, and the staff comment.
+	if _, err := e.database.Exec(`UPDATE payments SET staff_comment = 'faktura v šanonu' WHERE kind_id = 'lift'`); err != nil {
+		t.Fatal(err)
+	}
+	admin, _ := e.user("admin", "accepted", []string{"memberportal_admin"})
+	if rec := e.do(member, http.MethodGet, "/admin/projects", ""); rec.Code == http.StatusOK {
+		t.Fatal("a member got the admin projects page")
+	}
+	rec = e.do(admin, http.MethodGet, "/admin/projects", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/projects as admin = %d", rec.Code)
+	}
+	adminPage := rec.Body.String()
+	for _, want := range []string{"Přidat VS", "Projekt s platbami nejde smazat", "330981999/0300", "faktura v šanonu", "25" + nbsp + "462,10 Kč"} {
+		if !strings.Contains(adminPage, want) {
+			t.Errorf("admin page lacks %q", want)
 		}
 	}
 }

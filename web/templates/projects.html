@@ -1,0 +1,335 @@
+{{ define "content" }}
+<style>
+/* Fundraising, for members and (with .Manage) for admins: one page, one set of styles. */
+    .fr { max-width: 1100px; margin: 0 auto; padding: 24px 16px 40px; }
+    .fr-head { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; }
+    .fr-head h1 { font-size: 28px; font-weight: 700; color: var(--ink); }
+    .fr-head p { margin-top: 4px; max-width: 62ch; font-size: 14px; color: var(--ink-3); }
+    .fr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .muted { color: var(--ink-3); }
+    .empty { padding: 24px; text-align: center; color: var(--ink-3); }
+
+    .project { margin-bottom: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-card); }
+    .project > summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 6px 24px;
+        padding: 16px 20px;
+        list-style: none;
+        cursor: pointer;
+    }
+    .project > summary::-webkit-details-marker { display: none; }
+    .project > summary:hover { background: var(--surface-muted); }
+    .project-name { font-size: 18px; font-weight: 600; color: var(--ink); }
+    .project-name::before { content: "▸"; display: inline-block; width: 1em; color: var(--ink-4); transition: transform .15s; }
+    .project[open] .project-name::before { transform: rotate(90deg); }
+    .project-vs { margin-top: 6px; font-size: 13px; color: var(--ink-3); }
+
+    .vs-tag {
+        display: inline-flex; align-items: center; gap: 4px;
+        margin: 0 4px 4px 0; padding: 2px 8px;
+        border-radius: 12px; white-space: nowrap;
+        font-family: 'Courier New', monospace; font-size: 12px; font-weight: 600;
+        background: var(--tint-blue-bg); color: var(--tint-blue-fg);
+    }
+    .vs-tag.primary { background: var(--tint-green-bg); color: var(--tint-green-fg); }
+    .vs-tag small { font-family: inherit; font-weight: 400; opacity: .8; }
+
+    .money { text-align: right; }
+    .money-left { font-size: 24px; font-weight: 700; line-height: 1.2; white-space: nowrap; color: var(--money-positive); }
+    .money-left.over { color: var(--money-negative); }
+    .money-label { font-size: 12px; color: var(--ink-3); }
+    .money-flow { margin-top: 2px; font-size: 13px; color: var(--ink-2); }
+    .money-flow span { white-space: nowrap; }
+    .spent-bar { grid-column: 1 / -1; height: 6px; margin-top: 6px; overflow: hidden; border-radius: 3px; background: var(--surface-muted); }
+    .spent-bar > span { display: block; height: 100%; background: var(--money-negative); }
+
+    .project-body > * { padding: 16px 20px; border-top: 1px solid var(--line); }
+    .project-desc { font-size: 14px; color: var(--ink-2); white-space: pre-line; }
+
+    .qr { display: flex; gap: 16px; align-items: flex-start; }
+    .qr img { flex-shrink: 0; border: 1px solid var(--line); border-radius: 8px; }
+    .qr-info { font-size: 13px; color: var(--ink-3); }
+    .qr-info strong { color: var(--ink-2); }
+    .qr-amount { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+
+    .fr input, .fr textarea {
+        padding: 5px 8px; font-size: 13px;
+        color: var(--ink); background: var(--surface-raised);
+        border: 1px solid var(--line-strong); border-radius: 4px;
+    }
+    .qr-amount input { width: 100px; }
+
+    /* Payments: four columns on a desktop, two lines on a phone. */
+    .payments h3 { margin-bottom: 8px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+    .payment-list { list-style: none; margin: 0; padding: 0; }
+    .payment {
+        display: grid;
+        grid-template-columns: 6.5rem minmax(0, 1fr) auto 8.5rem;
+        grid-template-areas: "date what vs amount";
+        gap: 2px 16px;
+        padding: 8px 0;
+        font-size: 14px;
+        border-bottom: 1px solid var(--line-soft);
+    }
+    .payment:last-child { border-bottom: 0; }
+    .p-date { grid-area: date; color: var(--ink-3); white-space: nowrap; }
+    .p-what { grid-area: what; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+    .p-what .sub { display: block; font-size: 12px; color: var(--ink-3); }
+    .p-vs { grid-area: vs; align-self: end; font-family: 'Courier New', monospace; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+    .p-amount { grid-area: amount; text-align: right; font-weight: 600; white-space: nowrap; }
+    .payment.in .p-amount { color: var(--money-positive); }
+    .payment.out .p-amount { color: var(--money-negative); }
+
+    /* Admin controls */
+    .manage { display: flex; flex-direction: column; gap: 10px; background: var(--surface-sunken); }
+    .manage-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+    .manage-label { font-weight: 600; color: var(--ink-2); }
+    .manage-row .grow { flex: 1 1 12rem; min-width: 0; }
+    .vs-remove { padding: 0 2px; font-size: 14px; line-height: 1; color: inherit; background: none; border: 0; cursor: pointer; }
+    .vs-remove:hover { color: var(--accent-red); }
+    .status { font-size: 13px; }
+    .status.ok { color: var(--accent-green); }
+    .status.err { color: var(--accent-red); }
+    .new-project { margin-bottom: 20px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+    .new-project form { display: grid; gap: 10px; max-width: 40rem; }
+    .new-project label { display: grid; gap: 4px; font-size: 13px; font-weight: 500; color: var(--ink-2); }
+
+    @media (max-width: 640px) {
+        .fr { padding: 16px 12px 32px; }
+        .fr-head h1 { font-size: 24px; }
+        .project > summary { grid-template-columns: 1fr; padding: 14px 14px 12px; }
+        .money { text-align: left; }
+        .money-left { font-size: 20px; }
+        .project-body > * { padding: 14px; }
+        .qr { flex-direction: column; align-items: center; text-align: center; }
+        .qr-amount { justify-content: center; }
+        .payment {
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-areas: "date amount" "what vs";
+        }
+        .p-vs { text-align: right; }
+    }
+</style>
+
+<div class="fr">
+    <div class="fr-head">
+        <div>
+            <h1>Fundraising</h1>
+            <p>Projekty se speciálním VS pro sběr příspěvků: kolik se vybralo, kolik se z toho utratilo a za co.</p>
+        </div>
+        {{ if .Manage }}
+        <div class="fr-actions">
+            <a class="btn btn-secondary" href="/admin/payments/outgoing?unassigned=1">Přiřadit výdaje</a>
+            <button type="button" class="btn btn-primary" onclick="toggleNewProject()">+ Nový projekt</button>
+        </div>
+        {{ end }}
+    </div>
+
+    {{ if .Manage }}
+    <div class="new-project" id="new-project" hidden>
+        <form onsubmit="createProject(event)">
+            <label>Název projektu <input name="name" required maxlength="100" placeholder="např. Energie 2026"></label>
+            <label>Variabilní symbol <input name="payments_id" inputmode="numeric" pattern="[0-9]{1,10}" title="1 až 10 číslic" placeholder="např. 2026"></label>
+            <label>Popis <textarea name="description" rows="3" placeholder="Na co se sbírá"></textarea></label>
+            <div class="manage-row">
+                <button type="submit" class="btn btn-primary">Vytvořit projekt</button>
+                <span class="status" aria-live="polite"></span>
+            </div>
+        </form>
+    </div>
+    {{ end }}
+
+    {{ range .Projects }}{{ $p := . }}
+    <details class="project">
+        <summary>
+            <div>
+                <div class="project-name">{{.Name}}</div>
+                <div class="project-vs">
+                    VS: {{ range $i, $vs := .VSList }}<span class="vs-tag{{ if eq $i 0 }} primary{{ end }}"{{ if $vs.Note }} title="{{$vs.Note}}"{{ end }}>{{$vs.VS}}</span>{{ else }}–{{ end }}
+                </div>
+            </div>
+            <div class="money">
+                <div class="money-left{{ if lt .Remaining 0.0 }} over{{ end }}">{{fmtKc .Remaining}} Kč</div>
+                <div class="money-label">{{ if lt .Remaining 0.0 }}přečerpáno, rozdíl doplatil spolek{{ else }}zbývá{{ end }}</div>
+                <div class="money-flow"><span>vybráno {{fmtKc .Raised}} Kč</span> · <span>utraceno {{fmtKc .Spent}} Kč</span></div>
+            </div>
+            {{ if gt .Spent 0.0 }}<div class="spent-bar" title="Utraceno {{.SpentShare}} % vybraného"><span style="width: {{.SpentShare}}%"></span></div>{{ end }}
+        </summary>
+
+        <div class="project-body">
+            {{ if .Description.Valid }}<p class="project-desc">{{.Description.String}}</p>{{ end }}
+
+            {{ if $.Manage }}
+            <div class="manage">
+                <div class="manage-row">
+                    <span class="manage-label">VS</span>
+                    {{ range .VSList }}<span class="vs-tag">{{.VS}}{{ if .Note }} <small>{{.Note}}</small>{{ end }}{{ if gt (len $p.VSList) 1 }}<button type="button" class="vs-remove" title="Odebrat VS" data-project="{{$p.ID}}" data-vs="{{.VS}}" onclick="removeVS(this)">×</button>{{ end }}</span>{{ end }}
+                </div>
+                <form class="manage-row" data-project="{{.ID}}" onsubmit="addVS(event)">
+                    <input name="vs" required inputmode="numeric" pattern="[0-9]{1,10}" title="1 až 10 číslic" placeholder="další VS" size="10">
+                    <input name="note" maxlength="100" placeholder="poznámka, např. překlep" class="grow">
+                    <button type="submit" class="btn btn-sm btn-secondary">Přidat VS</button>
+                </form>
+                <div class="manage-row">
+                    {{ if .Payments }}<span class="muted">Projekt s platbami nejde smazat.</span>
+                    {{ else }}<button type="button" class="btn btn-sm btn-danger" data-project="{{.ID}}" data-name="{{.Name}}" onclick="deleteProject(this)">Smazat projekt</button>{{ end }}
+                    <span class="status" aria-live="polite"></span>
+                </div>
+            </div>
+            {{ end }}
+
+            {{ if .PrimaryVS }}
+            <div class="qr" data-vs="{{.PrimaryVS}}" data-msg="{{.Name}}">
+                <a class="qr-link" href="/api/qr?vs={{.PrimaryVS}}&amp;msg={{.Name}}" target="_blank" title="Otevřít v bankovní aplikaci">
+                    <img class="qr-img" src="/api/qr?vs={{.PrimaryVS}}&amp;msg={{.Name}}" alt="QR platba" width="150" height="150">
+                </a>
+                <div class="qr-info">
+                    <p><strong>QR platba</strong></p>
+                    <p>VS: <strong>{{.PrimaryVS}}</strong></p>
+                    <p class="qr-amount-text">Bez předvyplněné částky.</p>
+                    <div class="qr-amount">
+                        <input type="number" min="1" step="1" placeholder="Kč" aria-label="Částka v Kč">
+                        <button type="button" class="btn btn-sm btn-primary" onclick="setQRAmount(this)">Nastavit částku</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="resetQR(this)">Reset</button>
+                    </div>
+                </div>
+            </div>
+            {{ end }}
+
+            <div class="payments">
+                {{ if .Payments }}
+                <h3>Platby</h3>
+                <ul class="payment-list">
+                    {{ range .Payments }}
+                    <li class="payment {{ if .Outgoing }}out{{ else }}in{{ end }}">
+                        <span class="p-date">{{.Date.Format "02.01.2006"}}</span>
+                        <span class="p-what">
+                            {{ if .Outgoing }}{{ if .Note }}{{.Note}}{{ else }}<span class="muted">výdaj</span>{{ end }}{{ if .RemoteAccount }}<span class="sub">{{.RemoteAccount}}</span>{{ end }}
+                            {{ else if .RemoteAccount }}{{.RemoteAccount}}
+                            {{ else }}<span class="muted">příspěvek</span>{{ end }}
+                            {{ if .StaffComment }}<span class="sub" title="Interní komentář">{{.StaffComment}}</span>{{ end }}
+                        </span>
+                        <span class="p-vs">{{ if .VS }}VS {{.VS}}{{ end }}</span>
+                        <span class="p-amount">{{ if not .Outgoing }}+{{ end }}{{fmtKc .Value}} Kč</span>
+                    </li>
+                    {{ end }}
+                </ul>
+                {{ else }}
+                <div class="empty">Zatím žádné platby.</div>
+                {{ end }}
+            </div>
+        </div>
+    </details>
+    {{ else }}
+    <div class="empty">Zatím nejsou žádné fundraisingové projekty.</div>
+    {{ end }}
+</div>
+
+<script>
+// The QR code with an amount: rebuild its URL from the section's data.
+function showQR(section, amount) {
+    const params = new URLSearchParams({ vs: section.dataset.vs, msg: section.dataset.msg });
+    if (amount) params.set('amount', amount);
+    const url = '/api/qr?' + params.toString();
+    section.querySelector('.qr-img').src = url;
+    section.querySelector('.qr-link').href = url;
+    section.querySelector('.qr-amount-text').textContent =
+        amount ? `Částka: ${amount.toLocaleString('cs-CZ')} Kč` : 'Bez předvyplněné částky.';
+}
+
+function setQRAmount(button) {
+    const section = button.closest('.qr');
+    const amount = parseInt(section.querySelector('input').value, 10);
+    if (!amount || amount <= 0) {
+        section.querySelector('.qr-amount-text').textContent = 'Zadej platnou částku.';
+        return;
+    }
+    showQR(section, amount);
+}
+
+function resetQR(button) {
+    const section = button.closest('.qr');
+    section.querySelector('input').value = '';
+    showQR(section, 0);
+}
+</script>
+
+{{ if .Manage }}
+<script>
+// Admin controls. Each sends one JSON request and reloads on success; errors
+// are shown as text next to the control.
+async function send(method, url, body) {
+    const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) throw new Error(data.error || `Chyba ${response.status}`);
+}
+
+function fail(scope, error) {
+    const status = scope.querySelector('.status');
+    status.textContent = error.message;
+    status.className = 'status err';
+}
+
+function toggleNewProject() {
+    const panel = document.getElementById('new-project');
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) panel.querySelector('input').focus();
+}
+
+async function createProject(event) {
+    event.preventDefault();
+    const form = event.target;
+    try {
+        await send('POST', '/api/admin/projects', {
+            name: form.elements.name.value,
+            payments_id: form.elements.payments_id.value,
+            description: form.elements.description.value,
+        });
+        location.reload();
+    } catch (error) {
+        fail(form, error);
+    }
+}
+
+async function addVS(event) {
+    event.preventDefault();
+    const form = event.target;
+    try {
+        await send('POST', '/api/admin/projects/vs', {
+            project_id: Number(form.dataset.project),
+            vs: form.elements.vs.value.trim(),
+            note: form.elements.note.value.trim(),
+        });
+        location.reload();
+    } catch (error) {
+        fail(form.closest('.manage'), error);
+    }
+}
+
+async function removeVS(button) {
+    if (!confirm(`Odebrat VS ${button.dataset.vs}? Platby, které k projektu přivedl, z něj odejdou.`)) return;
+    try {
+        await send('DELETE', '/api/admin/projects/vs', { project_id: Number(button.dataset.project), vs: button.dataset.vs });
+        location.reload();
+    } catch (error) {
+        fail(button.closest('.manage'), error);
+    }
+}
+
+async function deleteProject(button) {
+    if (!confirm(`Smazat projekt „${button.dataset.name}“?`)) return;
+    try {
+        await send('DELETE', '/api/admin/projects', { project_id: Number(button.dataset.project) });
+        location.reload();
+    } catch (error) {
+        fail(button.closest('.manage'), error);
+    }
+}
+</script>
+{{ end }}
+{{ end }}

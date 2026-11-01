@@ -8,36 +8,10 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/base48/member-portal/internal/db"
 )
-
-// AdminProjectsHandler shows the projects management page
-// GET /admin/projects
-func (h *Handler) AdminProjectsHandler(w http.ResponseWriter, r *http.Request) {
-	user := h.auth.GetUser(r) // auth enforced by RequireAdmin middleware
-
-	ctx := r.Context()
-
-	// Get DBUser for layout
-	dbUser, err := h.queries.GetUserByKeycloakID(ctx, sql.NullString{
-		String: user.ID,
-		Valid:  true,
-	})
-	if err != nil {
-		log.Printf("[Handler] failed to fetch admin DB user: %v", err)
-	}
-
-	data := map[string]interface{}{
-		"Title":  "Správa projektů",
-		"User":   user,
-		"DBUser": dbUser,
-	}
-
-	h.render(w, "admin_projects.html", data)
-}
 
 // VSInfo represents a VS identifier for a project
 type VSInfo struct {
@@ -241,60 +215,6 @@ func (h *Handler) AdminDeleteProjectHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	h.jsonSuccess(w, "Project deleted successfully")
-}
-
-// PaymentResponse is a project payment as the admin page gets it.
-type PaymentResponse struct {
-	ID             int64  `json:"id"`
-	Date           string `json:"date"`
-	Amount         string `json:"amount"` // negative for an expense
-	RemoteAccount  string `json:"remote_account"`
-	Identification string `json:"identification"`
-	Note           string `json:"note"`    // what members see of an expense
-	Comment        string `json:"comment"` // staff comment
-}
-
-// AdminProjectPaymentsHandler returns payments for a project
-// GET /api/admin/projects/payments?project_id=N
-func (h *Handler) AdminProjectPaymentsHandler(w http.ResponseWriter, r *http.Request) {
-	projectIDStr := r.URL.Query().Get("project_id")
-	if projectIDStr == "" {
-		h.jsonError(w, "Missing project_id parameter", http.StatusBadRequest)
-		return
-	}
-
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
-	if err != nil {
-		h.jsonError(w, "Invalid project_id: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	ctx := r.Context()
-
-	payments, err := h.queries.GetProjectPayments(ctx, sql.NullInt64{Int64: projectID, Valid: true})
-	if err != nil {
-		h.jsonError(w, "Failed to fetch payments: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	paymentResponses := make([]PaymentResponse, len(payments))
-	for i, p := range payments {
-		paymentResponses[i] = PaymentResponse{
-			ID:             p.ID,
-			Date:           p.Date.Format("02.01.2006"),
-			Amount:         p.Amount,
-			RemoteAccount:  p.RemoteAccount,
-			Identification: p.Identification,
-			Note:           p.PublicNote.String,
-			Comment:        p.StaffComment.String,
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":  true,
-		"payments": paymentResponses,
-	})
 }
 
 // AddProjectVSRequest is the request body for adding a VS to a project

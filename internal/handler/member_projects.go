@@ -7,26 +7,31 @@ import (
 	"time"
 
 	"github.com/base48/member-portal/internal/access"
+	"github.com/base48/member-portal/internal/auth"
+	"github.com/base48/member-portal/internal/db"
 )
 
-// memberProject is a project as the fundraising page shows it.
-type memberProject struct {
+// projectView is a project as the fundraising page shows it.
+type projectView struct {
 	projectSummary
 	PrimaryVS  string
 	SpentShare int // how much of what was raised is spent, 0-100, for the bar
-	Payments   []memberProjectPayment
+	Payments   []projectPaymentView
 }
 
-// memberProjectPayment is a payment of a project as members see it. An
-// expense shows only its date, amount and note; who was paid, and the bank's
-// own texts, stay with the admins.
-type memberProjectPayment struct {
+// projectPaymentView is a payment of a project. Members see an expense's
+// date, amount and note only; who was paid stays with the admins, as does
+// the staff comment. A donor's account is shown to members, not to external
+// users.
+type projectPaymentView struct {
+	ID            int64
 	Date          time.Time
 	Value         float64
 	Outgoing      bool
 	Note          string // expenses: the note an admin approved
-	RemoteAccount string // gifts: the donor's account, for members only
+	RemoteAccount string
 	VS            string // gifts
+	StaffComment  string // admins only
 }
 
 // MemberProjectsHandler shows the fundraising projects: what each raised and
@@ -37,8 +42,26 @@ func (h *Handler) MemberProjectsHandler(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	ctx := r.Context()
+	h.renderProjects(w, r, user, dbUser, acc, false)
+}
 
+// AdminProjectsHandler shows the same page with the controls to manage
+// projects, and what members do not see of their payments.
+// GET /admin/projects
+func (h *Handler) AdminProjectsHandler(w http.ResponseWriter, r *http.Request) {
+	user := h.auth.GetUser(r) // RequireAdmin let them in
+	dbUser, err := h.getOrCreateUser(r, user)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	h.renderProjects(w, r, user, dbUser, h.accessFor(r.Context(), user, dbUser), true)
+}
+
+// renderProjects renders projects.html for a member, or with manage for an
+// admin.
+func (h *Handler) renderProjects(w http.ResponseWriter, r *http.Request, user *auth.User, dbUser *db.User, acc access.Subject, manage bool) {
+	ctx := r.Context()
 	summaries, err := h.listProjectSummaries(ctx)
 	if err != nil {
 		log.Printf("[Projects] list: %v", err)
@@ -52,25 +75,27 @@ func (h *Handler) MemberProjectsHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	byProject := make(map[int64][]memberProjectPayment)
+	byProject := make(map[int64][]projectPaymentView)
 	for _, p := range payments {
 		value, _ := strconv.ParseFloat(p.Amount, 64)
-		view := memberProjectPayment{Date: p.Date, Value: value, Outgoing: value < 0}
+		view := projectPaymentView{ID: p.ID, Date: p.Date, Value: value, Outgoing: value < 0}
 		if view.Outgoing {
 			view.Note = p.PublicNote.String
 		} else {
 			view.VS = p.Identification
-			// Donors' account numbers are for members only.
-			if acc.MemberArea() {
-				view.RemoteAccount = p.RemoteAccount
-			}
+		}
+		if manage || (!view.Outgoing && acc.MemberArea()) {
+			view.RemoteAccount = p.RemoteAccount
+		}
+		if manage {
+			view.StaffComment = p.StaffComment.String
 		}
 		byProject[p.ProjectID.Int64] = append(byProject[p.ProjectID.Int64], view)
 	}
 
-	projects := make([]memberProject, len(summaries))
+	projects := make([]projectView, len(summaries))
 	for i, s := range summaries {
-		projects[i] = memberProject{projectSummary: s, Payments: byProject[s.ID]}
+		projects[i] = projectView{projectSummary: s, Payments: byProject[s.ID]}
 		if len(s.VSList) > 0 {
 			projects[i].PrimaryVS = s.VSList[0].VS
 		}
@@ -82,11 +107,16 @@ func (h *Handler) MemberProjectsHandler(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	h.render(w, "member_projects.html", map[string]interface{}{
-		"Title":    "Fundraising",
+	title := "Fundraising"
+	if manage {
+		title = "Správa projektů"
+	}
+	h.render(w, "projects.html", map[string]interface{}{
+		"Title":    title,
 		"User":     user,
 		"DBUser":   dbUser,
 		"Access":   acc,
+		"Manage":   manage,
 		"Projects": projects,
 	})
 }

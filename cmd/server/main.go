@@ -206,7 +206,6 @@ func main() {
 		r.Get("/projects", h.RequireAdmin(h.AdminProjectsAPIHandler))
 		r.Post("/projects", h.RequireAdmin(h.AdminCreateProjectHandler))
 		r.Delete("/projects", h.RequireAdmin(h.AdminDeleteProjectHandler))
-		r.Get("/projects/payments", h.RequireAdmin(h.AdminProjectPaymentsHandler))
 		r.Post("/projects/vs", h.RequireAdmin(h.AdminAddProjectVSHandler))
 		r.Delete("/projects/vs", h.RequireAdmin(h.AdminRemoveProjectVSHandler))
 		r.Post("/workshop/resources/{id}", h.RequireAdmin(h.AdminUpdateResourceHandler))
