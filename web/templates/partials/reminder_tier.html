@@ -1,0 +1,6 @@
+{{/* A membership reminder, as admins see it in the fee-run preview and the
+     manual picker. Takes the tier: prepaid_ending, negative_balance,
+     debt_warning, or "" for none. */}}
+{{ define "reminder-tier" }}{{ if eq . "debt_warning" }}<span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 whitespace-nowrap">upozornění na dluh</span>{{ else if eq . "negative_balance" }}<span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 whitespace-nowrap">záporná bilance</span>{{ else if eq . "prepaid_ending" }}<span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 whitespace-nowrap">před koncem předplatného</span>{{ else }}<span class="text-gray-400">–</span>{{ end }}{{ end }}
+
+{{ define "reminder-row" }}{{ if eq . "debt_warning" }}bg-red-50{{ else if eq . "negative_balance" }}bg-yellow-50{{ else if eq . "prepaid_ending" }}bg-blue-50{{ end }}{{ end }}

@@ -41,8 +41,8 @@ func (c *Client) refreshBeforeSend(ctx context.Context, entry *db.EmailOutbox) l
 	switch entry.TemplateName {
 	case TemplateFileBarDebt:
 		return c.refreshBarDebt(ctx, entry)
-	case TemplateFileForTier(TierNegativeBalance), TemplateFileForTier(TierDebtWarning):
-		return c.refreshDebtReminder(ctx, entry)
+	case TemplateFileForTier(TierPrepaidEnding), TemplateFileForTier(TierNegativeBalance), TemplateFileForTier(TierDebtWarning):
+		return c.refreshMembershipReminder(ctx, entry)
 	case "welcome.html":
 		return c.stillInState(ctx, entry, "accepted", "už není přijatý člen")
 	case "registration.html":
@@ -52,44 +52,6 @@ func (c *Client) refreshBeforeSend(ctx context.Context, entry *db.EmailOutbox) l
 	default:
 		return lookSend
 	}
-}
-
-// refreshDebtReminder re-checks a membership debt reminder against the live
-// balance. The tier may change on the way: a member who paid part of a debt
-// warning gets the milder negative-balance email instead.
-func (c *Client) refreshDebtReminder(ctx context.Context, entry *db.EmailOutbox) look {
-	user, verdict := c.activeMemberFor(ctx, entry)
-	if verdict != lookSend {
-		return verdict
-	}
-
-	level, err := c.queries.GetLevel(ctx, user.LevelID)
-	if err != nil {
-		log.Printf("[Email] debt: cannot re-check outbox #%d: %v", entry.ID, err)
-		return lookHeld
-	}
-	balance, err := c.queries.GetUserBalance(ctx, db.GetUserBalanceParams{
-		UserID:   sql.NullInt64{Int64: user.ID, Valid: true},
-		UserID_2: user.ID,
-	})
-	if err != nil {
-		log.Printf("[Email] debt: cannot re-check outbox #%d: %v", entry.ID, err)
-		return lookHeld
-	}
-
-	monthlyFee := MonthlyFee(user.LevelActualAmount, level.Amount)
-	tier := DebtTier(float64(balance), monthlyFee)
-	if tier == "" {
-		return c.cancelOutbox(ctx, entry, fmt.Sprintf("bilance je teď %d Kč, dluh mezitím uhrazen", balance))
-	}
-
-	data, err := c.debtReminderData(ctx, &user, tier, float64(balance), monthlyFee)
-	if err != nil {
-		log.Printf("[Email] debt: holding outbox #%d: %v", entry.ID, err)
-		return lookHeld
-	}
-	c.rerender(ctx, entry, TemplateFileForTier(tier), data)
-	return lookSend
 }
 
 // stillInState cancels an entry announcing a state the recipient has left
@@ -131,13 +93,12 @@ func (c *Client) activeMemberFor(ctx context.Context, entry *db.EmailOutbox) (db
 // rerender renders the entry afresh and stores the result, updating the entry
 // in place for delivery. If rendering fails, the version from queue time is
 // still a valid email and goes out unchanged.
-func (c *Client) rerender(ctx context.Context, entry *db.EmailOutbox, templateFile string, data map[string]interface{}) {
+func (c *Client) rerender(ctx context.Context, entry *db.EmailOutbox, templateFile, subject string, data any) {
 	rendered, err := c.renderTemplate(SendParams{TemplateName: templateFile, Data: data})
 	if err != nil {
 		log.Printf("[Email] re-render of outbox #%d failed, sending as queued: %v", entry.ID, err)
 		return
 	}
-	subject := data["Content"].(map[string]string)["subject"]
 	dataJSON, _ := json.Marshal(data)
 	if err := c.queries.UpdateEmailOutboxContent(ctx, db.UpdateEmailOutboxContentParams{
 		Subject:      subject,

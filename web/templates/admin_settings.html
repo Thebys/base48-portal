@@ -154,6 +154,65 @@
         </details>
     </div>
 
+    <!-- Membership Reminder Section -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group">
+            <summary class="cursor-pointer list-none">
+                <div class="flex flex-wrap justify-between items-center gap-2 p-6 hover:bg-gray-50 transition-colors">
+                    <div>
+                        <h2 class="text-lg font-medium text-gray-900">Upozornění na členské příspěvky</h2>
+                        <p class="mt-1 text-sm text-gray-500">Jednou měsíčně po předpisu: před koncem předplatného, na zápornou bilanci a na dluh</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{if .Membership.PrepaidEnabled}}
+                        <span class="badge badge-success">Před koncem předplatného zapnuto</span>
+                        {{else}}
+                        <span class="badge badge-gray">Před koncem předplatného vypnuto</span>
+                        {{end}}
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="membership-prepaid-enabled" class="sr-only peer" {{if .Membership.PrepaidEnabled}}checked{{end}}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                        <span class="text-sm text-gray-700">Posílat upozornění před koncem předplatného</span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="membership-months-ahead" class="block text-sm font-medium text-gray-700 mb-1">Upozornit, když nemá zaplaceno (měsíců dopředu)</label>
+                            <input type="number" id="membership-months-ahead" min="1" max="3" step="1" value="{{.Membership.MonthsAhead}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">1: má zaplaceno nejvýš do konce tohoto měsíce (nebo mu chybí jen část)</p>
+                        </div>
+                        <div>
+                            <label for="membership-suggest-months" class="block text-sm font-medium text-gray-700 mb-1">Doporučená platba (měsíců dopředu)</label>
+                            <input type="number" id="membership-suggest-months" min="1" max="12" step="1" value="{{.Membership.SuggestMonths}}"
+                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">QR ve všech upozorněních a v profilu nabízí dluh a tolik měsíců</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        Upozornění se počítají 1. v měsíci hned po předpisu a odcházejí 4. v 10:00. Každý člen dostane nejvýš jedno za měsíc:
+                        před koncem předplatného, při dluhu aspoň jednoho příspěvku zápornou bilanci, při dluhu aspoň dvou upozornění na dluh.
+                        Těsně před odesláním se vše ověří znovu, takže kdo mezitím zaplatí, e-mail nedostane. Texty se upravují níže v sekci <em>Šablony e-mailů</em>.
+                    </p>
+                    <p class="text-sm text-gray-600">
+                        Upozornění před koncem předplatného by teď dostalo <strong id="membership-prepaid-count">{{.PrepaidNow}}</strong> členů.
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <button onclick="saveMembershipSettings()" class="btn btn-sm btn-primary">Uložit</button>
+                        <span id="membership-status" class="text-sm hidden"></span>
+                    </div>
+                </div>
+            </div>
+        </details>
+    </div>
+
     <!-- Bar Debt Reminder Section -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group">
@@ -403,6 +462,22 @@ SMTP_FROM_NAME=Base48 Hackerspace</pre>
                                 </div>
                             </button>
 
+                            <button type="button" onclick="sendTestEmail('prepaid_ending')"
+                                    class="test-email-btn relative flex items-start p-4 border border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-medium text-gray-900">Před koncem předplatného</h3>
+                                    <p class="mt-1 text-xs text-gray-500">Zaplaceno do konce tohoto měsíce, po předpisu 1. v měsíci</p>
+                                </div>
+                            </button>
+
+                            <button type="button" onclick="sendTestEmail('prepaid_ending_short')"
+                                    class="test-email-btn relative flex items-start p-4 border border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-medium text-gray-900">Před koncem předplatného, chybí část</h3>
+                                    <p class="mt-1 text-xs text-gray-500">Na tento měsíc chybí méně než celý příspěvek</p>
+                                </div>
+                            </button>
+
                             <button type="button" onclick="sendTestEmail('negative_balance')"
                                     class="test-email-btn relative flex items-start p-4 border border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
                                 <div class="flex-1">
@@ -461,12 +536,8 @@ SMTP_FROM_NAME=Base48 Hackerspace</pre>
                         <label for="template-type" class="block text-sm font-medium text-gray-700 mb-1">Vyber šablonu</label>
                         <select id="template-type" onchange="loadTemplateContent()" class="block w-full sm:w-64 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                             <option value="">-- Vyber šablonu --</option>
-                            <option value="registration">Potvrzení registrace</option>
-                            <option value="welcome">Vítací e-mail</option>
-                            <option value="negative_balance">Záporný zůstatek</option>
-                            <option value="debt_warning">Varování před dluhem</option>
-                            <option value="membership_suspended">Členství pozastaveno</option>
-                            <option value="bar_debt">Dluh na baru</option>
+                            {{range .EmailTemplates}}<option value="{{.Key}}">{{.Label}}</option>
+                            {{end}}
                         </select>
                     </div>
                     <div>
@@ -478,6 +549,8 @@ SMTP_FROM_NAME=Base48 Hackerspace</pre>
                     </div>
                 </div>
 
+                <div id="template-info" class="hidden mb-4 text-sm text-gray-600"></div>
+
                 <div id="template-fields" class="hidden space-y-4"></div>
 
                 <div id="template-actions" class="hidden mt-4 flex gap-3">
@@ -488,6 +561,8 @@ SMTP_FROM_NAME=Base48 Hackerspace</pre>
                 <div id="template-status" class="hidden mt-3"></div>
 
                 <div id="template-preview" class="hidden mt-4 border rounded-lg overflow-hidden">
+                    <p id="preview-subject" class="px-4 py-2 text-sm text-gray-700 border-b"></p>
+                    <p class="px-4 pt-2 text-xs text-gray-500">Náhled ukazuje uložené texty. Uložení se projeví i u e-mailů, které už čekají ve frontě.</p>
                     <iframe id="preview-iframe" sandbox class="w-full" style="height:500px; border:none;"></iframe>
                 </div>
             </div>
@@ -530,24 +605,6 @@ let currentBlocks = [];
 let currentTemplateName = '';
 
 // Block display names
-const blockLabels = {
-    'subject': 'Předmět e-mailu',
-    'heading': 'Nadpis',
-    'intro_text': 'Úvodní text',
-    'steps_text': 'Kroky / Instrukce',
-    'action_text': 'Text výzvy k akci',
-    'warning_text': 'Text varování',
-    'consequences_text': 'Text důsledků',
-    'recovery_text': 'Text obnovy',
-    'footer': 'Patička',
-};
-
-// Template text goes into innerHTML; without escaping, a "<" or "&" in it
-// would be parsed as markup and the block would come back mangled on save.
-function escapeHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 function loadTemplateContent() {
     const templateName = document.getElementById('template-type').value;
     const fieldsDiv = document.getElementById('template-fields');
@@ -576,25 +633,26 @@ function loadTemplateContent() {
         currentBlocks = data.blocks;
         let html = '';
 
-        // Sort blocks: subject first, footer last
-        const order = ['subject', 'heading', 'intro_text', 'warning_text', 'action_text', 'consequences_text', 'steps_text', 'recovery_text', 'footer'];
-        const sorted = data.blocks.sort((a, b) => {
-            const ia = order.indexOf(a.name);
-            const ib = order.indexOf(b.name);
-            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-        });
-
-        sorted.forEach(block => {
-            const label = blockLabels[block.name] || block.name;
-            const rows = block.name === 'subject' ? 1 : (block.current.length > 100 ? 4 : 2);
+        // The server sends the blocks in the order the email shows them.
+        data.blocks.forEach(block => {
+            const rows = block.name.startsWith('subject') ? 1 : (block.current.length > 100 ? 4 : 2);
             const modifiedMark = block.is_modified ? '<span class="modified-indicator">upraveno</span>' : '';
             html += `
                 <div>
-                    <label>${label}${modifiedMark}</label>
-                    <textarea id="block-${block.name}" rows="${rows}" data-default="${encodeURIComponent(block.default)}">${escapeHtml(block.current)}</textarea>
+                    <label for="block-${esc(block.name)}">${esc(block.label || block.name)}${modifiedMark}</label>
+                    <textarea id="block-${esc(block.name)}" rows="${rows}">${esc(block.current)}</textarea>
                 </div>
             `;
         });
+
+        const info = document.getElementById('template-info');
+        let infoHTML = data.when ? `<p><strong>Kdy se posílá:</strong> ${esc(data.when)}</p>` : '';
+        if (data.placeholders && data.placeholders.length) {
+            infoHTML += '<p class="mt-2"><strong>Do textu můžeš vložit:</strong></p><ul class="mt-1 list-disc pl-5">' +
+                data.placeholders.map(p => `<li><code>{${esc(p.Name)}}</code> ${esc(p.Meaning)}</li>`).join('') + '</ul>';
+        }
+        info.innerHTML = infoHTML;
+        info.classList.toggle('hidden', !infoHTML);
 
         fieldsDiv.innerHTML = html;
         fieldsDiv.classList.remove('hidden');
@@ -640,12 +698,43 @@ function previewTemplate() {
             const previewDiv = document.getElementById('template-preview');
             const iframe = document.getElementById('preview-iframe');
             previewDiv.classList.remove('hidden');
+            document.getElementById('preview-subject').textContent = 'Předmět: ' + (data.subject || '');
             iframe.srcdoc = data.html;
         } else {
             showTemplateStatus('error', data.error || 'Chyba');
         }
     })
     .catch(err => showTemplateStatus('error', 'Chyba: ' + err.message));
+}
+
+function saveMembershipSettings() {
+    const status = document.getElementById('membership-status');
+    fetch('/api/admin/membership-email-settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            prepaid_enabled: document.getElementById('membership-prepaid-enabled').checked,
+            months_ahead: parseInt(document.getElementById('membership-months-ahead').value, 10) || 0,
+            suggest_months: parseInt(document.getElementById('membership-suggest-months').value, 10) || 0,
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        status.classList.remove('hidden', 'text-green-600', 'text-red-600');
+        if (data.success) {
+            status.classList.add('text-green-600');
+            status.textContent = data.message || 'Uloženo';
+            document.getElementById('membership-prepaid-count').textContent = data.prepaid;
+        } else {
+            status.classList.add('text-red-600');
+            status.textContent = data.error || 'Chyba';
+        }
+    })
+    .catch(err => {
+        status.classList.remove('hidden', 'text-green-600');
+        status.classList.add('text-red-600');
+        status.textContent = 'Chyba: ' + err.message;
+    });
 }
 
 function saveBarDebtSettings() {

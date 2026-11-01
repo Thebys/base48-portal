@@ -269,6 +269,6 @@ func (c *Client) refreshBarDebt(ctx context.Context, entry *db.EmailOutbox) look
 	}
 
 	data := c.barDebtData(ctx, &user, account.BalanceCents, settings.ThresholdCZK)
-	c.rerender(ctx, entry, TemplateFileBarDebt, data)
+	c.rerender(ctx, entry, TemplateFileBarDebt, data["Content"].(map[string]string)["subject"], data)
 	return lookSend
 }

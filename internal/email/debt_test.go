@@ -5,58 +5,6 @@ import (
 	"time"
 )
 
-func TestMonthlyFee(t *testing.T) {
-	tests := []struct {
-		name                      string
-		actualAmount, levelAmount string
-		want                      float64
-	}{
-		{"individual override wins", "750", "1000", 750},
-		{"zero override falls back to the level", "0", "1000", 1000},
-		{"empty override falls back to the level", "", "1000", 1000},
-		{"decimal amount", "500.5", "1000", 500.5},
-		{"free level", "0", "0", 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := MonthlyFee(tt.actualAmount, tt.levelAmount); got != tt.want {
-				t.Errorf("MonthlyFee(%q, %q) = %v, want %v",
-					tt.actualAmount, tt.levelAmount, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestDebtTier(t *testing.T) {
-	tests := []struct {
-		name       string
-		balance    float64
-		monthlyFee float64
-		want       string
-	}{
-		{"in credit", 500, 1000, ""},
-		{"exactly zero", 0, 1000, ""},
-		{"owes less than one fee", -999, 1000, ""},
-		{"owes exactly one fee", -1000, 1000, TierNegativeBalance},
-		{"owes more than one fee", -1500, 1000, TierNegativeBalance},
-		{"owes just under two fees", -1999, 1000, TierNegativeBalance},
-		{"owes exactly two fees", -2000, 1000, TierDebtWarning},
-		{"owes far more than two fees", -9000, 1000, TierDebtWarning},
-		// Honorary/free memberships have no fee to fall behind on, so no
-		// negative balance of theirs may ever trigger a reminder.
-		{"zero fee never warns", -5000, 0, ""},
-		{"negative fee never warns", -5000, -100, ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := DebtTier(tt.balance, tt.monthlyFee); got != tt.want {
-				t.Errorf("DebtTier(%v, %v) = %q, want %q", tt.balance, tt.monthlyFee, got, tt.want)
-			}
-		})
-	}
-}
-
 // The tier names double as the content-block keys and, with .html appended, as
 // the outbox template_name the anti-spam lookup matches on. If they drift apart,
 // reminders silently stop being deduplicated.
@@ -64,6 +12,7 @@ func TestTemplateFileForTier(t *testing.T) {
 	tests := []struct{ tier, want string }{
 		{TierDebtWarning, "debt_warning.html"},
 		{TierNegativeBalance, "negative_balance.html"},
+		{TierPrepaidEnding, "prepaid_ending.html"},
 		{"", ""},
 	}
 	for _, tt := range tests {
@@ -71,7 +20,7 @@ func TestTemplateFileForTier(t *testing.T) {
 			t.Errorf("TemplateFileForTier(%q) = %q, want %q", tt.tier, got, tt.want)
 		}
 	}
-	for _, tier := range []string{TierDebtWarning, TierNegativeBalance} {
+	for _, tier := range MembershipTiers {
 		if _, ok := defaultContentBlocks[tier]; !ok {
 			t.Errorf("tier %q has no Czech content blocks", tier)
 		}

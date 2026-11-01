@@ -70,6 +70,11 @@ usages. Consequences worth knowing:
 own colours, carry no Tailwind colour utility inside, and must stay light in both
 themes. Do not tokenise them.
 
+The emails in `web/templates/email/` are not pages: mail clients take inline
+styles only, so they carry their own hex colours and no classes. What they share
+(the frame, the footer, the payment box of the membership reminders) is in
+`_layout.html`; `internal/email/registry.go` lists each email's text blocks.
+
 ### Charts
 
 The sequential blue ramp (`.bar-seq-*`, `.bar-coh-*`) is **rebuilt, not

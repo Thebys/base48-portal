@@ -175,7 +175,7 @@
         <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div class="bg-indigo-50 px-4 py-3 rounded-md text-center">
                 <div class="text-2xl font-bold text-indigo-900">{{.Level.Name}}</div>
-                <div class="text-xs text-indigo-600">{{.Level.Amount}} Kč/měsíc ·
+                <div class="text-xs text-indigo-600">{{fmtNum .MonthlyFee}} Kč/měsíc ·
                     {{if .DBUser.PaymentsID.Valid}}VS <span class="font-mono font-semibold">{{.DBUser.PaymentsID.String}}</span>{{else}}VS nepřiřazen{{end}}</div>
             </div>
             <div class="bg-purple-50 px-4 py-3 rounded-md text-center">
@@ -188,7 +188,7 @@
             </div>
             <div class="px-4 py-3 rounded-md text-center {{if ge .Balance 0.0}}bg-green-50{{else}}bg-red-50{{end}}">
                 <div class="text-2xl font-bold {{if ge .Balance 0.0}}text-green-900{{else}}text-red-900{{end}}">{{fmtNum .Balance}} Kč</div>
-                <div class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">Bilance · {{if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}</div>
+                <div class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">Bilance · {{if .PaidThrough}}zaplaceno do konce {{.PaidThrough}}{{else if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}</div>
             </div>
             <div class="bg-gray-50 px-4 py-3 rounded-md text-center">
                 <div class="mt-1"><span class="badge badge-{{ .DBUser.State }}">{{ .DBUser.State }}</span></div>

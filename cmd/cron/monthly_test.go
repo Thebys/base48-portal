@@ -14,6 +14,7 @@ import (
 	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/email"
 	"github.com/base48/member-portal/internal/migrate"
 	"github.com/base48/member-portal/migrations"
 )
@@ -230,5 +231,45 @@ func TestMonthlyTickChargesOnce(t *testing.T) {
 	}
 	if outboxCount(t, database) != 1 {
 		t.Errorf("%d reminders, want the one for the month just charged", outboxCount(t, database))
+	}
+}
+
+// Switched on, the reminder before any debt goes to members not paid beyond
+// this month, alongside the debt reminders; each member still gets one.
+func TestMembershipRemindersBeforeAnyDebt(t *testing.T) {
+	q, database, cfg := reminderDB(t, map[string]int{"paid": 0, "two": 2})
+	ctx := context.Background()
+	now := time.Now()
+	if err := recordMonth(ctx, q, settingFeesMonth, now); err != nil {
+		t.Fatal(err)
+	}
+	s := email.DefaultMembershipSettings()
+	s.PrepaidEnabled = true
+	if err := email.SaveMembershipSettings(ctx, q, s); err != nil {
+		t.Fatal(err)
+	}
+
+	run, err := queueMembershipReminders(ctx, cfg, q, now, false, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Queued != 2 {
+		t.Fatalf("%+v, want both reminded", run)
+	}
+	got := map[string]string{}
+	rows, err := database.Query(`SELECT recipient, template_name FROM email_outbox`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var recipient, template string
+		if err := rows.Scan(&recipient, &template); err != nil {
+			t.Fatal(err)
+		}
+		got[recipient] = template
+	}
+	if got["paid@base48.cz"] != "prepaid_ending.html" || got["two@base48.cz"] != "debt_warning.html" {
+		t.Errorf("queued %v", got)
 	}
 }

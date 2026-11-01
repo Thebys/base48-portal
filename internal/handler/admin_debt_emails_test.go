@@ -287,8 +287,12 @@ func TestQueueDebtRemindersLandsInOutbox(t *testing.T) {
 		t.Fatal("next_retry_at is unset, so the timer would never fire")
 	}
 	// The email has to quote the real debt, not a placeholder.
-	if !strings.Contains(html, "-1000") {
-		t.Errorf("rendered email does not mention the -1000 balance")
+	if !strings.Contains(html, "−1&nbsp;000&nbsp;Kč") {
+		t.Errorf("rendered email does not mention the −1 000 balance")
+	}
+	// And it suggests the debt plus three months, which the QR carries.
+	if !strings.Contains(html, "amount=4000") {
+		t.Errorf("the QR does not carry the debt and three months ahead")
 	}
 	if !strings.Contains(html, "5001") {
 		t.Errorf("rendered email does not carry the variable symbol")

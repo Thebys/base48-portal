@@ -7,13 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/dues"
 	"github.com/base48/member-portal/internal/email"
 )
 
@@ -106,6 +110,7 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Bar debt reminder settings, plus how many members they would hit today
+	membership := email.LoadMembershipSettings(ctx, h.queries)
 	barDebt := email.LoadBarDebtSettings(ctx, h.queries)
 	barDebtors, err := h.queries.ListAcceptedBarDebtors(ctx, barDebt.MaxBalanceCents())
 	if err != nil {
@@ -127,6 +132,9 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"CurrentBannerEnabled":   bannerEnabled,
 		"CurrentBannerColor":     bannerColor,
 		"CurrentAwaitingMessage": awaitingMessage,
+		"EmailTemplates":         email.Templates,
+		"Membership":             membership,
+		"PrepaidNow":             h.prepaidNow(ctx, membership),
 		"BarDebt":                barDebt,
 		"BarDebtorsNow":          len(barDebtors),
 	}
@@ -171,12 +179,12 @@ func (h *Handler) AdminTestEmailHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	templateName, data, err := h.buildEmailTestData(ctx, emailType, lang, admin.DisplayName(), admin.Username.String, admin.PaymentsID.String)
+	templateName, subject, data, err := h.buildEmailTestData(ctx, emailType, lang, &admin)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	subject := "[TEST] " + data["Content"].(map[string]string)["subject"]
+	subject = "[TEST] " + subject
 
 	sendErr := h.emailClient.SendTemplated(ctx, email.SendParams{
 		UserID:       sql.NullInt64{Int64: admin.ID, Valid: true},
@@ -217,10 +225,10 @@ func (h *Handler) AdminGetTemplateContentHandler(w http.ResponseWriter, r *http.
 		lang = "cs"
 	}
 
-	defaults := email.GetDefaultContentBlocks(lang)
-	templateDefaults, ok := defaults[templateName]
-	if !ok {
-		h.jsonError(w, "unknown template: "+templateName, http.StatusBadRequest)
+	spec, ok := email.TemplateByKey(templateName)
+	templateDefaults := email.GetDefaultContentBlocks(lang)[templateName]
+	if !ok || templateDefaults == nil {
+		h.jsonError(w, "neznámá šablona: "+templateName, http.StatusBadRequest)
 		return
 	}
 
@@ -228,16 +236,19 @@ func (h *Handler) AdminGetTemplateContentHandler(w http.ResponseWriter, r *http.
 
 	type blockInfo struct {
 		Name       string `json:"name"`
+		Label      string `json:"label"`
 		Default    string `json:"default"`
 		Current    string `json:"current"`
 		IsModified bool   `json:"is_modified"`
 	}
 
-	blocks := make([]blockInfo, 0, len(templateDefaults))
-	for name, def := range templateDefaults {
-		cur := current[name]
+	// In the order the email shows them, with their Czech names.
+	blocks := make([]blockInfo, 0, len(spec.Blocks))
+	for _, b := range spec.Blocks {
+		def, cur := templateDefaults[b.Name], current[b.Name]
 		blocks = append(blocks, blockInfo{
-			Name:       name,
+			Name:       b.Name,
+			Label:      b.Label,
 			Default:    def,
 			Current:    cur,
 			IsModified: cur != def,
@@ -246,10 +257,12 @@ func (h *Handler) AdminGetTemplateContentHandler(w http.ResponseWriter, r *http.
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":  true,
-		"template": templateName,
-		"lang":     lang,
-		"blocks":   blocks,
+		"success":      true,
+		"template":     templateName,
+		"lang":         lang,
+		"when":         spec.When,
+		"placeholders": spec.Placeholders,
+		"blocks":       blocks,
 	})
 }
 
@@ -292,11 +305,16 @@ func (h *Handler) saveTemplateBlocks(ctx context.Context, templateName, lang str
 	if !ok {
 		return fmt.Errorf("unknown template: %s", templateName)
 	}
-	for blockName := range blocks {
+	spec, _ := email.TemplateByKey(templateName)
+	for blockName, content := range blocks {
 		if _, ok := templateDefaults[blockName]; !ok {
 			return fmt.Errorf("unknown block: %s", blockName)
 		}
+		if err := spec.CheckPlaceholders(content); err != nil {
+			return fmt.Errorf("blok %s: %w", blockName, err)
+		}
 	}
+	current := h.emailClient.LoadRawContentBlocks(ctx, templateName, lang)
 
 	for blockName, content := range blocks {
 		content = email.NormalizeBlockText(content)
@@ -323,6 +341,26 @@ func (h *Handler) saveTemplateBlocks(ctx context.Context, templateName, lang str
 		if err != nil {
 			return fmt.Errorf("failed to save block %s: %w", blockName, err)
 		}
+	}
+
+	// What changed, and the text it replaced, so an edit can be undone.
+	var changed []string
+	before := map[string]string{}
+	for blockName, content := range blocks {
+		if content = email.NormalizeBlockText(content); content != current[blockName] {
+			changed = append(changed, blockName)
+			before[blockName] = current[blockName]
+		}
+	}
+	if len(changed) > 0 {
+		sort.Strings(changed)
+		metadata, _ := json.Marshal(map[string]any{"template": templateName, "lang": lang, "admin": adminEmail, "before": before})
+		h.queries.CreateLog(ctx, db.CreateLogParams{
+			Subsystem: "email",
+			Level:     "info",
+			Message:   fmt.Sprintf("Šablona %s (%s): upraveno %s (%s)", templateName, lang, strings.Join(changed, ", "), adminEmail),
+			Metadata:  sql.NullString{String: string(metadata), Valid: true},
+		})
 	}
 	return nil
 }
@@ -441,29 +479,47 @@ func outcomeText(err error) string {
 	return "odesláno"
 }
 
-// buildEmailTestData builds template data and resolves the template filename
-// for a given email type. Used by both test-send and preview handlers.
-// paymentsID is the VS used for QR codes (real user's VS for test, "12345" for preview).
-func (h *Handler) buildEmailTestData(ctx context.Context, emailType, lang, name, username, paymentsID string) (templateFile string, data map[string]interface{}, err error) {
-	content := h.emailClient.LoadContentBlocks(ctx, emailType, lang)
-	labels := email.EmailLabels(lang)
+// emailScenarios are the standings the admin's previews and test emails show
+// for each membership reminder, as multiples of the monthly fee. They are
+// built by the same code as the real reminders, so a preview cannot show
+// something the monthly run would never send.
+var emailScenarios = map[string]struct {
+	tier    string
+	balance float64 // in monthly fees
+}{
+	email.TierPrepaidEnding:            {email.TierPrepaidEnding, 0},
+	email.TierPrepaidEnding + "_short": {email.TierPrepaidEnding, -0.3},
+	email.TierNegativeBalance:          {email.TierNegativeBalance, -1},
+	email.TierDebtWarning:              {email.TierDebtWarning, -2.4},
+}
 
-	data = map[string]interface{}{
-		"Name":      name,
-		"Username":  username,
-		"PortalURL": h.config.BaseURL,
-		"Content":   content,
-		"Labels":    labels,
+// buildEmailTestData builds what the preview and the test emails render for
+// emailType, addressed to user: the admin themselves for a test email, a
+// made-up member for the preview. Membership reminders get a scenario from
+// emailScenarios at the user's own fee (1000 Kč without one).
+func (h *Handler) buildEmailTestData(ctx context.Context, emailType, lang string, user *db.User) (templateFile, subject string, data any, err error) {
+	if scenario, ok := emailScenarios[emailType]; ok {
+		fee := 1000.0
+		if level, err := h.queries.GetLevel(ctx, user.LevelID); err == nil {
+			if f := dues.MonthlyFee(user.LevelActualAmount, level.Amount); f > 0 {
+				fee = f
+			}
+		}
+		st := dues.Standing{Fee: fee, Balance: math.Round(scenario.balance * fee), Anchor: dues.MonthOf(time.Now())}
+		e, err := h.emailClient.MembershipEmailFor(ctx, user, lang, scenario.tier, st)
+		if err != nil {
+			return "", "", nil, err
+		}
+		return email.TemplateFileForTier(scenario.tier), e.Content["subject"], e, nil
 	}
 
-	// Debt reminders carry payment details. Like the real ones, they cannot be
-	// rendered before the FIO sync has recorded the account.
-	if emailType == "negative_balance" || emailType == "debt_warning" {
-		acc, ok := bank.Load(ctx, h.queries)
-		if !ok {
-			return "", nil, bank.ErrUnknown
-		}
-		email.AddPaymentAccount(data, acc)
+	content := h.emailClient.LoadContentBlocks(ctx, emailType, lang)
+	fields := map[string]interface{}{
+		"Name":      user.DisplayName(),
+		"Username":  user.Username.String,
+		"PortalURL": h.config.BaseURL,
+		"Content":   content,
+		"Labels":    email.EmailLabels(lang),
 	}
 
 	switch emailType {
@@ -471,39 +527,30 @@ func (h *Handler) buildEmailTestData(ctx context.Context, emailType, lang, name,
 		templateFile = "registration.html"
 	case "welcome":
 		templateFile = "welcome.html"
-	case "negative_balance":
-		templateFile = "negative_balance.html"
-		data["Balance"] = -500.0
-		data["AbsBalance"] = 500.0
-		data["PaymentsID"] = paymentsID
-		data["QRAmount"] = 1000.0
-		if qr := h.emailClient.GenerateQRForEmail(paymentsID, 1000); qr != "" {
-			data["PaymentQRCode"] = qr
-		}
-	case "debt_warning":
-		templateFile = "debt_warning.html"
-		data["Balance"] = -2400.0
-		data["AbsBalance"] = 2400.0
-		data["MonthlyFee"] = 1000.0
-		data["PaymentsID"] = paymentsID
-		data["QRAmount"] = 2400.0
-		if qr := h.emailClient.GenerateQRForEmail(paymentsID, 2400); qr != "" {
-			data["PaymentQRCode"] = qr
-		}
 	case "membership_suspended":
 		templateFile = "membership_suspended.html"
-		data["Reason"] = "Dluh na členském příspěvku přesahuje povolený limit."
 	case email.TemplateBarDebt:
 		templateFile = email.TemplateFileBarDebt
 		threshold := email.LoadBarDebtSettings(ctx, h.queries).ThresholdCZK
-		data["BalanceCents"] = int64(-35050)
-		data["BalanceText"] = email.FormatCZKCents(-35050)
-		data["ThresholdText"] = strconv.FormatInt(threshold, 10)
+		balance := -(threshold + 150) * 100
+		fields["BalanceCents"] = balance
+		fields["BalanceText"] = email.FormatCZKCents(balance)
+		fields["ThresholdText"] = strconv.FormatInt(threshold, 10)
 	default:
-		return "", nil, fmt.Errorf("unknown template: %s", emailType)
+		return "", "", nil, fmt.Errorf("neznámá šablona: %s", emailType)
 	}
 
-	return templateFile, data, nil
+	return templateFile, content["subject"], fields, nil
+}
+
+// previewMember is who the preview is addressed to.
+func previewMember(lang string) *db.User {
+	return &db.User{
+		Username:   sql.NullString{String: "jan.novak", Valid: true},
+		Realname:   sql.NullString{String: "Jan Novák", Valid: true},
+		PaymentsID: sql.NullString{String: "12345", Valid: true},
+		Locale:     lang,
+	}
 }
 
 // AdminPreviewEmailHandler renders a template with test data for preview.
@@ -524,7 +571,7 @@ func (h *Handler) AdminPreviewEmailHandler(w http.ResponseWriter, r *http.Reques
 		req.Lang = "cs"
 	}
 
-	templateFile, data, err := h.buildEmailTestData(ctx, req.TemplateName, req.Lang, "Jan Novák", "jan.novak", "12345")
+	templateFile, subject, data, err := h.buildEmailTestData(ctx, req.TemplateName, req.Lang, previewMember(req.Lang))
 	if err != nil {
 		h.jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -535,13 +582,14 @@ func (h *Handler) AdminPreviewEmailHandler(w http.ResponseWriter, r *http.Reques
 		Data:         data,
 	})
 	if err != nil {
-		h.jsonError(w, "Render failed: "+err.Error(), http.StatusInternalServerError)
+		h.jsonError(w, "Náhled se nepodařilo vykreslit: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
+		"subject": subject,
 		"html":    rendered,
 	})
 }
@@ -603,6 +651,75 @@ func (h *Handler) AdminSaveBannerHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.jsonSuccess(w, "Banner uložen")
+}
+
+// prepaidNow counts the members the reminder before any debt would go to now,
+// switched on or not, so the admin knows what turning it on means.
+func (h *Handler) prepaidNow(ctx context.Context, s email.MembershipSettings) int {
+	users, err := h.queries.ListAcceptedUsersForFees(ctx)
+	if err != nil {
+		log.Printf("[Handler] failed to list members: %v", err)
+		return 0
+	}
+	now := time.Now()
+	standings, err := dues.LoadAll(ctx, h.queries, users, now)
+	if err != nil {
+		log.Printf("[Handler] failed to load standings: %v", err)
+		return 0
+	}
+	policy := s.Policy()
+	policy.Prepaid = true
+	n := 0
+	for _, st := range standings {
+		if dues.Classify(st, dues.MonthOf(now), policy) == email.TierPrepaidEnding {
+			n++
+		}
+	}
+	return n
+}
+
+// AdminSaveMembershipEmailSettingsHandler saves the membership reminder settings.
+// POST /api/admin/membership-email-settings
+func (h *Handler) AdminSaveMembershipEmailSettingsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req struct {
+		PrepaidEnabled bool `json:"prepaid_enabled"`
+		MonthsAhead    int  `json:"months_ahead"`
+		SuggestMonths  int  `json:"suggest_months"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	settings := email.MembershipSettings{
+		PrepaidEnabled: req.PrepaidEnabled,
+		MonthsAhead:    req.MonthsAhead,
+		SuggestMonths:  req.SuggestMonths,
+	}
+	if err := settings.Validate(); err != nil {
+		h.jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := email.SaveMembershipSettings(ctx, h.queries, settings); err != nil {
+		h.jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	state := "vypnuto"
+	if settings.PrepaidEnabled {
+		state = "zapnuto"
+	}
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "email",
+		Level:     "info",
+		Message: fmt.Sprintf("Upozornění na příspěvky: před koncem předplatného %s, %d měsíc(e) předem, doporučená platba na %d měsíců (%s)",
+			state, settings.MonthsAhead, settings.SuggestMonths, h.adminEmail(r)),
+	})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Nastavení uloženo",
+		"prepaid": h.prepaidNow(ctx, settings),
+	})
 }
 
 // AdminSaveBarDebtSettingsHandler saves the bar debt reminder settings.

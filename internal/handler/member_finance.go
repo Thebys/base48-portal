@@ -9,6 +9,7 @@ import (
 
 	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/dues"
 	"github.com/base48/member-portal/internal/finance"
 )
 
@@ -61,13 +62,7 @@ func (h *Handler) buildFinanceSummary(ctx context.Context) (*financeSummary, err
 	}
 
 	for _, user := range users {
-		feeAmount := user.LevelActualAmount
-		if feeAmount == "0" || feeAmount == "" {
-			feeAmount = user.LevelAmount
-		}
-
-		var feeFloat float64
-		fmt.Sscanf(feeAmount, "%f", &feeFloat)
+		feeFloat := dues.MonthlyFee(user.LevelActualAmount, user.LevelAmount)
 		totalMonthlyFees += int64(feeFloat)
 
 		balance := balanceMap[user.ID]

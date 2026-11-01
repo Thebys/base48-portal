@@ -9,7 +9,7 @@ import (
 
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
-	"github.com/base48/member-portal/internal/money"
+	"github.com/base48/member-portal/internal/dues"
 )
 
 // runFees creates this month's membership fee for every accepted member and
@@ -67,21 +67,17 @@ func chargeMonthlyFees(ctx context.Context, queries *db.Queries, now time.Time) 
 			continue
 		}
 
-		// Určíme částku - vždy používáme level_actual_amount, fallback na level.amount.
-		// Nečíselnou částku (třeba "NaN", který profil dřív pustil) by SQLite
-		// v bilanci sečetlo jako 0, takže by člen fakticky neplatil nic.
-		feeAmount := user.LevelActualAmount
-		if amount, err := money.ParseAmount(feeAmount); err != nil {
-			feeAmount = user.LevelAmount
-			log.Printf("  ⚠ User %s has an invalid level_actual_amount %q, using level default: %s", user.Email, user.LevelActualAmount, feeAmount)
-		} else if amount == 0 {
-			feeAmount = user.LevelAmount
-			log.Printf("  ⚠ User %s has no level_actual_amount, using level default: %s", user.Email, feeAmount)
-		}
-		if _, err := money.ParseAmount(feeAmount); err != nil {
-			log.Printf("  ✗ Level amount %q of %s is not a valid amount, no fee created", feeAmount, user.Email)
+		// The member's own amount, else the level's (dues.FeeAmount). A junk
+		// amount such as "NaN", which the profile used to let through, would
+		// otherwise be summed by SQLite as 0: the member would pay nothing.
+		feeAmount, fellBack, err := dues.FeeAmount(user.LevelActualAmount, user.LevelAmount)
+		if err != nil {
+			log.Printf("  ✗ No fee for %s: %v", user.Email, err)
 			errors++
 			continue
+		}
+		if fellBack {
+			log.Printf("  ⚠ User %s has an invalid level_actual_amount %q, using level default: %s", user.Email, user.LevelActualAmount, feeAmount)
 		}
 
 		// Vytvoříme fee záznam

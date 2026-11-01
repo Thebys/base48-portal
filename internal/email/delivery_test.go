@@ -131,7 +131,7 @@ func outboxRow(t *testing.T, database *sql.DB, id int64) (status string, attempt
 func TestWorkerDeliversDueEmails(t *testing.T) {
 	c, database, smtp := deliveryClient(t)
 	user := seedDebtor(t, database, "owing", 2)
-	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 
 	if sent := c.ProcessPendingEmails(context.Background()); sent != 1 {
 		t.Fatalf("sent %d, want 1", sent)
@@ -152,7 +152,7 @@ func TestWorkerDeliversDueEmails(t *testing.T) {
 func TestWorkerIdlesWhileEmailIsOff(t *testing.T) {
 	c, database, smtp := deliveryClient(t)
 	user := seedDebtor(t, database, "owing", 2)
-	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 
 	c.config.EmailEnabled = false
 	if sent := c.ProcessPendingEmails(context.Background()); sent != 0 || smtp.count() != 0 {
@@ -174,7 +174,7 @@ func TestWorkerIdlesWhileEmailIsOff(t *testing.T) {
 func TestFailedTriesAreRescheduledThenFail(t *testing.T) {
 	c, database, smtp := deliveryClient(t)
 	user := seedDebtor(t, database, "owing", 2)
-	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 	smtp.setFailing(true)
 
 	for try := int64(1); try <= 3; try++ {
@@ -209,7 +209,7 @@ func TestFailedTriesAreRescheduledThenFail(t *testing.T) {
 func TestSendNowWithdrawsAReminderThatIsNoLongerDue(t *testing.T) {
 	c, database, smtp := deliveryClient(t)
 	user := seedDebtor(t, database, "payer", 2)
-	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 	pay(t, database, user, "payer", 2000)
 
 	err := c.SendNow(context.Background(), entry.ID)

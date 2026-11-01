@@ -13,6 +13,7 @@ import (
 	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/dues"
 	"github.com/base48/member-portal/internal/email"
 )
 
@@ -58,12 +59,13 @@ type reminderRun struct {
 	Members int // accepted members on a paid level
 	Queued  int
 	Skipped int // already had a membership reminder this month
-	NoDebt  int
+	NoDebt  int // no reminder warranted
 	Errors  int
 }
 
 // queueMembershipReminders queues a reminder for every accepted member whose
-// balance warrants one and who has not had one this calendar month. With
+// standing warrants one (dues.Classify, with the admin's settings) and who
+// has not had one this calendar month. With
 // dryRun it only writes to out who would get what. The error is set when the
 // pass could not run at all: no payment account known, email switched off,
 // members not listed. Then the month is not recorded and the daemon tries
@@ -88,32 +90,29 @@ func queueMembershipReminders(ctx context.Context, cfg *config.Config, queries *
 	if err != nil {
 		return run, fmt.Errorf("list members: %w", err)
 	}
+	standings, err := dues.LoadAll(ctx, queries, users, now)
+	if err != nil {
+		return run, fmt.Errorf("load standings: %w", err)
+	}
+	settings := email.LoadMembershipSettings(ctx, queries)
+	month := dues.MonthOf(now)
 
 	due := email.LocalHourAfter(now.Add(reminderDelay), reminderHour)
 	client := email.New(cfg, queries).At(due)
 	since := monthStartUTC(now)
 
-	log.Printf("Membership reminders for %s, due %s", now.Format("2006-01"), due.Format("2006-01-02 15:04"))
+	log.Printf("Membership reminders for %s, due %s (before any debt: %s)",
+		month, due.Format("2006-01-02 15:04"), map[bool]string{true: "on", false: "off"}[settings.PrepaidEnabled])
 
 	for _, user := range users {
-		monthlyFee := email.MonthlyFee(user.LevelActualAmount, user.LevelAmount)
-		if monthlyFee <= 0 {
+		st := standings[user.ID]
+		if !st.Known() {
 			continue
 		}
 		run.Members++
 
-		balance, err := queries.GetUserBalance(ctx, db.GetUserBalanceParams{
-			UserID:   sql.NullInt64{Int64: user.ID, Valid: true},
-			UserID_2: user.ID,
-		})
-		if err != nil {
-			log.Printf("  ⚠ Failed to get balance for %s: %v", user.Email, err)
-			run.Errors++
-			continue
-		}
-
-		tier := email.DebtTier(float64(balance), monthlyFee)
-		if tier == "" {
+		tier := dues.Classify(st, month, settings.Policy())
+		if tier == dues.None {
 			run.NoDebt++
 			continue
 		}
@@ -137,7 +136,8 @@ func queueMembershipReminders(ctx context.Context, cfg *config.Config, queries *
 		}
 
 		if dryRun {
-			fmt.Fprintf(out, "%-22s %-40s %8d Kč (příspěvek %.0f Kč)\n", tier, user.Email, balance, monthlyFee)
+			fmt.Fprintf(out, "%-18s %-40s %8.0f Kč  zaplaceno do %s  (příspěvek %.0f Kč)\n",
+				tier, user.Email, st.Balance, st.PaidThrough(), st.Fee)
 			run.Queued++
 			continue
 		}
@@ -148,12 +148,12 @@ func queueMembershipReminders(ctx context.Context, cfg *config.Config, queries *
 			run.Errors++
 			continue
 		}
-		if err := client.SendDebtReminder(ctx, &fullUser, tier, float64(balance), monthlyFee); err != nil {
+		if err := client.SendMembershipReminder(ctx, &fullUser, tier, st); err != nil {
 			log.Printf("  ⚠ Failed to queue %s for %s: %v", tier, user.Email, err)
 			run.Errors++
 			continue
 		}
-		log.Printf("  ✉ Queued %s for %s (balance: %d Kč)", tier, user.Email, balance)
+		log.Printf("  ✉ Queued %s for %s (balance: %.0f Kč, paid through %s)", tier, user.Email, st.Balance, st.PaidThrough())
 		run.Queued++
 	}
 

@@ -1054,6 +1054,20 @@ func (q *Queries) GetFeeByUserAndPeriod(ctx context.Context, arg GetFeeByUserAnd
 	return i, err
 }
 
+const getLatestChargedMonth = `-- name: GetLatestChargedMonth :one
+SELECT CAST(COALESCE(MAX(substr(period_start, 1, 7)), '') AS TEXT) AS month
+FROM fees WHERE substr(period_start, 1, 7) <= CAST(?1 AS TEXT)
+`
+
+// The latest month anybody was charged for, up to the given 'YYYY-MM', so
+// that a fee an admin entered ahead does not count. ” when none.
+func (q *Queries) GetLatestChargedMonth(ctx context.Context, until string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getLatestChargedMonth, until)
+	var month string
+	err := row.Scan(&month)
+	return month, err
+}
+
 const getLevel = `-- name: GetLevel :one
 SELECT id, name, amount, active, created_at FROM levels WHERE id = ? LIMIT 1
 `
@@ -1090,7 +1104,7 @@ func (q *Queries) GetMaxNumericPaymentsID(ctx context.Context) (int64, error) {
 const getMembershipEmailSince = `-- name: GetMembershipEmailSince :one
 SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
 WHERE user_id = ?1
-  AND template_name IN ('negative_balance.html', 'debt_warning.html')
+  AND template_name IN ('prepaid_ending.html', 'negative_balance.html', 'debt_warning.html')
   AND status IN ('pending', 'sent')
   AND created_at >= CAST(?2 AS TEXT)
 ORDER BY created_at DESC
@@ -1612,6 +1626,19 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Locale,
 	)
 	return i, err
+}
+
+const getUserLastFeeMonth = `-- name: GetUserLastFeeMonth :one
+SELECT CAST(COALESCE(MAX(substr(period_start, 1, 7)), '') AS TEXT) AS month
+FROM fees WHERE user_id = ?
+`
+
+// The last month a member was charged for, as 'YYYY-MM', ” when never.
+func (q *Queries) GetUserLastFeeMonth(ctx context.Context, userID int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserLastFeeMonth, userID)
+	var month string
+	err := row.Scan(&month)
+	return month, err
 }
 
 const grantUserKeys = `-- name: GrantUserKeys :one
@@ -2350,6 +2377,40 @@ func (q *Queries) ListFeesByUser(ctx context.Context, userID int64) ([]Fee, erro
 	return items, nil
 }
 
+const listLastFeeMonths = `-- name: ListLastFeeMonths :many
+SELECT user_id, CAST(MAX(substr(period_start, 1, 7)) AS TEXT) AS month
+FROM fees GROUP BY user_id
+`
+
+type ListLastFeeMonthsRow struct {
+	UserID int64  `json:"user_id"`
+	Month  string `json:"month"`
+}
+
+// The last month each member was charged for, as 'YYYY-MM'.
+func (q *Queries) ListLastFeeMonths(ctx context.Context) ([]ListLastFeeMonthsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLastFeeMonths)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLastFeeMonthsRow{}
+	for rows.Next() {
+		var i ListLastFeeMonthsRow
+		if err := rows.Scan(&i.UserID, &i.Month); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestBalances = `-- name: ListLatestBalances :many
 SELECT account, CAST(MAX(day) AS TEXT) AS day, balance
 FROM bank_balances
@@ -2790,20 +2851,12 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 	return items, nil
 }
 
-const listRecentDebtEmails = `-- name: ListRecentDebtEmails :many
-SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
-WHERE user_id IS NOT NULL
-  AND template_name IN ('negative_balance.html', 'debt_warning.html')
-  AND status IN ('pending', 'sent')
-  AND created_at > datetime('now', '-180 days')
-ORDER BY created_at DESC
+const listRecentEmailOutbox = `-- name: ListRecentEmailOutbox :many
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox ORDER BY created_at DESC LIMIT ?
 `
 
-// Debt reminders already queued or sent, newest first. The manual reminder
-// picker folds these per user to show "last reminded N days ago" and to spot a
-// reminder still waiting in the outbox.
-func (q *Queries) ListRecentDebtEmails(ctx context.Context) ([]EmailOutbox, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentDebtEmails)
+func (q *Queries) ListRecentEmailOutbox(ctx context.Context, limit int64) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentEmailOutbox, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -2841,12 +2894,20 @@ func (q *Queries) ListRecentDebtEmails(ctx context.Context) ([]EmailOutbox, erro
 	return items, nil
 }
 
-const listRecentEmailOutbox = `-- name: ListRecentEmailOutbox :many
-SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox ORDER BY created_at DESC LIMIT ?
+const listRecentMembershipEmails = `-- name: ListRecentMembershipEmails :many
+SELECT id, user_id, recipient, subject, template_name, template_data, rendered_html, status, attempts, max_attempts, last_error, next_retry_at, sent_at, created_at, leased_until FROM email_outbox
+WHERE user_id IS NOT NULL
+  AND template_name IN ('prepaid_ending.html', 'negative_balance.html', 'debt_warning.html')
+  AND status IN ('pending', 'sent')
+  AND created_at > datetime('now', '-180 days')
+ORDER BY created_at DESC
 `
 
-func (q *Queries) ListRecentEmailOutbox(ctx context.Context, limit int64) ([]EmailOutbox, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentEmailOutbox, limit)
+// Membership reminders already queued or sent, newest first. The manual
+// reminder picker folds these per user to show "last reminded N days ago" and
+// to spot a reminder still waiting in the outbox.
+func (q *Queries) ListRecentMembershipEmails(ctx context.Context) ([]EmailOutbox, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentMembershipEmails)
 	if err != nil {
 		return nil, err
 	}

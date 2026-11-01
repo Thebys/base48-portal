@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"math"
 	"mime"
 	"net"
 	"net/smtp"
@@ -20,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 )
@@ -137,6 +135,19 @@ var defaultContentBlocks = map[string]map[string]string{
 		"sign_off":        "Base48 hackerspace",
 		"footer":          "Máš otázky? Stačí odpovědět na tento e-mail.",
 	},
+	"prepaid_ending": {
+		"subject":          "Členství v Base48 máš zaplacené do konce {zaplaceno_do}",
+		"subject_short":    "Na {mesic} ti v Base48 chybí {chybi}",
+		"preheader":        "Díky za podporu! Pokud můžeš, pošli příspěvek aspoň na {mesice} dopředu.",
+		"preheader_short":  "Doplať prosím {chybi} na {mesic}, ideálně rovnou na {mesice} dopředu.",
+		"heading":          "Díky za podporu Base48",
+		"heading_short":    "Na {mesic} ti chybí {chybi}",
+		"intro_text":       "díky, že platíš členské příspěvky. Takhle na tom teď jsi:",
+		"intro_text_short": "na členský příspěvek za {mesic} ti ještě něco chybí. Nejde o upomínku, jen ať o tom víš dřív, než se z toho stane dluh:",
+		"prepay_text":      "Další příspěvek se předepíše začátkem příštího měsíce. Pokud můžeš, pošli ho rovnou aspoň na {mesice} dopředu: méně plateb pro tebe, méně párování pro nás a spolek ví, s čím může počítat. Díky!",
+		"sign_off":         "Base48 hackerspace",
+		"footer":           "Máš otázky, nebo ti něco nesedí? Stačí odpovědět na tento e-mail.",
+	},
 	"negative_balance": {
 		"subject":     "Záporná bilance členského příspěvku",
 		"heading":     "Záporná bilance členského příspěvku",
@@ -199,6 +210,19 @@ var defaultContentBlocksEN = map[string]map[string]string{
 		"sign_off":        "Base48 hackerspace",
 		"footer":          "Questions? Just reply to this email.",
 	},
+	"prepaid_ending": {
+		"subject":          "Your Base48 membership is paid until the end of {zaplaceno_do}",
+		"subject_short":    "Your Base48 membership is {chybi} short for {mesic}",
+		"preheader":        "Thanks for your support! If you can, pay at least {mesice} ahead.",
+		"preheader_short":  "Please top up {chybi} for {mesic}, ideally {mesice} ahead.",
+		"heading":          "Thanks for supporting Base48",
+		"heading_short":    "{chybi} short for {mesic}",
+		"intro_text":       "thank you for paying your membership fees. Here is where you stand:",
+		"intro_text_short": "your membership fee for {mesic} is still a little short. This is not a debt reminder, just a heads-up before it becomes one:",
+		"prepay_text":      "The next fee is charged at the start of next month. If you can, pay at least {mesice} ahead: fewer payments for you, less matching for us, and the association knows what it can count on. Thank you!",
+		"sign_off":         "Base48 hackerspace",
+		"footer":           "Questions, or something does not add up? Just reply to this email.",
+	},
 	"negative_balance": {
 		"subject":     "Negative membership fee balance",
 		"heading":     "Negative membership fee balance",
@@ -250,56 +274,60 @@ var allDefaultContentBlocks = map[string]map[string]map[string]string{
 func EmailLabels(lang string) map[string]string {
 	if lang == "en" {
 		return map[string]string{
-			"greeting_prefix":       "Hi",
-			"credentials_heading":   "Your login credentials:",
-			"username_label":        "Username:",
-			"payment_heading":       "Payment details:",
-			"account_label":         "Account number:",
-			"iban_label":            "IBAN:",
-			"vs_label":              "Variable symbol:",
-			"payment_message_label": "Payment reference:",
-			"payment_ref_text":      "Base48 membership fee",
-			"qr_instruction":        "Tap the QR code to open in your banking app",
-			"button_portal":         "Open Member Portal",
-			"button_wiki":           "Browse the wiki",
-			"button_view_profile":   "View details in portal",
-			"button_my_profile":     "View my profile",
-			"reason_heading":        "Reason for suspension:",
-			"amount_due_label":      "Amount due:",
-			"current_debt_label":    "Current debt:",
-			"monthly_fee_label":     "Monthly fee:",
-			"or_partial":            "(or at least a portion)",
-			"vs_reminder":           "Important: Use your variable symbol (%s) so we can automatically match the payment to your account.",
-			"debt_payment_ref":      "Membership fee payment",
-			"bar_balance_label":     "Bar balance:",
-			"bar_threshold_note":    "We send this reminder once your bar debt goes above %s CZK.",
+			"greeting_prefix":        "Hi",
+			"credentials_heading":    "Your login credentials:",
+			"username_label":         "Username:",
+			"payment_heading":        "Payment details:",
+			"account_label":          "Account number:",
+			"iban_label":             "IBAN:",
+			"vs_label":               "Variable symbol:",
+			"payment_message_label":  "Payment reference:",
+			"qr_instruction":         "Scan the QR code in your banking app. You can change the amount there.",
+			"button_portal":          "Open Member Portal",
+			"button_view_profile":    "View details in portal",
+			"button_my_profile":      "View my profile",
+			"reason_heading":         "Reason for suspension:",
+			"current_debt_label":     "Current debt:",
+			"monthly_fee_label":      "Monthly fee:",
+			"paid_through_label":     "Paid until the end of",
+			"short_label":            "Short for %s:",
+			"amount_suggested_label": "Suggested payment:",
+			"amount_minimum_label":   "At least:",
+			"amount_note_debt":       "your debt and %s ahead, paid until the end of %s",
+			"amount_note_short":      "what is missing and %s ahead, paid until the end of %s",
+			"amount_note_ahead":      "%s ahead, paid until the end of %s",
+			"vs_reminder":            "Important: Use your variable symbol (%s) so we can automatically match the payment to your account.",
+			"bar_balance_label":      "Bar balance:",
+			"bar_threshold_note":     "We send this reminder once your bar debt goes above %s CZK.",
 		}
 	}
 	// Czech (default)
 	return map[string]string{
-		"greeting_prefix":       "Ahoj",
-		"credentials_heading":   "Tvé přihlašovací údaje:",
-		"username_label":        "Uživatelské jméno:",
-		"payment_heading":       "Platební údaje:",
-		"account_label":         "Číslo účtu:",
-		"iban_label":            "IBAN:",
-		"vs_label":              "Variabilní symbol:",
-		"payment_message_label": "Zpráva pro příjemce:",
-		"payment_ref_text":      "Členský příspěvek Base48",
-		"qr_instruction":        "Klikni na QR kód pro otevření v\u00a0bankovní aplikaci",
-		"button_portal":         "Otevřít členský portál",
-		"button_wiki":           "Prohlédnout wiki",
-		"button_view_profile":   "Zobrazit detail v\u00a0portálu",
-		"button_my_profile":     "Zobrazit můj profil",
-		"reason_heading":        "Důvod pozastavení:",
-		"amount_due_label":      "Částka k\u00a0úhradě:",
-		"current_debt_label":    "Aktuální dluh:",
-		"monthly_fee_label":     "Měsíční příspěvek:",
-		"or_partial":            "(nebo alespoň část)",
-		"vs_reminder":           "Důležité: Použij svůj variabilní symbol (%s), ať můžeme platbu automaticky přiřadit k\u00a0tvému účtu.",
-		"debt_payment_ref":      "Úhrada členského příspěvku",
-		"bar_balance_label":     "Zůstatek na baru:",
-		"bar_threshold_note":    "Tuto upomínku posíláme, když dluh na baru stoupne nad %s\u00a0Kč.",
+		"greeting_prefix":        "Ahoj",
+		"credentials_heading":    "Tvé přihlašovací údaje:",
+		"username_label":         "Uživatelské jméno:",
+		"payment_heading":        "Platební údaje:",
+		"account_label":          "Číslo účtu:",
+		"iban_label":             "IBAN:",
+		"vs_label":               "Variabilní symbol:",
+		"payment_message_label":  "Zpráva pro příjemce:",
+		"qr_instruction":         "QR kód naskenuj v\u00a0bankovní aplikaci. Částku v\u00a0ní můžeš změnit.",
+		"button_portal":          "Otevřít členský portál",
+		"button_view_profile":    "Zobrazit detail v\u00a0portálu",
+		"button_my_profile":      "Zobrazit můj profil",
+		"reason_heading":         "Důvod pozastavení:",
+		"current_debt_label":     "Aktuální dluh:",
+		"monthly_fee_label":      "Měsíční příspěvek:",
+		"paid_through_label":     "Zaplaceno do konce",
+		"short_label":            "Na %s chybí:",
+		"amount_suggested_label": "Doporučená platba:",
+		"amount_minimum_label":   "Nejméně:",
+		"amount_note_debt":       "dluh a\u00a0%s dopředu, zaplaceno pak do konce %s",
+		"amount_note_short":      "doplatek a\u00a0%s dopředu, zaplaceno pak do konce %s",
+		"amount_note_ahead":      "%s dopředu, zaplaceno pak do konce %s",
+		"vs_reminder":            "Důležité: Použij svůj variabilní symbol (%s), ať můžeme platbu automaticky přiřadit k\u00a0tvému účtu.",
+		"bar_balance_label":      "Zůstatek na baru:",
+		"bar_threshold_note":     "Tuto upomínku posíláme, když dluh na baru stoupne nad %s\u00a0Kč.",
 	}
 }
 
@@ -659,10 +687,15 @@ func (c *Client) sendSMTP(recipient, subject, htmlBody string) error {
 	return client.Quit()
 }
 
+// layoutFile holds what every email template shares (see its comment).
+const layoutFile = "_layout.html"
+
 // renderTemplate renders an email template and returns the HTML string
 func (c *Client) renderTemplate(params SendParams) (string, error) {
-	templatePath := filepath.Join(c.config.WebRoot, "templates", "email", params.TemplateName)
-	tmpl, err := template.ParseFiles(templatePath)
+	dir := filepath.Join(c.config.WebRoot, "templates", "email")
+	// The email first: ParseFiles names the set after it, and that is what
+	// Execute runs. The layout brings the frame and the payment box.
+	tmpl, err := template.ParseFiles(filepath.Join(dir, params.TemplateName), filepath.Join(dir, layoutFile))
 	if err != nil {
 		return "", fmt.Errorf("template parse error: %w", err)
 	}
@@ -744,29 +777,6 @@ func (c *Client) logEmail(ctx context.Context, params SendParams, err error) err
 	}
 
 	return err
-}
-
-// generateEmailQR builds a URL to the /api/qr endpoint for embedding in emails.
-// Uses max(abs(debtAmount), minAmount) so the QR is never for less than minAmount.
-// Returns empty string if the user has no PaymentsID. The endpoint encodes the
-// recorded account, so callers check that one is known (see debtReminderData).
-func (c *Client) generateEmailQR(user *db.User, debtAmount float64, minAmount float64) string {
-	if !user.PaymentsID.Valid || user.PaymentsID.String == "" {
-		return ""
-	}
-
-	amount := math.Max(math.Abs(debtAmount), minAmount)
-	return fmt.Sprintf("%s/api/qr?vs=%s&amount=%.0f", c.config.BaseURL, user.PaymentsID.String, amount)
-}
-
-// GenerateQRForEmail builds a URL to the /api/qr endpoint.
-// Intended for test/preview handlers that need to attach QR to template data.
-func (c *Client) GenerateQRForEmail(vs string, amount float64) string {
-	if vs == "" {
-		return ""
-	}
-
-	return fmt.Sprintf("%s/api/qr?vs=%s&amount=%.0f", c.config.BaseURL, vs, amount)
 }
 
 // LoadContentBlocks loads template content overrides from DB, falling back to
@@ -872,107 +882,6 @@ func (c *Client) SendRegistration(ctx context.Context, user *db.User) error {
 		Recipient:    user.Email,
 		Subject:      content["subject"],
 		TemplateName: "registration.html",
-		Data:         data,
-	})
-}
-
-// Debt reminder tiers. These are the template keys (no .html) shared by the
-// monthly cron, the admin fee-run preview and the manual reminder sender, so all
-// three agree on who gets which email.
-const (
-	TierDebtWarning     = "debt_warning"
-	TierNegativeBalance = "negative_balance"
-)
-
-// DebtTier classifies a balance against the member's monthly fee:
-// at or below minus two monthly fees is a debt warning, at or below minus one
-// is a plain negative balance, anything else warrants no email (empty string).
-// A non-positive monthly fee (free/honorary membership) never triggers one.
-func DebtTier(balance, monthlyFee float64) string {
-	if monthlyFee <= 0 {
-		return ""
-	}
-	switch {
-	case balance <= -(2 * monthlyFee):
-		return TierDebtWarning
-	case balance <= -monthlyFee:
-		return TierNegativeBalance
-	default:
-		return ""
-	}
-}
-
-// TemplateFileForTier maps a debt tier to its outbox template_name.
-func TemplateFileForTier(tier string) string {
-	if tier == "" {
-		return ""
-	}
-	return tier + ".html"
-}
-
-// MonthlyFee resolves a member's monthly fee: their individual override when
-// set, otherwise their level's amount.
-func MonthlyFee(actualAmount, levelAmount string) float64 {
-	amount := actualAmount
-	if amount == "0" || amount == "" {
-		amount = levelAmount
-	}
-	var fee float64
-	fmt.Sscanf(amount, "%f", &fee)
-	return fee
-}
-
-// AddPaymentAccount puts the account members pay into into template data.
-func AddPaymentAccount(data map[string]interface{}, acc bank.Account) {
-	data["BankAccount"] = acc.Domestic()
-	data["BankIBAN"] = acc.PrettyIBAN()
-	data["BankBIC"] = acc.BIC
-}
-
-// debtReminderData builds the template data for a membership debt reminder.
-// The QR amount is max(abs(balance), monthlyFee) — never less than one
-// month's fee. A reminder without payment details is useless, so it fails
-// with bank.ErrUnknown until the FIO sync has recorded the account.
-func (c *Client) debtReminderData(ctx context.Context, user *db.User, tier string, balance, monthlyFee float64) (map[string]interface{}, error) {
-	acc, ok := bank.Load(ctx, c.queries)
-	if !ok {
-		return nil, bank.ErrUnknown
-	}
-	lang := userLang(user)
-	data := map[string]interface{}{
-		"Name":       displayName(user),
-		"Balance":    balance,
-		"AbsBalance": math.Abs(balance),
-		"MonthlyFee": monthlyFee,
-		"PaymentsID": user.PaymentsID.String,
-		"PortalURL":  c.config.BaseURL,
-		"Content":    c.LoadContentBlocks(ctx, tier, lang),
-		"Labels":     EmailLabels(lang),
-	}
-	AddPaymentAccount(data, acc)
-	if qr := c.generateEmailQR(user, balance, monthlyFee); qr != "" {
-		data["PaymentQRCode"] = qr
-		data["QRAmount"] = math.Max(math.Abs(balance), monthlyFee)
-	}
-	return data, nil
-}
-
-// SendDebtReminder queues the email for the given debt tier. The cron job and
-// the admin's manual sender both go through here, and the send-time check
-// re-renders through the same debtReminderData.
-func (c *Client) SendDebtReminder(ctx context.Context, user *db.User, tier string, balance, monthlyFee float64) error {
-	if tier != TierDebtWarning && tier != TierNegativeBalance {
-		return fmt.Errorf("unknown debt tier: %q", tier)
-	}
-	data, err := c.debtReminderData(ctx, user, tier, balance, monthlyFee)
-	if err != nil {
-		return err
-	}
-	return c.QueueEmail(ctx, SendParams{
-		UserID:       sql.NullInt64{Int64: user.ID, Valid: true},
-		Recipient:    user.Email,
-		Subject:      data["Content"].(map[string]string)["subject"],
-		TemplateName: TemplateFileForTier(tier),
 		Data:         data,
 	})
 }

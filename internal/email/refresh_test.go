@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/dues"
 )
 
 // seedDebtor creates an accepted member on a 1000 Kč level who owes `months`
@@ -51,16 +53,26 @@ func pay(t *testing.T, database *sql.DB, userID int64, name string, amount int) 
 	}
 }
 
+// standingOf is the member's standing as the reminders see it.
+func standingOf(t *testing.T, c *Client, user *db.User) dues.Standing {
+	t.Helper()
+	st, err := dues.Load(context.Background(), c.queries, user, "1000", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
 // queueDebt queues the reminder for the given tier and returns the outbox
 // entry as the worker would see it.
-func queueDebt(t *testing.T, c *Client, database *sql.DB, userID int64, tier string, balance float64) db.EmailOutbox {
+func queueDebt(t *testing.T, c *Client, database *sql.DB, userID int64, tier string) db.EmailOutbox {
 	t.Helper()
 	ctx := context.Background()
 	user, err := c.queries.GetUserByID(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Scheduled(0).SendDebtReminder(ctx, &user, tier, balance, 1000); err != nil {
+	if err := c.Scheduled(0).SendMembershipReminder(ctx, &user, tier, standingOf(t, c, &user)); err != nil {
 		t.Fatal(err)
 	}
 	var id int64
@@ -77,7 +89,7 @@ func queueDebt(t *testing.T, c *Client, database *sql.DB, userID int64, tier str
 func TestDebtRefreshCancelsWhenPaid(t *testing.T) {
 	c, database := barTestClient(t)
 	user := seedDebtor(t, database, "payer", 2)
-	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 
 	pay(t, database, user, "payer", 2000) // paid during the 72h review window
 
@@ -95,7 +107,7 @@ func TestDebtRefreshCancelsWhenPaid(t *testing.T) {
 func TestDebtRefreshDowngradesTier(t *testing.T) {
 	c, database := barTestClient(t)
 	user := seedDebtor(t, database, "partial", 3)
-	entry := queueDebt(t, c, database, user, TierDebtWarning, -3000)
+	entry := queueDebt(t, c, database, user, TierDebtWarning)
 
 	pay(t, database, user, "partial", 1500) // now -1500: one fee, not two
 
@@ -117,15 +129,15 @@ func TestDebtRefreshDowngradesTier(t *testing.T) {
 	if tmpl != "negative_balance.html" || subject != entry.Subject {
 		t.Errorf("stored template=%q subject=%q, not updated", tmpl, subject)
 	}
-	if !strings.Contains(html, "-1500&nbsp;Kč") || strings.Contains(html, "-3000") {
-		t.Error("stored html should quote the current -1500, not the queued -3000")
+	if !strings.Contains(html, "−1&nbsp;500&nbsp;Kč") || strings.Contains(html, "−3&nbsp;000") {
+		t.Error("stored html should quote the current −1 500, not the queued −3 000")
 	}
 }
 
 func TestDebtRefreshCancelsForSuspendedMember(t *testing.T) {
 	c, database := barTestClient(t)
 	user := seedDebtor(t, database, "leaver", 2)
-	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 
 	if _, err := database.Exec(`UPDATE users SET state = 'suspended' WHERE id = ?`, user); err != nil {
 		t.Fatal(err)
@@ -141,7 +153,7 @@ func TestDebtRefreshCancelsForSuspendedMember(t *testing.T) {
 func TestDebtRefreshKeepsPaymentDetails(t *testing.T) {
 	c, database := barTestClient(t)
 	user := seedDebtor(t, database, "qr", 2)
-	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 
 	worker := New(c.config, c.queries) // what cmd/cron builds for the outbox
 	if worker.refreshBeforeSend(context.Background(), &entry) != lookSend {
@@ -163,7 +175,7 @@ func TestDebtRefreshKeepsPaymentDetails(t *testing.T) {
 func TestDebtReminderWaitsForPaymentAccount(t *testing.T) {
 	c, database := barTestClient(t)
 	user := seedDebtor(t, database, "early", 2)
-	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance)
 
 	if _, err := database.Exec(`DELETE FROM settings WHERE key = 'bank_account'`); err != nil {
 		t.Fatal(err)
@@ -173,7 +185,7 @@ func TestDebtReminderWaitsForPaymentAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Scheduled(0).SendDebtReminder(context.Background(), &u, TierNegativeBalance, -2000, 1000); !errors.Is(err, bank.ErrUnknown) {
+	if err := c.Scheduled(0).SendMembershipReminder(context.Background(), &u, TierNegativeBalance, standingOf(t, c, &u)); !errors.Is(err, bank.ErrUnknown) {
 		t.Errorf("queueing without an account: err = %v, want bank.ErrUnknown", err)
 	}
 

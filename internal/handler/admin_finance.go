@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/dues"
 	"github.com/base48/member-portal/internal/email"
 	"github.com/base48/member-portal/internal/unmatched"
 )
@@ -19,7 +19,7 @@ type FeePreviewItem struct {
 	Balance         int64
 	FeeAmount       string
 	BalanceAfterFee int64
-	EmailTier       string // "", "negative_balance", "debt_warning"
+	EmailTier       string // a membership reminder, or "" for none
 }
 
 type UnmatchedPaymentItem struct {
@@ -62,73 +62,57 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The month the next run charges: this one until it has been charged,
+	// then the next.
 	now := time.Now()
-	currentPeriod := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	nextPeriod := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
-	previewPeriod := nextPeriod
-	if len(users) > 0 {
-		_, err := h.queries.GetFeeByUserAndPeriod(ctx, db.GetFeeByUserAndPeriodParams{
-			UserID:      users[0].ID,
-			PeriodStart: currentPeriod,
-		})
-		if err != nil {
-			previewPeriod = currentPeriod
-		}
+	thisMonth := dues.MonthOf(now)
+	previewMonth := thisMonth
+	if run, err := dues.RunMonth(ctx, h.queries, now); err == nil && !run.Before(thisMonth) {
+		previewMonth = thisMonth.Add(1)
 	}
 
-	var (
-		feePreview         []FeePreviewItem
-		previewTotalFees   int64
-		previewNegBalance  int
-		previewDebtWarning int
-	)
-
-	// Batch-fetch all user balances in one query (avoids N+1)
-	balanceMap, err := h.getUserBalanceMap(ctx)
+	standings, err := dues.LoadAll(ctx, h.queries, users, now)
 	if err != nil {
 		http.Error(w, "Failed to load balances", http.StatusInternalServerError)
 		return
 	}
+	policy := email.LoadMembershipSettings(ctx, h.queries).Policy()
+
+	var (
+		feePreview         []FeePreviewItem
+		previewTotalFees   int64
+		previewPrepaid     int
+		previewNegBalance  int
+		previewDebtWarning int
+	)
 
 	for _, user := range users {
-		feeAmount := user.LevelActualAmount
-		if feeAmount == "0" || feeAmount == "" {
-			feeAmount = user.LevelAmount
-		}
-
-		feeFloat := email.MonthlyFee(user.LevelActualAmount, user.LevelAmount)
-
-		balance := balanceMap[user.ID]
-
-		balanceAfterFee := balance - int64(feeFloat)
-
-		emailTier := email.DebtTier(float64(balanceAfterFee), feeFloat)
+		st := standings[user.ID]
+		after := st.AfterCharge(previewMonth)
+		emailTier := dues.Classify(after, previewMonth, policy)
 		switch emailTier {
 		case email.TierDebtWarning:
 			previewDebtWarning++
 		case email.TierNegativeBalance:
 			previewNegBalance++
+		case email.TierPrepaidEnding:
+			previewPrepaid++
 		}
 
-		previewTotalFees += int64(feeFloat)
-
-		realname := ""
-		if user.Realname.Valid {
-			realname = user.Realname.String
+		feeAmount, _, err := dues.FeeAmount(user.LevelActualAmount, user.LevelAmount)
+		if err != nil {
+			feeAmount = "?"
 		}
-		username := ""
-		if user.Username.Valid {
-			username = user.Username.String
-		}
+		previewTotalFees += int64(st.Fee)
 
 		feePreview = append(feePreview, FeePreviewItem{
 			UserID:          user.ID,
-			Username:        username,
+			Username:        user.Username.String,
 			Email:           user.Email,
-			Realname:        realname,
-			Balance:         balance,
+			Realname:        user.Realname.String,
+			Balance:         int64(st.Balance),
 			FeeAmount:       feeAmount,
-			BalanceAfterFee: balanceAfterFee,
+			BalanceAfterFee: int64(after.Balance),
 			EmailTier:       emailTier,
 		})
 	}
@@ -176,8 +160,10 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Fee preview (admin-only)
 		"FeePreview":         feePreview,
-		"PreviewPeriod":      previewPeriod.Format("2006-01"),
+		"PreviewPeriod":      previewMonth.String(),
 		"PreviewTotalFees":   previewTotalFees,
+		"PreviewPrepaid":     previewPrepaid,
+		"PrepaidEnabled":     policy.Prepaid,
 		"PreviewNegBalance":  previewNegBalance,
 		"PreviewDebtWarning": previewDebtWarning,
 

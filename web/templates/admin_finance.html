@@ -16,10 +16,15 @@
             </div>
             <div class="flex flex-wrap gap-2">
                 {{ if gt .PreviewDebtWarning 0 }}
-                <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 whitespace-nowrap">{{.PreviewDebtWarning}} debt warning</span>
+                <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 whitespace-nowrap">{{.PreviewDebtWarning}}× upozornění na dluh</span>
                 {{ end }}
                 {{ if gt .PreviewNegBalance 0 }}
-                <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800 whitespace-nowrap">{{.PreviewNegBalance}} negative balance</span>
+                <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800 whitespace-nowrap">{{.PreviewNegBalance}}× záporná bilance</span>
+                {{ end }}
+                {{ if gt .PreviewPrepaid 0 }}
+                <span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 whitespace-nowrap">{{.PreviewPrepaid}}× před koncem předplatného</span>
+                {{ else if not .PrepaidEnabled }}
+                <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 whitespace-nowrap">upozornění před koncem předplatného vypnuté</span>
                 {{ end }}
             </div>
         </summary>
@@ -37,7 +42,7 @@
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         {{ range .FeePreview }}
-                        <tr class="{{ if eq .EmailTier "debt_warning" }}bg-red-50{{ else if eq .EmailTier "negative_balance" }}bg-yellow-50{{ end }}">
+                        <tr class="{{ template "reminder-row" .EmailTier }}">
                             <td class="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">
                                 {{.UserID}} - {{ if .Username }}{{.Username}}{{ else if .Realname }}{{.Realname}}{{ else }}{{.Email}}{{ end }}
                             </td>
@@ -51,13 +56,7 @@
                                 {{.BalanceAfterFee}} Kč
                             </td>
                             <td class="px-4 py-2 text-sm whitespace-nowrap">
-                                {{ if eq .EmailTier "debt_warning" }}
-                                <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">debt warning</span>
-                                {{ else if eq .EmailTier "negative_balance" }}
-                                <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">negative balance</span>
-                                {{ else }}
-                                <span class="text-gray-400">–</span>
-                                {{ end }}
+                                {{ template "reminder-tier" .EmailTier }}
                             </td>
                         </tr>
                         {{ end }}
@@ -71,12 +70,12 @@
     <details class="bg-white shadow rounded-lg mb-8" id="debt-reminders">
         <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">
             <div>
-                <h2 class="text-lg font-semibold text-gray-900 inline">Ruční upozornění na dluh</h2>
+                <h2 class="text-lg font-semibold text-gray-900 inline">Ruční upozornění na příspěvky</h2>
                 <span class="ml-2 text-sm text-gray-500">zařadí e-mail do outboxu s timerem</span>
             </div>
             <div class="flex flex-wrap gap-2">
                 {{ if .DebtCandidates }}
-                <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 whitespace-nowrap">{{len .DebtCandidates}} s dluhem</span>
+                <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 whitespace-nowrap">{{len .DebtCandidates}} k upozornění</span>
                 {{ end }}
                 {{ if gt .DebtSendable 0 }}
                 <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 whitespace-nowrap">{{.DebtSendable}} k odeslání</span>
@@ -132,14 +131,14 @@
                             </th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Člen</th>
                             <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Bilance</th>
-                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Měs. fee</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Příspěvek</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Šablona</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Naposledy</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         {{ range .DebtCandidates }}
-                        <tr class="{{ if eq .Tier "debt_warning" }}bg-red-50{{ else }}bg-yellow-50{{ end }}">
+                        <tr class="{{ template "reminder-row" .Tier }}">
                             <td class="px-4 py-2">
                                 <input type="checkbox" class="debt-check rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                        value="{{.UserID}}" data-blocked="{{.Blocked}}" onchange="updateDebtSelection()">
@@ -148,14 +147,10 @@
                                 <a href="/admin/users/{{.UserID}}" class="hover:underline">{{.UserID}} - {{.Name}}</a>
                                 <span class="text-xs text-gray-400 ml-1">{{.Email}}{{ if eq .Locale "en" }} · EN{{ end }}</span>
                             </td>
-                            <td class="px-4 py-2 text-sm text-right whitespace-nowrap text-red-600 font-medium">{{.Balance}} Kč</td>
+                            <td class="px-4 py-2 text-sm text-right whitespace-nowrap {{ if lt .Balance 0 }}text-red-600 font-medium{{ else }}text-gray-900{{ end }}">{{.Balance}} Kč <span class="block text-xs text-gray-500 font-normal">zaplaceno do {{.PaidThrough}}</span></td>
                             <td class="px-4 py-2 text-sm text-right text-gray-500 whitespace-nowrap">{{.MonthlyFee}} Kč</td>
                             <td class="px-4 py-2 text-sm whitespace-nowrap">
-                                {{ if eq .Tier "debt_warning" }}
-                                <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">debt warning</span>
-                                {{ else }}
-                                <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">negative balance</span>
-                                {{ end }}
+                                {{ template "reminder-tier" .Tier }}
                             </td>
                             <td class="px-4 py-2 text-sm whitespace-nowrap">
                                 {{ if .Blocked }}
@@ -172,7 +167,7 @@
                 </table>
             </div>
             {{ else }}
-            <p class="px-6 py-4 text-sm text-gray-500">Žádný člen nemá dluh, který by opravňoval upozornění.</p>
+            <p class="px-6 py-4 text-sm text-gray-500">Teď nikomu nepatří žádné upozornění.</p>
             {{ end }}
         </div>
     </details>

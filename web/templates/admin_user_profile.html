@@ -100,7 +100,7 @@
             <div class="bg-gray-50 px-4 py-3 rounded-md">
                 <dt class="text-sm font-medium text-gray-500">Úroveň členství</dt>
                 <dd class="mt-1 text-sm text-gray-900 font-semibold">{{.Level.Name}}</dd>
-                <dd class="text-xs text-gray-500">{{.Level.Amount}} Kč/měsíc</dd>
+                <dd class="text-xs text-gray-500">{{fmtNum .MonthlyFee}} Kč/měsíc</dd>
             </div>
 
             <div class="bg-gray-50 px-4 py-3 rounded-md">
@@ -129,7 +129,7 @@
                     {{fmtNum .Balance}} Kč
                 </dd>
                 <dd class="text-xs {{if ge .Balance 0.0}}text-green-600{{else}}text-red-600{{end}}">
-                    {{if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}
+                    {{if .PaidThrough}}zaplaceno do konce {{.PaidThrough}}{{else if ge .Balance 0.0}}v pořádku{{else}}dluh{{end}}
                 </dd>
             </div>
             {{if .RevbankAccount}}

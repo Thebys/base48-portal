@@ -276,6 +276,22 @@ SELECT u.id as user_id, CAST(ROUND(
 ) AS INTEGER) as balance
 FROM users u;
 
+-- name: GetUserLastFeeMonth :one
+-- The last month a member was charged for, as 'YYYY-MM', '' when never.
+SELECT CAST(COALESCE(MAX(substr(period_start, 1, 7)), '') AS TEXT) AS month
+FROM fees WHERE user_id = ?;
+
+-- name: ListLastFeeMonths :many
+-- The last month each member was charged for, as 'YYYY-MM'.
+SELECT user_id, CAST(MAX(substr(period_start, 1, 7)) AS TEXT) AS month
+FROM fees GROUP BY user_id;
+
+-- name: GetLatestChargedMonth :one
+-- The latest month anybody was charged for, up to the given 'YYYY-MM', so
+-- that a fee an admin entered ahead does not count. '' when none.
+SELECT CAST(COALESCE(MAX(substr(period_start, 1, 7)), '') AS TEXT) AS month
+FROM fees WHERE substr(period_start, 1, 7) <= CAST(sqlc.arg(until) AS TEXT);
+
 -- name: CreateLog :one
 INSERT INTO system_logs (subsystem, level, user_id, message, metadata)
 VALUES (?, ?, ?, ?, ?)
@@ -481,13 +497,13 @@ UPDATE email_outbox SET
 WHERE id = ? AND status = 'failed'
 RETURNING *;
 
--- name: ListRecentDebtEmails :many
--- Debt reminders already queued or sent, newest first. The manual reminder
--- picker folds these per user to show "last reminded N days ago" and to spot a
--- reminder still waiting in the outbox.
+-- name: ListRecentMembershipEmails :many
+-- Membership reminders already queued or sent, newest first. The manual
+-- reminder picker folds these per user to show "last reminded N days ago" and
+-- to spot a reminder still waiting in the outbox.
 SELECT * FROM email_outbox
 WHERE user_id IS NOT NULL
-  AND template_name IN ('negative_balance.html', 'debt_warning.html')
+  AND template_name IN ('prepaid_ending.html', 'negative_balance.html', 'debt_warning.html')
   AND status IN ('pending', 'sent')
   AND created_at > datetime('now', '-180 days')
 ORDER BY created_at DESC;
@@ -516,7 +532,7 @@ WHERE id = sqlc.arg(id) AND status = 'pending';
 -- each member at most one of them a calendar month.
 SELECT * FROM email_outbox
 WHERE user_id = sqlc.arg(user_id)
-  AND template_name IN ('negative_balance.html', 'debt_warning.html')
+  AND template_name IN ('prepaid_ending.html', 'negative_balance.html', 'debt_warning.html')
   AND status IN ('pending', 'sent')
   AND created_at >= CAST(sqlc.arg(since) AS TEXT)
 ORDER BY created_at DESC

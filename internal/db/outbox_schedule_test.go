@@ -316,7 +316,7 @@ func TestMembershipEmailSince(t *testing.T) {
 	}
 }
 
-func TestListRecentDebtEmailsOnlyReturnsReminders(t *testing.T) {
+func TestListRecentMembershipEmailsOnlyReturnsReminders(t *testing.T) {
 	q := newOutboxDB(t)
 	queue(t, q, "a@base48.cz", "debt_warning.html", 0)
 	queue(t, q, "b@base48.cz", "negative_balance.html", 0)
@@ -331,16 +331,16 @@ func TestListRecentDebtEmailsOnlyReturnsReminders(t *testing.T) {
 		}
 	}
 
-	rows, err := q.ListRecentDebtEmails(ctx)
+	rows, err := q.ListRecentMembershipEmails(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rows) != 2 {
-		t.Fatalf("got %d rows, want 2 — welcome.html is not a debt reminder", len(rows))
+		t.Fatalf("got %d rows, want 2 — welcome.html is not a membership reminder", len(rows))
 	}
 	for _, row := range rows {
 		if row.TemplateName == "welcome.html" {
-			t.Errorf("welcome.html leaked into the debt reminder history")
+			t.Errorf("welcome.html leaked into the membership reminder history")
 		}
 	}
 }

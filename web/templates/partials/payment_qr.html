@@ -1,22 +1,33 @@
 {{/* How to pay the member's fee: QR code, amount, account and VS. Used by the
      member's own profile and the admin's view of it; expects .PaymentQRCode,
-     .TargetDBUser, .QRAmount, .Balance and .PaymentAccount. */}}
+     .PaymentOptions, .TargetDBUser and .PaymentAccount. The QR shown first is
+     the default option, drawn on the server; the period buttons swap it for
+     /api/qr with that amount (js/payment-qr.js), and without JavaScript open
+     that QR on its own. */}}
 {{ define "payment-qr" }}
-<div class="mt-6 pt-6 border-t border-gray-200">
+<div class="mt-6 pt-6 border-t border-gray-200" data-payment-qr>
     <div class="flex flex-col sm:flex-row items-center gap-4">
         <div class="flex-shrink-0">
-            <a href="/api/qr?vs={{.TargetDBUser.PaymentsID.String}}&amount={{printf "%.0f" .QRAmount}}" target="_blank" title="Otevřít QR kód pro sdílení do bankovní aplikace">
-                <img src="{{.PaymentQRCode}}" alt="QR platba" width="150" height="150" class="rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
-            </a>
+            <img src="{{.PaymentQRCode}}" alt="QR platba" width="150" height="150" data-qr-image
+                 class="rounded-lg shadow-sm border border-gray-200">
         </div>
         <div class="text-center sm:text-left">
             <h3 class="text-sm font-medium text-gray-900">QR kód pro členský příspěvek</h3>
-            <p class="mt-1 text-sm text-gray-500">
-                Klikni na QR kód pro otevření v bankovní aplikaci.
+            <p class="mt-1 text-sm text-gray-500">Naskenuj ho v bankovní aplikaci. Částku v ní můžeš změnit.</p>
+            {{range .PaymentOptions}}{{if .Default}}
+            <p class="mt-2 text-sm text-gray-900" data-qr-amount>
+                Částka: <strong>{{fmtNum .Amount}} Kč</strong> <span class="text-gray-500" data-qr-note>({{.Note}})</span>
             </p>
-            <p class="mt-2 text-sm {{if lt .Balance 0.0}}text-red-600 font-medium{{else}}text-gray-600{{end}}">
-                Částka: {{printf "%.0f" .QRAmount}} Kč{{if lt .Balance 0.0}} (doplatek dluhu){{end}}
-            </p>
+            {{end}}{{end}}
+            {{if gt (len .PaymentOptions) 1}}
+            <div class="mt-2 flex flex-wrap justify-center sm:justify-start gap-2" role="group" aria-label="Na kolik měsíců dopředu">
+                {{range .PaymentOptions}}
+                <a href="{{.URL}}" target="_blank" class="btn btn-sm {{if .Default}}btn-primary{{else}}btn-secondary{{end}}"
+                   data-qr-option data-url="{{.URL}}" data-amount="{{fmtNum .Amount}}" data-note="{{.Note}}"
+                   aria-pressed="{{if .Default}}true{{else}}false{{end}}">{{.Label}}</a>
+                {{end}}
+            </div>
+            {{end}}
             <p class="mt-2 text-sm text-gray-600">
                 {{with .PaymentAccount}}
                 Číslo účtu: <span class="font-mono font-medium text-gray-900">{{.Domestic}}</span><br>
@@ -26,5 +37,6 @@
             </p>
         </div>
     </div>
+    <script src="{{asset "js/payment-qr.js"}}" defer></script>
 </div>
 {{ end }}

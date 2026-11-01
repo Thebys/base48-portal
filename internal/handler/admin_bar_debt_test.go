@@ -16,7 +16,7 @@ import (
 func TestBarDebtPreviewRenders(t *testing.T) {
 	h, _ := testHandlerWithEmail(t)
 	for _, lang := range []string{"cs", "en"} {
-		file, data, err := h.buildEmailTestData(context.Background(), email.TemplateBarDebt, lang, "Jan Novák", "jan", "12345")
+		file, _, data, err := h.buildEmailTestData(context.Background(), email.TemplateBarDebt, lang, previewMember(lang))
 		if err != nil {
 			t.Fatalf("%s: %v", lang, err)
 		}
@@ -24,7 +24,7 @@ func TestBarDebtPreviewRenders(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: render: %v", lang, err)
 		}
-		if !strings.Contains(html, "-350,50&nbsp;Kč") || strings.Contains(html, "%!") {
+		if !strings.Contains(html, "-350&nbsp;Kč") || strings.Contains(html, "%!") {
 			t.Errorf("%s: preview does not show the sample balance cleanly", lang)
 		}
 	}

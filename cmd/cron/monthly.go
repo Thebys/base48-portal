@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/dues"
 )
 
 // The monthly run charges the membership fees and then queues the membership
@@ -17,8 +18,8 @@ import (
 // reminders are recorded apart: reminders that could not be queued (no payment
 // account known yet, say) are tried again without charging anybody twice.
 const (
-	settingFeesMonth      = "membership_fees_month"
-	settingRemindersMonth = "membership_reminders_month"
+	settingFeesMonth      = dues.SettingFeesMonth
+	settingRemindersMonth = dues.SettingRemindersMonth
 
 	// catchUpDays is the last day of the month a missed run is still made up.
 	// Later, fees would land on members who joined or left meanwhile, and

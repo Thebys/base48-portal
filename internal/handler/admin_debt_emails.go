@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/dues"
 	"github.com/base48/member-portal/internal/email"
 )
 
@@ -34,7 +35,11 @@ type DebtCandidate struct {
 	Locale     string
 	Balance    int64
 	MonthlyFee int64
-	Tier       string // "debt_warning" | "negative_balance"
+	Tier       string // a membership reminder: see email.MembershipTiers
+
+	// PaidThrough is "listopadu 2026": paid up to the end of that month.
+	PaidThrough string
+	standing    dues.Standing
 
 	LastRemindedAt   time.Time // zero when never reminded
 	LastRemindedDays int
@@ -59,7 +64,7 @@ type debtReminderHistory struct {
 func (h *Handler) loadDebtReminderHistory(ctx context.Context) map[int64]debtReminderHistory {
 	history := map[int64]debtReminderHistory{}
 
-	rows, err := h.queries.ListRecentDebtEmails(ctx)
+	rows, err := h.queries.ListRecentMembershipEmails(ctx)
 	if err != nil {
 		log.Printf("[Handler] failed to load debt reminder history: %v", err)
 		return history
@@ -84,43 +89,48 @@ func (h *Handler) loadDebtReminderHistory(ctx context.Context) map[int64]debtRem
 	return history
 }
 
-// buildDebtCandidates lists every accepted member whose current balance already
-// warrants a reminder. This deliberately uses the balance as it stands, not the
-// fee-run preview's balance-after-fee: the email quotes what the member owes now.
+// buildDebtCandidates lists every accepted member whose standing warrants a
+// membership reminder now, with the admin's settings (the one before any debt
+// only when it is switched on). This deliberately uses the balance as it
+// stands, not the fee-run preview's balance-after-fee: the email quotes what
+// the member owes now.
 func (h *Handler) buildDebtCandidates(ctx context.Context) ([]DebtCandidate, error) {
 	users, err := h.queries.ListAcceptedUsersForFees(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	balances, err := h.getUserBalanceMap(ctx)
+	now := time.Now()
+	standings, err := dues.LoadAll(ctx, h.queries, users, now)
 	if err != nil {
 		return nil, err
 	}
+	policy := email.LoadMembershipSettings(ctx, h.queries).Policy()
+	month := dues.MonthOf(now)
 
 	history := h.loadDebtReminderHistory(ctx)
-	now := time.Now().UTC()
+	now = now.UTC()
 
 	var candidates []DebtCandidate
 	for _, user := range users {
-		monthlyFee := email.MonthlyFee(user.LevelActualAmount, user.LevelAmount)
-		balance := balances[user.ID]
-
-		tier := email.DebtTier(float64(balance), monthlyFee)
-		if tier == "" {
+		st := standings[user.ID]
+		tier := dues.Classify(st, month, policy)
+		if tier == dues.None {
 			continue
 		}
 
 		name := db.User{Username: user.Username, Realname: user.Realname, Email: user.Email}.DisplayName()
 
 		candidate := DebtCandidate{
-			UserID:     user.ID,
-			Name:       name,
-			Email:      user.Email,
-			Locale:     user.Locale,
-			Balance:    balance,
-			MonthlyFee: int64(monthlyFee),
-			Tier:       tier,
+			UserID:      user.ID,
+			Name:        name,
+			Email:       user.Email,
+			Locale:      user.Locale,
+			Balance:     int64(st.Balance),
+			MonthlyFee:  int64(st.Fee),
+			Tier:        tier,
+			PaidThrough: email.MonthUntil(st.PaidThrough(), "cs"),
+			standing:    st,
 		}
 
 		past := history[user.ID]
@@ -306,8 +316,7 @@ func (h *Handler) queueDebtReminders(ctx context.Context, userIDs []int64, delay
 			continue
 		}
 
-		err = client.SendDebtReminder(ctx, &user, candidate.Tier,
-			float64(candidate.Balance), float64(candidate.MonthlyFee))
+		err = client.SendMembershipReminder(ctx, &user, candidate.Tier, candidate.standing)
 		if err != nil {
 			log.Printf("[Handler] failed to queue debt reminder for %s: %v", candidate.Email, err)
 			skipped = append(skipped, debtNotifyResult{

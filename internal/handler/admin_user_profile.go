@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +14,8 @@ import (
 
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/dues"
+	"github.com/base48/member-portal/internal/email"
 	"github.com/base48/member-portal/internal/keycloak"
 	"github.com/base48/member-portal/internal/money"
 	"github.com/base48/member-portal/internal/qrpay"
@@ -80,11 +81,11 @@ func (h *Handler) AdminUserProfileHandler(w http.ResponseWriter, r *http.Request
 
 	// Add admin-specific context
 	data["IsAdminView"] = true
-	data["User"] = currentUser                // For layout navbar (logged-in admin)
-	data["DBUser"] = adminDBUser              // For layout navbar (logged-in admin)
-	data["TargetUser"] = data["ViewedUser"]   // The user being viewed (rename for template)
+	data["User"] = currentUser              // For layout navbar (logged-in admin)
+	data["DBUser"] = adminDBUser            // For layout navbar (logged-in admin)
+	data["TargetUser"] = data["ViewedUser"] // The user being viewed (rename for template)
 	data["Title"] = fmt.Sprintf("Profil uživatele: %s", targetDBUser.Email)
-	data["KeycloakInfo"] = kcInfo             // Full Keycloak profile (may be nil)
+	data["KeycloakInfo"] = kcInfo // Full Keycloak profile (may be nil)
 
 	grants, availableScopes, err := h.adminAccessData(ctx, targetDBUser.ID)
 	if err != nil {
@@ -112,8 +113,8 @@ func (h *Handler) AdminUserProfileHandler(w http.ResponseWriter, r *http.Request
 			adminUsername, adminDBUser.Email,
 			targetUsername, targetDBUser.Email),
 		Metadata: logMetadata(map[string]interface{}{
-			"admin_user_id": adminDBUser.ID,
-			"admin_email":   adminDBUser.Email,
+			"admin_user_id":  adminDBUser.ID,
+			"admin_email":    adminDBUser.Email,
 			"target_user_id": userID,
 			"target_email":   targetDBUser.Email,
 		}),
@@ -169,38 +170,35 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 	// Build Keycloak account URL
 	keycloakAccountURL := fmt.Sprintf("%s/realms/%s/account", h.config.KeycloakURL, h.config.KeycloakRealm)
 
-	// Generate QR payment code if user has PaymentsID (variable symbol) and has debt
+	// Where the member stands with the fee, and the QR: by default the debt
+	// and as many months ahead as the reminders suggest, with other periods
+	// to choose from.
+	standing, err := dues.Load(ctx, h.queries, targetDBUser, level.Amount, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load standing: %w", err)
+	}
+	charged := targetDBUser.State == "accepted"
+	var paidThrough string
+	if charged && standing.Known() {
+		paidThrough = email.MonthUntil(standing.PaidThrough(), "cs")
+	}
+
 	var paymentQRCode string
 	var qrAmount float64
+	var options []paymentOption
 	qrService, paymentAccount, accountKnown := h.paymentQR(ctx)
 	if accountKnown && targetDBUser.PaymentsID.Valid && targetDBUser.PaymentsID.String != "" {
-		// Generate QR for debt repayment or monthly fee
-		var qrMessage string
-
-		if balance < 0 {
-			// User has debt - generate QR for full debt amount
-			qrAmount = math.Abs(float64(balance))
-			qrMessage = "CLENSKY PRISPEVEK BASE48"
-		} else {
-			// No debt - generate QR for monthly fee
-			var levelAmount float64
-			fmt.Sscanf(level.Amount, "%f", &levelAmount)
-			// Use custom amount if set and higher than level minimum
-			var customAmount float64
-			fmt.Sscanf(targetDBUser.LevelActualAmount, "%f", &customAmount)
-			if customAmount > levelAmount {
-				qrAmount = customAmount
-			} else {
-				qrAmount = levelAmount
+		suggest := email.LoadMembershipSettings(ctx, h.queries).SuggestMonths
+		options = paymentOptions(standing, targetDBUser.PaymentsID.String, suggest, charged)
+		for _, o := range options {
+			if !o.Default {
+				continue
 			}
-			qrMessage = "CLENSKY PRISPEVEK BASE48"
-		}
-
-		if qrAmount > 0 {
+			qrAmount = o.Amount
 			qrCode, err := qrService.GeneratePaymentQR(qrpay.GenerateParams{
-				Amount:         qrAmount,
+				Amount:         o.Amount,
 				VariableSymbol: targetDBUser.PaymentsID.String,
-				Message:        qrMessage,
+				Message:        "CLENSKY PRISPEVEK BASE48",
 				Size:           200,
 			})
 			if err == nil {
@@ -226,8 +224,8 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 	}
 
 	data := map[string]interface{}{
-		"ViewedUser":         targetUser,    // The user being viewed (renamed for clarity)
-		"TargetDBUser":       targetDBUser,  // The user being viewed (DB record)
+		"ViewedUser":         targetUser,   // The user being viewed (renamed for clarity)
+		"TargetDBUser":       targetDBUser, // The user being viewed (DB record)
 		"Level":              level,
 		"UpgradeLevels":      upgradeLevels,
 		"AllActiveLevels":    allLevels,
@@ -236,9 +234,12 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 		"Balance":            float64(balance),
 		"TotalPaid":          int64(totalPaid),
 		"KeycloakAccountURL": keycloakAccountURL,
-		"IsAdminView":        false, // Default, will be overridden if admin view
+		"IsAdminView":        false,                       // Default, will be overridden if admin view
 		"PaymentQRCode":      template.URL(paymentQRCode), // Mark as safe URL for template
 		"QRAmount":           qrAmount,
+		"PaymentOptions":     options,
+		"PaidThrough":        paidThrough,
+		"MonthlyFee":         standing.Fee,
 	}
 	if accountKnown {
 		data["PaymentAccount"] = paymentAccount
@@ -581,10 +582,10 @@ func (h *Handler) AdminUpdateUserLevelHandler(w http.ResponseWriter, r *http.Req
 			previousLevel.Name, previousLevel.Amount, newLevel.Name, newLevel.Amount, adminDBUser.Email),
 		Metadata: logMetadata(map[string]interface{}{
 			"previous_level_id": targetUser.LevelID,
-			"new_level_id":     req.LevelID,
-			"previous_level":   previousLevel.Name,
-			"new_level":        newLevel.Name,
-			"admin_email":      adminDBUser.Email,
+			"new_level_id":      req.LevelID,
+			"previous_level":    previousLevel.Name,
+			"new_level":         newLevel.Name,
+			"admin_email":       adminDBUser.Email,
 		}),
 	})
 
@@ -858,7 +859,7 @@ func (h *Handler) AdminCreateFeeHandler(w http.ResponseWriter, r *http.Request) 
 
 	var req struct {
 		PeriodStart string `json:"period_start"` // "2026-03" format
-		Amount      string `json:"amount"`        // e.g. "1000" or "0"
+		Amount      string `json:"amount"`       // e.g. "1000" or "0"
 		LevelID     int64  `json:"level_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
