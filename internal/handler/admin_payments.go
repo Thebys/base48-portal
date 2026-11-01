@@ -9,16 +9,14 @@ import (
 	"strconv"
 
 	"github.com/base48/member-portal/internal/db"
+	"github.com/base48/member-portal/internal/unmatched"
 )
 
-// UnmatchedPaymentInfo contains payment with analysis
+// UnmatchedPaymentInfo is one row of the unmatched payments page.
 type UnmatchedPaymentInfo struct {
-	Payment     db.Payment
-	UserExists  bool
-	Category    string // "empty_vs", "user_not_found", "sync_bug"
-	Reason      string
-	IsIncoming  bool
-	AmountFloat float64
+	Payment  db.Payment
+	Category string // an unmatched.Category
+	Reason   string
 }
 
 // AdminUnmatchedPaymentsHandler shows all payments that couldn't be automatically matched to users
@@ -37,74 +35,21 @@ func (h *Handler) AdminUnmatchedPaymentsHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Get all unassigned payments
-	unassignedPayments, err := h.queries.ListUnassignedPayments(ctx)
+	payments, err := unmatched.List(ctx, h.queries)
 	if err != nil {
+		log.Printf("[Payments] list unmatched: %v", err)
 		http.Error(w, "Failed to fetch unassigned payments", http.StatusInternalServerError)
 		return
 	}
-
-	// Analyze each payment - ONLY INCOMING PAYMENTS
-	var unmatchedList []UnmatchedPaymentInfo
-	totalAmount := 0.0
-	countPayments := 0
-
-	// Count by category
-	countEmptyVS := 0
-	countUserNotFound := 0
-	countSyncBug := 0
-
-	for _, payment := range unassignedPayments {
-		// Parse amount for totals and direction
-		amountFloat := 0.0
-		if amount, err := strconv.ParseFloat(payment.Amount, 64); err == nil {
-			amountFloat = amount
+	unmatchedList := make([]UnmatchedPaymentInfo, len(payments))
+	counts := map[unmatched.Category]int{}
+	for i, p := range payments {
+		unmatchedList[i] = UnmatchedPaymentInfo{
+			Payment:  p.Payment,
+			Category: string(p.Category),
+			Reason:   p.Category.Reason(),
 		}
-
-		// SKIP: outgoing payments (negative/zero) and small incoming (< 5 Kč, usually bank interest)
-		if amountFloat < 5 {
-			continue
-		}
-
-		// Only process incoming payments from here
-		totalAmount += amountFloat
-		countPayments++
-
-		info := UnmatchedPaymentInfo{
-			Payment:     payment,
-			AmountFloat: amountFloat,
-			IsIncoming:  true, // Always true now
-		}
-
-		// Skip if no identification (VS)
-		if payment.Identification == "" {
-			info.Category = "empty_vs"
-			info.Reason = "Empty variable symbol"
-			unmatchedList = append(unmatchedList, info)
-			countEmptyVS++
-			continue
-		}
-
-		// Check if user with this payments_id exists
-		_, err = h.queries.GetUserByPaymentsID(ctx, sql.NullString{String: payment.Identification, Valid: true})
-		if err == sql.ErrNoRows {
-			info.Category = "user_not_found"
-			info.UserExists = false
-			info.Reason = "No user with this payments_id exists"
-			unmatchedList = append(unmatchedList, info)
-			countUserNotFound++
-			continue
-		} else if err != nil {
-			http.Error(w, "Database error checking user", http.StatusInternalServerError)
-			return
-		}
-
-		// User exists but payment not assigned - potential sync bug
-		info.Category = "sync_bug"
-		info.UserExists = true
-		info.Reason = "User with this payments_id exists but payment not assigned (sync issue)"
-		unmatchedList = append(unmatchedList, info)
-		countSyncBug++
+		counts[p.Category]++
 	}
 
 	// Get dismissed payments for archive section
@@ -123,7 +68,7 @@ func (h *Handler) AdminUnmatchedPaymentsHandler(w http.ResponseWriter, r *http.R
 		if amount, err := strconv.ParseFloat(p.Amount, 64); err == nil {
 			amountFloat = amount
 		}
-		if amountFloat < 5 {
+		if amountFloat < unmatched.MinAmount {
 			continue
 		}
 
@@ -141,11 +86,9 @@ func (h *Handler) AdminUnmatchedPaymentsHandler(w http.ResponseWriter, r *http.R
 		"DBUser":            dbUser,
 		"UnmatchedList":     unmatchedList,
 		"TotalCount":        len(unmatchedList),
-		"TotalAmount":       totalAmount,
-		"CountPayments":     countPayments,
-		"CountEmptyVS":      countEmptyVS,
-		"CountUserNotFound": countUserNotFound,
-		"CountSyncBug":      countSyncBug,
+		"CountEmptyVS":      counts[unmatched.EmptyVS],
+		"CountUserNotFound": counts[unmatched.UserNotFound],
+		"CountSyncBug":      counts[unmatched.SyncBug],
 		"DismissedPayments": dismissedPayments,
 		"DismissedCount":    len(dismissedPayments),
 		"DismissedTotal":    dismissedTotal,

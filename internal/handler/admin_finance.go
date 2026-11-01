@@ -1,13 +1,14 @@
 package handler
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"time"
 
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
+	"github.com/base48/member-portal/internal/unmatched"
 )
 
 type FeePreviewItem struct {
@@ -147,14 +148,12 @@ func (h *Handler) AdminFinanceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// === Admin-only: Unmatched payments ===
-	unmatched, _ := h.queries.ListUnassignedPayments(ctx)
+	pending, err := unmatched.List(ctx, h.queries)
+	if err != nil {
+		log.Printf("[Finance] list unmatched payments: %v", err)
+	}
 	var unmatchedPayments []UnmatchedPaymentItem
-	for _, p := range unmatched {
-		var amount float64
-		fmt.Sscanf(p.Amount, "%f", &amount)
-		if amount < 5 {
-			continue
-		}
+	for _, p := range pending {
 		unmatchedPayments = append(unmatchedPayments, UnmatchedPaymentItem{
 			ID:             p.ID,
 			Date:           p.Date,
