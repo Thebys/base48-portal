@@ -54,6 +54,7 @@ func newAccessEnv(t *testing.T) *accessEnv {
 	r.Get("/payments/recent", h.MemberRecentPaymentsHandler)
 	r.Get("/projects", h.MemberProjectsHandler)
 	r.Get("/workshop", h.WorkshopHandler)
+	r.Post("/view-as", h.ViewAsHandler)
 	r.Get("/api/member/workshop", h.WorkshopAPIHandler)
 	r.Post("/api/member/workshop/reservations", h.CreateReservationHandler)
 	r.Post("/api/member/workshop/reservations/{id}/cancel", h.CancelReservationHandler)

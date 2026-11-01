@@ -8,7 +8,10 @@ konfigurace v `.env.example`, schéma v `migrations/`.
 
 - Přihlášení přes Keycloak OIDC, role se čtou z ID tokenu
 - Service account pro cron a změny rolí přes Keycloak Admin API
-- `memberportal_admin`: přístup do Správy
+- `memberportal_admin`: přístup do Správy. Admin si v menu účtu může zapnout
+  „Zobrazit jako člen“: do konce session nebo do „Zpět na admina“ portál roli
+  nevidí (příznak v session, `auth.ViewAsMember`). Funguje to i na produkci,
+  může to jen ubrat práva a další přihlášení začíná zase jako admin.
 - `active_member`: každý člen ve stavu `accepted`
 - `in_debt`: záporná bilance, cron ji přidává a odebírá každé 2 minuty
 - Nastavení Keycloaku: [docs/KEYCLOAK_SETUP.md](docs/KEYCLOAK_SETUP.md)

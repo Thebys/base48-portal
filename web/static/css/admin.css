@@ -1140,6 +1140,27 @@ main :has(> table) {
 .nav-mobile-item[aria-current="page"] { color: var(--ink); background: var(--surface-muted); }
 .nav-mobile-item.is-sub { padding-left: 1.5rem; }
 .nav-mobile-item.is-danger { color: var(--accent-red); }
+/* The same item as a form button (the member view switch). */
+button.nav-mobile-item {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+/* --- Member view ---------------------------------------------------------- */
+/* Under the nav while an admin looks at the portal as a member, with the way
+   back. Purple, the badge colour for "special", so it reads as neither an
+   alert nor the emergency banner. */
+.member-view-bar {
+    background: var(--tint-purple-bg);
+    color: var(--tint-purple-fg);
+    border-bottom: 1px solid var(--line);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
 
 /* --- Focus ---------------------------------------------------------------- */
 /* One visible focus ring for everything the keyboard can reach in the nav. */

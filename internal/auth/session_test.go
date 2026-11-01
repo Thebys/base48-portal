@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -204,5 +205,72 @@ func TestSessionCookieIsEncrypted(t *testing.T) {
 	})
 	if got := a.GetUser(requestWith(legacy)); got != nil {
 		t.Error("a cookie signed with the raw secret was accepted")
+	}
+}
+
+// switchView runs ViewAsMember on a request carrying c and returns the cookie
+// it saved.
+func switchView(t *testing.T, a *Authenticator, c *http.Cookie, on bool) (*http.Cookie, error) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	if err := a.ViewAsMember(rec, requestWith(c), on); err != nil {
+		return nil, err
+	}
+	for _, saved := range rec.Result().Cookies() {
+		if saved.Name == sessionName {
+			return saved, nil
+		}
+	}
+	t.Fatal("no session cookie set")
+	return nil, nil
+}
+
+// The member view hides the admin role and nothing else, and switching back
+// needs nothing but the session.
+func TestMemberViewHidesOnlyTheAdminRole(t *testing.T) {
+	a, _ := testAuthenticator(t)
+	admin := &User{ID: "kc-1", Email: "admin@base48.cz", Roles: []string{"active_member", "memberportal_admin", "in_debt"}}
+	signedIn := cookieFor(t, func(w http.ResponseWriter, r *http.Request) error { return a.SignIn(w, r, admin) })
+
+	asMember, err := switchView(t, a, signedIn, true)
+	if err != nil {
+		t.Fatalf("switch to the member view: %v", err)
+	}
+	got := a.GetUser(requestWith(asMember))
+	if got == nil || got.IsAdmin() || !got.ViewingAsMember() {
+		t.Fatalf("member view: GetUser = %+v, want no admin role and the member view", got)
+	}
+	if !got.IsActiveMember() || !got.IsInDebt() || got.Email != admin.Email {
+		t.Errorf("member view lost more than the admin role: %+v", got)
+	}
+
+	back, err := switchView(t, a, asMember, false)
+	if err != nil {
+		t.Fatalf("switch back: %v", err)
+	}
+	if got := a.GetUser(requestWith(back)); got == nil || !got.IsAdmin() || got.ViewingAsMember() {
+		t.Errorf("after switching back: GetUser = %+v, want the admin", got)
+	}
+
+	// A new sign-in in the same browser starts as admin.
+	resigned := cookieFor(t, func(w http.ResponseWriter, _ *http.Request) error {
+		return a.SignIn(w, requestWith(asMember), admin)
+	})
+	if got := a.GetUser(requestWith(resigned)); got == nil || !got.IsAdmin() || got.ViewingAsMember() {
+		t.Errorf("after signing in again: GetUser = %+v, want the admin", got)
+	}
+}
+
+func TestMemberViewIsForSignedInAdmins(t *testing.T) {
+	a, _ := testAuthenticator(t)
+	member := cookieFor(t, func(w http.ResponseWriter, r *http.Request) error {
+		return a.SignIn(w, r, &User{ID: "kc-2", Roles: []string{"active_member"}})
+	})
+	if _, err := switchView(t, a, member, true); !errors.Is(err, ErrNotAdmin) {
+		t.Errorf("member switching to the member view: err = %v, want ErrNotAdmin", err)
+	}
+	stranger := &http.Cookie{Name: sessionName, Value: "garbage"}
+	if _, err := switchView(t, a, stranger, true); !errors.Is(err, ErrNotSignedIn) {
+		t.Errorf("no session: err = %v, want ErrNotSignedIn", err)
 	}
 }

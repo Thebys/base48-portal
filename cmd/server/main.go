@@ -119,6 +119,7 @@ func main() {
 		r.Get("/payments/recent", h.MemberRecentPaymentsHandler)
 		r.Get("/projects", h.MemberProjectsHandler)
 		r.Get("/workshop", h.WorkshopHandler)
+		r.Post("/view-as", h.ViewAsHandler)
 	})
 
 	// Member API routes (read-only, requires auth)

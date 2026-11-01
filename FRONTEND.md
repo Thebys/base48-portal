@@ -296,6 +296,11 @@ The bar is: brand, primary links, and one account control on the right.
   times per page and `nav.js` keeps every copy's `aria-pressed` in sync. The
   panel deliberately stays open while switching, so the two themes can be
   compared in place.
+- **Member view** — admins get "Zobrazit jako člen" in the account menu and
+  the mobile panel, a POST to `/view-as`. While it is on, `.User.IsAdmin` is
+  false everywhere and `.User.ViewingAsMember` is true; the layout shows
+  `.member-view-bar` under the nav with the way back. New admin-only markup
+  needs nothing extra: it keys off `IsAdmin` and disappears on its own.
 
 
 ## Guidelines

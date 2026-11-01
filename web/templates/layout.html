@@ -144,6 +144,30 @@
                                 Služby
                             </a>
                             {{end}}
+                            {{/* The member view: an admin sees the portal without the admin role.
+                                 POST /view-as, see internal/handler/view_as.go. */}}
+                            {{if .User.IsAdmin}}
+                            <form method="post" action="/view-as">
+                                <input type="hidden" name="as" value="member">
+                                <button type="submit" class="nav-menu-item" title="Portál tak, jak ho vidí člen bez práv admina">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                                    Zobrazit jako člen
+                                </button>
+                            </form>
+                            {{else if .User.ViewingAsMember}}
+                            <form method="post" action="/view-as">
+                                <input type="hidden" name="as" value="admin">
+                                <button type="submit" class="nav-menu-item">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                </svg>
+                                    Zpět na admina
+                                </button>
+                            </form>
+                            {{end}}
 
                             <div class="nav-menu-sep"></div>
                             {{template "themeSwitch" .}}
@@ -229,6 +253,19 @@
                     <a href="/admin/settings" class="nav-mobile-item is-sub">Nastavení</a>
                     {{end}}
                 </div>
+                {{if .User.IsAdmin}}
+                <div class="nav-menu-sep"></div>
+                <form method="post" action="/view-as">
+                    <input type="hidden" name="as" value="member">
+                    <button type="submit" class="nav-mobile-item">Zobrazit jako člen</button>
+                </form>
+                {{else if .User.ViewingAsMember}}
+                <div class="nav-menu-sep"></div>
+                <form method="post" action="/view-as">
+                    <input type="hidden" name="as" value="admin">
+                    <button type="submit" class="nav-mobile-item">Zpět na admina</button>
+                </form>
+                {{end}}
 
                 <div class="nav-menu-sep"></div>
                 {{template "themeSwitch" .}}
@@ -253,6 +290,18 @@
 
     {{if .DevMode}}
     <div class="bg-green-500 text-white text-center text-sm font-semibold py-1">LOCAL DEVELOPMENT ENVIRONMENT</div>
+    {{end}}
+
+    {{if and .User .User.ViewingAsMember}}
+    <div class="member-view-bar" role="status">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <p>Díváš se na portál jako člen. Správa a všechno, co vidí jen admin, jsou skryté.</p>
+            <form method="post" action="/view-as">
+                <input type="hidden" name="as" value="admin">
+                <button type="submit" class="btn btn-sm btn-primary">Zpět na admina</button>
+            </form>
+        </div>
+    </div>
     {{end}}
 
     <main class="w-full max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">

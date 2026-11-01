@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,6 +34,8 @@ const (
 	sessionStateKey  = "oauth_state"
 	sessionIssuedKey = "issued_at"
 	sessionIDKey     = "session_id"
+	// Set while an admin looks at the portal as a member; see ViewAsMember.
+	sessionMemberViewKey = "member_view"
 )
 
 // SessionLifetime is how long a sign-in lasts. Roles are copied from the ID
@@ -87,6 +90,11 @@ type User struct {
 	PreferredName string   `json:"preferred_username"`
 	Roles         []string `json:"roles"`
 	Locale        string   `json:"locale"`
+
+	// memberView marks the copy GetUser hands out while an admin looks at
+	// the portal as a member. Unexported, so gob never writes it into the
+	// session: it is worked out on every request.
+	memberView bool
 }
 
 // keycloakState bundles the OIDC primitives that are only valid once Keycloak
@@ -462,11 +470,42 @@ func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
 // SignIn starts a session for user. CallbackHandler calls it once the ID
 // token checks out; handler tests call it to get a signed-in cookie.
+// A sign-in always starts in the user's own view, even when the browser
+// still holds an expired session that was in the member view.
 func (a *Authenticator) SignIn(w http.ResponseWriter, r *http.Request, user *User) error {
 	session, _ := a.store.Get(r, sessionName)
 	session.Values[sessionUserKey] = user
 	session.Values[sessionIssuedKey] = time.Now().Unix()
 	session.Values[sessionIDKey] = generateState() // 32 random bytes, as for the OAuth state
+	delete(session.Values, sessionMemberViewKey)
+	return session.Save(r, w)
+}
+
+// ErrNotAdmin is ViewAsMember refusing someone who is not an admin.
+var ErrNotAdmin = errors.New("only an admin can switch to the member view")
+
+// ErrNotSignedIn is ViewAsMember finding no valid session.
+var ErrNotSignedIn = errors.New("not signed in")
+
+// ViewAsMember switches a signed-in admin between their own view and the one
+// a member without the admin role gets. On, GetUser leaves memberportal_admin
+// out, so every check, page and menu in the portal treats them as a member.
+// The role itself stays in the session, which is how switching back works
+// without asking Keycloak, and the switch can only ever take a right away.
+// A new sign-in starts in the admin's own view again.
+func (a *Authenticator) ViewAsMember(w http.ResponseWriter, r *http.Request, on bool) error {
+	user, session := a.sessionUser(r)
+	if user == nil {
+		return ErrNotSignedIn
+	}
+	if on {
+		if !user.IsAdmin() {
+			return ErrNotAdmin
+		}
+		session.Values[sessionMemberViewKey] = true
+	} else {
+		delete(session.Values, sessionMemberViewKey)
+	}
 	return session.Save(r, w)
 }
 
@@ -488,35 +527,50 @@ func (a *Authenticator) revoke(ctx context.Context, session *sessions.Session) {
 	}
 }
 
-// GetUser returns the authenticated user from session, or nil if not authenticated
+// GetUser returns the authenticated user from session, or nil if not
+// authenticated. While an admin is in the member view (ViewAsMember), it
+// returns them without the admin role.
 func (a *Authenticator) GetUser(r *http.Request) *User {
+	user, session := a.sessionUser(r)
+	if user == nil {
+		return nil
+	}
+	if on, _ := session.Values[sessionMemberViewKey].(bool); on && user.IsAdmin() {
+		return user.asMember()
+	}
+	return user
+}
+
+// sessionUser is the user the session was signed in as, with the roles from
+// sign-in, and the session itself; nil when there is no valid session.
+func (a *Authenticator) sessionUser(r *http.Request) (*User, *sessions.Session) {
 	session, err := a.store.Get(r, sessionName)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
 	user, ok := session.Values[sessionUserKey].(*User)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	// The cookie is signed, so this is the time SignIn wrote. A session from
 	// before it was recorded has none and counts as expired.
 	issued, ok := session.Values[sessionIssuedKey].(int64)
 	if !ok || time.Since(time.Unix(issued, 0)) > SessionLifetime {
-		return nil
+		return nil, nil
 	}
 
 	id, ok := session.Values[sessionIDKey].(string)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	revoked, err := a.queries.IsSessionRevoked(r.Context(), id)
 	if err != nil || revoked {
-		return nil
+		return nil, nil
 	}
 
-	return user
+	return user, session
 }
 
 // RequireAuth is a middleware that ensures the user is authenticated
@@ -560,6 +614,25 @@ func (u *User) HasAnyRole(roles ...string) bool {
 // IsAdmin checks if user has memberportal_admin role
 func (u *User) IsAdmin() bool {
 	return u.HasRole("memberportal_admin")
+}
+
+// ViewingAsMember reports whether this is an admin in the member view: the
+// admin role is hidden and the layout offers the way back.
+func (u *User) ViewingAsMember() bool {
+	return u != nil && u.memberView
+}
+
+// asMember is a copy of u without the admin role, marked as the member view.
+func (u *User) asMember() *User {
+	c := *u
+	c.Roles = make([]string, 0, len(u.Roles))
+	for _, role := range u.Roles {
+		if role != "memberportal_admin" {
+			c.Roles = append(c.Roles, role)
+		}
+	}
+	c.memberView = true
+	return &c
 }
 
 // IsActiveMember checks if user has active_member role
