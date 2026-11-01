@@ -21,5 +21,8 @@ func TestStaticFilesListNoDirectories(t *testing.T) {
 		if rec.Code != want {
 			t.Errorf("GET %s = %d, want %d", path, rec.Code, want)
 		}
+		if want == http.StatusOK && rec.Header().Get("Cache-Control") != "no-cache" {
+			t.Errorf("GET %s Cache-Control = %q, want no-cache", path, rec.Header().Get("Cache-Control"))
+		}
 	}
 }
