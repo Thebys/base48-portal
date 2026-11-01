@@ -175,6 +175,47 @@ RETURNING *;
 -- name: GetPaymentByKindAndID :one
 SELECT * FROM payments WHERE kind = ? AND kind_id = ? LIMIT 1;
 
+-- name: InsertOutgoingPayment :execrows
+-- Record an outgoing FIO payment once. A row already there is left alone, so
+-- the project and note an admin set survive every later sync. Returns 0 rows
+-- for a payment already recorded.
+-- substr normalizes Go time.Time to YYYY-MM-DD, as in UpsertPayment.
+INSERT INTO payments (
+    project_id, date, amount, kind, kind_id,
+    local_account, remote_account, identification, raw_data, public_note
+) VALUES (
+    sqlc.arg(project_id), substr(sqlc.arg(date), 1, 10), sqlc.arg(amount), 'fio', sqlc.arg(kind_id),
+    sqlc.arg(local_account), sqlc.arg(remote_account), sqlc.arg(identification),
+    sqlc.arg(raw_data), sqlc.arg(public_note)
+)
+ON CONFLICT(kind, kind_id) DO NOTHING;
+
+-- name: ListOutgoingPayments :many
+-- Outgoing payments of one year (YYYY), newest first, with their project.
+SELECT p.id, p.date, p.amount, p.remote_account, p.identification, p.raw_data,
+       p.staff_comment, p.public_note, p.project_id, pr.name AS project_name
+FROM payments p
+LEFT JOIN projects pr ON pr.id = p.project_id
+WHERE CAST(p.amount AS REAL) < 0
+  AND substr(p.date, 1, 4) = CAST(sqlc.arg(year) AS TEXT)
+ORDER BY p.date DESC, p.id DESC;
+
+-- name: ListOutgoingPaymentYears :many
+SELECT DISTINCT CAST(substr(date, 1, 4) AS TEXT) AS year
+FROM payments
+WHERE CAST(amount AS REAL) < 0
+ORDER BY year DESC;
+
+-- name: AssignOutgoingPayment :one
+-- Set the project and the note members see of an outgoing payment. Refuses
+-- (sql.ErrNoRows) anything that is not outgoing: incoming payments are
+-- assigned on the unmatched payments page.
+UPDATE payments SET
+    project_id = sqlc.arg(project_id),
+    public_note = sqlc.arg(public_note)
+WHERE id = sqlc.arg(id) AND CAST(amount AS REAL) < 0
+RETURNING *;
+
 -- name: AssignPayment :one
 UPDATE payments SET
     user_id = ?,

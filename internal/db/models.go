@@ -79,6 +79,7 @@ type Payment struct {
 	DismissedAt     interface{}    `json:"dismissed_at"`
 	DismissedBy     interface{}    `json:"dismissed_by"`
 	DismissedReason interface{}    `json:"dismissed_reason"`
+	PublicNote      sql.NullString `json:"public_note"`
 }
 
 type Project struct {

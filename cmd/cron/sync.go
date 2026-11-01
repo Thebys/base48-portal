@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -110,43 +111,27 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	// Process transactions
 	inserted := 0
 	updated := 0
+	outgoing := 0
 	skipped := 0
 	errors := 0
 	unmatchedVS := []fio.Transaction{}
 	emptyVS := []fio.Transaction{}
 
 	for _, tx := range transactions {
-		// Detect rent payments (outgoing, VS 3872751 or message contains "najemne"/"nájem")
 		if tx.Amount < 0 {
-			msg := strings.ToLower(tx.Message + " " + tx.Comment)
-			isRent := tx.VariableSymbol == "3872751" ||
-				strings.Contains(msg, "najemne") || strings.Contains(msg, "nájem")
-			if isRent {
-				if txDate, parseErr := fio.ParseDate(tx.Date); parseErr == nil {
-					shouldUpdate := true
-					if existing, getErr := queries.GetSetting(ctx, "fio_last_rent_date"); getErr == nil {
-						if existingDate, _ := time.Parse("2006-01-02", existing.Value); !txDate.After(existingDate) {
-							shouldUpdate = false
-						}
-					}
-					if shouldUpdate {
-						queries.UpsertSetting(ctx, db.UpsertSettingParams{
-							Key:   "fio_last_rent_date",
-							Value: txDate.Format("2006-01-02"),
-						})
-						queries.UpsertSetting(ctx, db.UpsertSettingParams{
-							Key:   "fio_last_rent_amount",
-							Value: fmt.Sprintf("%.0f", -tx.Amount),
-						})
-						log.Printf("✓ Detected rent payment: %.0f CZK on %s", -tx.Amount, txDate.Format("2006-01-02"))
-					}
-				}
+			noteRent(ctx, queries, tx)
+			switch recorded, err := recordOutgoing(ctx, queries, tx, localAccount); {
+			case err != nil:
+				log.Printf("✗ Failed to record outgoing payment (FIO ID %d): %v", tx.ID, err)
+				errors++
+			case recorded:
+				outgoing++
+			default:
+				skipped++
 			}
+			continue
 		}
-
-		// Skip transactions with zero or negative amounts (outgoing payments, fees, etc.)
-		// Only process incoming payments (positive amounts)
-		if tx.Amount <= 0 {
+		if tx.Amount == 0 {
 			skipped++
 			continue
 		}
@@ -212,11 +197,7 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 			rawDataJSON = []byte("{}")
 		}
 
-		// Build remote account string (account + bank code)
-		remoteAccount := tx.AccountNumber
-		if tx.BankCode != "" {
-			remoteAccount = fmt.Sprintf("%s/%s", tx.AccountNumber, tx.BankCode)
-		}
+		remoteAccount := remoteAccountOf(tx)
 
 		// Check if payment already exists
 		existingPayment, err := queries.GetPaymentByKindAndID(ctx, db.GetPaymentByKindAndIDParams{
@@ -317,7 +298,8 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	log.Printf("Total transactions fetched: %d", len(transactions))
 	log.Printf("  ✓ Inserted: %d", inserted)
 	log.Printf("  ↻ Updated: %d", updated)
-	log.Printf("  - Skipped (negative/zero): %d", skipped)
+	log.Printf("  ↗ Outgoing recorded: %d", outgoing)
+	log.Printf("  - Skipped (already recorded, unchanged or reassigned by hand): %d", skipped)
 	log.Printf("  ✗ Errors: %d", errors)
 	log.Println(repeat("-", 80))
 
@@ -364,11 +346,109 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 		Subsystem: "fio_sync",
 		Level:     level,
 		UserID:    sql.NullInt64{},
-		Message:   fmt.Sprintf("FIO sync completed: %d new, %d updated, %d unmatched", inserted, updated, totalUnmatched),
-		Metadata:  sql.NullString{String: fmt.Sprintf(`{"inserted":%d,"updated":%d,"skipped":%d,"unmatched":%d,"errors":%d}`, inserted, updated, skipped, totalUnmatched, errors), Valid: true},
+		Message:   fmt.Sprintf("FIO sync completed: %d new, %d updated, %d outgoing, %d unmatched", inserted, updated, outgoing, totalUnmatched),
+		Metadata:  sql.NullString{String: fmt.Sprintf(`{"inserted":%d,"updated":%d,"outgoing":%d,"skipped":%d,"unmatched":%d,"errors":%d}`, inserted, updated, outgoing, skipped, totalUnmatched, errors), Valid: true},
 	})
 
 	return errors
+}
+
+// remoteAccountOf is the counter-account as stored: number/bank code.
+func remoteAccountOf(tx fio.Transaction) string {
+	if tx.BankCode == "" {
+		return tx.AccountNumber
+	}
+	return tx.AccountNumber + "/" + tx.BankCode
+}
+
+// recordOutgoing stores an outgoing payment the first time a sync sees it and
+// reports whether it did; a payment already recorded is left alone, so what
+// an admin assigned or wrote stays. It is never matched to a member: its VS
+// is the recipient's (rent, an invoice number) and may well equal a member's,
+// which would book the expense to them as debt. A VS that is one of a
+// project's symbols books it to that project, which is how an expense paid
+// for a project is marked when it is sent.
+func recordOutgoing(ctx context.Context, queries *db.Queries, tx fio.Transaction, localAccount string) (bool, error) {
+	date, err := fio.ParseDate(tx.Date)
+	if err != nil {
+		return false, fmt.Errorf("date %q: %w", tx.Date, err)
+	}
+
+	var projectID sql.NullInt64
+	if tx.VariableSymbol != "" {
+		switch project, err := queries.GetProjectByPaymentsID(ctx, tx.VariableSymbol); {
+		case err == nil:
+			projectID = sql.NullInt64{Int64: project.ID, Valid: true}
+		case err != sql.ErrNoRows:
+			return false, err
+		}
+	}
+
+	raw, err := json.Marshal(tx)
+	if err != nil {
+		return false, err
+	}
+	note := outgoingNote(tx)
+	n, err := queries.InsertOutgoingPayment(ctx, db.InsertOutgoingPaymentParams{
+		ProjectID:      projectID,
+		Date:           date,
+		Amount:         fmt.Sprintf("%.2f", tx.Amount),
+		KindID:         strconv.FormatInt(tx.ID, 10),
+		LocalAccount:   localAccount,
+		RemoteAccount:  remoteAccountOf(tx),
+		Identification: tx.VariableSymbol,
+		RawData:        sql.NullString{String: string(raw), Valid: true},
+		PublicNote:     sql.NullString{String: note, Valid: note != ""},
+	})
+	if err != nil {
+		return false, err
+	}
+	if n == 0 {
+		return false, nil
+	}
+	log.Printf("↗ Recorded outgoing payment: %.2f CZK on %s, %q (FIO ID %d)", tx.Amount, date.Format("2006-01-02"), note, tx.ID)
+	return true, nil
+}
+
+// outgoingNote is what members first see about an outgoing payment: the
+// payer's comment from the bank, which says what it was for ("Doplatek za
+// betonování"), else the message for the recipient, which is often only an
+// invoice number. An admin can change it.
+func outgoingNote(tx fio.Transaction) string {
+	if c := strings.TrimSpace(tx.Comment); c != "" {
+		return c
+	}
+	return strings.TrimSpace(tx.Message)
+}
+
+// noteRent remembers the newest rent payment for the finance overview. Rent
+// is the payment with the landlord's VS, or one whose comment or message says
+// so.
+func noteRent(ctx context.Context, queries *db.Queries, tx fio.Transaction) {
+	msg := strings.ToLower(tx.Message + " " + tx.Comment)
+	isRent := tx.VariableSymbol == "3872751" ||
+		strings.Contains(msg, "najemne") || strings.Contains(msg, "nájem")
+	if !isRent {
+		return
+	}
+	txDate, err := fio.ParseDate(tx.Date)
+	if err != nil {
+		return
+	}
+	if existing, err := queries.GetSetting(ctx, "fio_last_rent_date"); err == nil {
+		if existingDate, _ := time.Parse("2006-01-02", existing.Value); !txDate.After(existingDate) {
+			return
+		}
+	}
+	queries.UpsertSetting(ctx, db.UpsertSettingParams{
+		Key:   "fio_last_rent_date",
+		Value: txDate.Format("2006-01-02"),
+	})
+	queries.UpsertSetting(ctx, db.UpsertSettingParams{
+		Key:   "fio_last_rent_amount",
+		Value: fmt.Sprintf("%.0f", -tx.Amount),
+	})
+	log.Printf("✓ Detected rent payment: %.0f CZK on %s", -tx.Amount, txDate.Format("2006-01-02"))
 }
 
 func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queries) int {

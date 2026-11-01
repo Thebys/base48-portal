@@ -52,6 +52,8 @@ type FetchResult struct {
 	Transactions   []Transaction
 	ClosingBalance float64
 	Account        AccountInfo
+	DateStart      string // period covered, as FIO gives it: 2026-02-12+0100
+	DateEnd        string
 }
 
 // AccountInfo is the account the token reads, as the statement header
@@ -268,6 +270,8 @@ func ParseStatement(r io.Reader) (*FetchResult, error) {
 	return &FetchResult{
 		Transactions:   transactions,
 		ClosingBalance: info.ClosingBalance,
+		DateStart:      info.DateStart,
+		DateEnd:        info.DateEnd,
 		Account: AccountInfo{
 			AccountID: info.AccountID,
 			BankID:    info.BankID,

@@ -36,12 +36,54 @@ func (q *Queries) AddProjectVS(ctx context.Context, arg AddProjectVSParams) (Pro
 	return i, err
 }
 
+const assignOutgoingPayment = `-- name: AssignOutgoingPayment :one
+UPDATE payments SET
+    project_id = ?1,
+    public_note = ?2
+WHERE id = ?3 AND CAST(amount AS REAL) < 0
+RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note
+`
+
+type AssignOutgoingPaymentParams struct {
+	ProjectID  sql.NullInt64  `json:"project_id"`
+	PublicNote sql.NullString `json:"public_note"`
+	ID         int64          `json:"id"`
+}
+
+// Set the project and the note members see of an outgoing payment. Refuses
+// (sql.ErrNoRows) anything that is not outgoing: incoming payments are
+// assigned on the unmatched payments page.
+func (q *Queries) AssignOutgoingPayment(ctx context.Context, arg AssignOutgoingPaymentParams) (Payment, error) {
+	row := q.db.QueryRowContext(ctx, assignOutgoingPayment, arg.ProjectID, arg.PublicNote, arg.ID)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Date,
+		&i.Amount,
+		&i.Kind,
+		&i.KindID,
+		&i.LocalAccount,
+		&i.RemoteAccount,
+		&i.Identification,
+		&i.RawData,
+		&i.StaffComment,
+		&i.CreatedAt,
+		&i.ProjectID,
+		&i.DismissedAt,
+		&i.DismissedBy,
+		&i.DismissedReason,
+		&i.PublicNote,
+	)
+	return i, err
+}
+
 const assignPayment = `-- name: AssignPayment :one
 UPDATE payments SET
     user_id = ?,
     staff_comment = ?
 WHERE id = ?
-RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason
+RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note
 `
 
 type AssignPaymentParams struct {
@@ -70,6 +112,7 @@ func (q *Queries) AssignPayment(ctx context.Context, arg AssignPaymentParams) (P
 		&i.DismissedAt,
 		&i.DismissedBy,
 		&i.DismissedReason,
+		&i.PublicNote,
 	)
 	return i, err
 }
@@ -782,7 +825,7 @@ UPDATE payments SET
     dismissed_reason = ?,
     staff_comment = ?
 WHERE id = ?
-RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason
+RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note
 `
 
 type DismissPaymentParams struct {
@@ -817,6 +860,7 @@ func (q *Queries) DismissPayment(ctx context.Context, arg DismissPaymentParams) 
 		&i.DismissedAt,
 		&i.DismissedBy,
 		&i.DismissedReason,
+		&i.PublicNote,
 	)
 	return i, err
 }
@@ -976,7 +1020,7 @@ func (q *Queries) GetMaxNumericPaymentsID(ctx context.Context) (int64, error) {
 }
 
 const getPayment = `-- name: GetPayment :one
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE id = ? LIMIT 1
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetPayment(ctx context.Context, id int64) (Payment, error) {
@@ -999,12 +1043,13 @@ func (q *Queries) GetPayment(ctx context.Context, id int64) (Payment, error) {
 		&i.DismissedAt,
 		&i.DismissedBy,
 		&i.DismissedReason,
+		&i.PublicNote,
 	)
 	return i, err
 }
 
 const getPaymentByKindAndID = `-- name: GetPaymentByKindAndID :one
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE kind = ? AND kind_id = ? LIMIT 1
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments WHERE kind = ? AND kind_id = ? LIMIT 1
 `
 
 type GetPaymentByKindAndIDParams struct {
@@ -1032,6 +1077,7 @@ func (q *Queries) GetPaymentByKindAndID(ctx context.Context, arg GetPaymentByKin
 		&i.DismissedAt,
 		&i.DismissedBy,
 		&i.DismissedReason,
+		&i.PublicNote,
 	)
 	return i, err
 }
@@ -1072,7 +1118,7 @@ func (q *Queries) GetProjectByPaymentsID(ctx context.Context, vs string) (Projec
 }
 
 const getProjectPayments = `-- name: GetProjectPayments :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments
 WHERE project_id = ?
 ORDER BY date DESC, id DESC
 `
@@ -1105,6 +1151,7 @@ func (q *Queries) GetProjectPayments(ctx context.Context, projectID sql.NullInt6
 			&i.DismissedAt,
 			&i.DismissedBy,
 			&i.DismissedReason,
+			&i.PublicNote,
 		); err != nil {
 			return nil, err
 		}
@@ -1526,6 +1573,52 @@ func (q *Queries) GrantUserKeys(ctx context.Context, id int64) (User, error) {
 		&i.Locale,
 	)
 	return i, err
+}
+
+const insertOutgoingPayment = `-- name: InsertOutgoingPayment :execrows
+INSERT INTO payments (
+    project_id, date, amount, kind, kind_id,
+    local_account, remote_account, identification, raw_data, public_note
+) VALUES (
+    ?1, substr(?2, 1, 10), ?3, 'fio', ?4,
+    ?5, ?6, ?7,
+    ?8, ?9
+)
+ON CONFLICT(kind, kind_id) DO NOTHING
+`
+
+type InsertOutgoingPaymentParams struct {
+	ProjectID      sql.NullInt64  `json:"project_id"`
+	Date           interface{}    `json:"date"`
+	Amount         string         `json:"amount"`
+	KindID         string         `json:"kind_id"`
+	LocalAccount   string         `json:"local_account"`
+	RemoteAccount  string         `json:"remote_account"`
+	Identification string         `json:"identification"`
+	RawData        sql.NullString `json:"raw_data"`
+	PublicNote     sql.NullString `json:"public_note"`
+}
+
+// Record an outgoing FIO payment once. A row already there is left alone, so
+// the project and note an admin set survive every later sync. Returns 0 rows
+// for a payment already recorded.
+// substr normalizes Go time.Time to YYYY-MM-DD, as in UpsertPayment.
+func (q *Queries) InsertOutgoingPayment(ctx context.Context, arg InsertOutgoingPaymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertOutgoingPayment,
+		arg.ProjectID,
+		arg.Date,
+		arg.Amount,
+		arg.KindID,
+		arg.LocalAccount,
+		arg.RemoteAccount,
+		arg.Identification,
+		arg.RawData,
+		arg.PublicNote,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const isSessionRevoked = `-- name: IsSessionRevoked :one
@@ -1984,7 +2077,7 @@ func (q *Queries) ListAllProjectVS(ctx context.Context) ([]ProjectV, error) {
 }
 
 const listDismissedPayments = `-- name: ListDismissedPayments :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE dismissed_at IS NOT NULL ORDER BY dismissed_at DESC
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments WHERE dismissed_at IS NOT NULL ORDER BY dismissed_at DESC
 `
 
 func (q *Queries) ListDismissedPayments(ctx context.Context) ([]Payment, error) {
@@ -2013,6 +2106,7 @@ func (q *Queries) ListDismissedPayments(ctx context.Context) ([]Payment, error) 
 			&i.DismissedAt,
 			&i.DismissedBy,
 			&i.DismissedReason,
+			&i.PublicNote,
 		); err != nil {
 			return nil, err
 		}
@@ -2245,8 +2339,96 @@ func (q *Queries) ListMonthlyPaymentStats(ctx context.Context) ([]ListMonthlyPay
 	return items, nil
 }
 
+const listOutgoingPaymentYears = `-- name: ListOutgoingPaymentYears :many
+SELECT DISTINCT CAST(substr(date, 1, 4) AS TEXT) AS year
+FROM payments
+WHERE CAST(amount AS REAL) < 0
+ORDER BY year DESC
+`
+
+func (q *Queries) ListOutgoingPaymentYears(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listOutgoingPaymentYears)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var year string
+		if err := rows.Scan(&year); err != nil {
+			return nil, err
+		}
+		items = append(items, year)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOutgoingPayments = `-- name: ListOutgoingPayments :many
+SELECT p.id, p.date, p.amount, p.remote_account, p.identification, p.raw_data,
+       p.staff_comment, p.public_note, p.project_id, pr.name AS project_name
+FROM payments p
+LEFT JOIN projects pr ON pr.id = p.project_id
+WHERE CAST(p.amount AS REAL) < 0
+  AND substr(p.date, 1, 4) = CAST(?1 AS TEXT)
+ORDER BY p.date DESC, p.id DESC
+`
+
+type ListOutgoingPaymentsRow struct {
+	ID             int64          `json:"id"`
+	Date           time.Time      `json:"date"`
+	Amount         string         `json:"amount"`
+	RemoteAccount  string         `json:"remote_account"`
+	Identification string         `json:"identification"`
+	RawData        sql.NullString `json:"raw_data"`
+	StaffComment   sql.NullString `json:"staff_comment"`
+	PublicNote     sql.NullString `json:"public_note"`
+	ProjectID      sql.NullInt64  `json:"project_id"`
+	ProjectName    sql.NullString `json:"project_name"`
+}
+
+// Outgoing payments of one year (YYYY), newest first, with their project.
+func (q *Queries) ListOutgoingPayments(ctx context.Context, year string) ([]ListOutgoingPaymentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOutgoingPayments, year)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOutgoingPaymentsRow{}
+	for rows.Next() {
+		var i ListOutgoingPaymentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Date,
+			&i.Amount,
+			&i.RemoteAccount,
+			&i.Identification,
+			&i.RawData,
+			&i.StaffComment,
+			&i.PublicNote,
+			&i.ProjectID,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPaymentsByUser = `-- name: ListPaymentsByUser :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE user_id = ? ORDER BY date DESC
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments WHERE user_id = ? ORDER BY date DESC
 `
 
 func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) ([]Payment, error) {
@@ -2275,6 +2457,7 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID sql.NullInt64) 
 			&i.DismissedAt,
 			&i.DismissedBy,
 			&i.DismissedReason,
+			&i.PublicNote,
 		); err != nil {
 			return nil, err
 		}
@@ -2495,7 +2678,7 @@ func (q *Queries) ListRecentEmailOutbox(ctx context.Context, limit int64) ([]Ema
 }
 
 const listRecentPayments = `-- name: ListRecentPayments :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments
 WHERE date >= date('now', 'start of month', '-1 month')
 ORDER BY date DESC
 `
@@ -2527,6 +2710,7 @@ func (q *Queries) ListRecentPayments(ctx context.Context) ([]Payment, error) {
 			&i.DismissedAt,
 			&i.DismissedBy,
 			&i.DismissedReason,
+			&i.PublicNote,
 		); err != nil {
 			return nil, err
 		}
@@ -2843,7 +3027,7 @@ func (q *Queries) ListRevbankTransactionsByUsername(ctx context.Context, arg Lis
 }
 
 const listUnassignedPayments = `-- name: ListUnassignedPayments :many
-SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason FROM payments WHERE user_id IS NULL AND project_id IS NULL AND dismissed_at IS NULL ORDER BY date DESC
+SELECT id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note FROM payments WHERE user_id IS NULL AND project_id IS NULL AND dismissed_at IS NULL ORDER BY date DESC
 `
 
 func (q *Queries) ListUnassignedPayments(ctx context.Context) ([]Payment, error) {
@@ -2872,6 +3056,7 @@ func (q *Queries) ListUnassignedPayments(ctx context.Context) ([]Payment, error)
 			&i.DismissedAt,
 			&i.DismissedBy,
 			&i.DismissedReason,
+			&i.PublicNote,
 		); err != nil {
 			return nil, err
 		}
@@ -3096,7 +3281,7 @@ UPDATE payments SET
     dismissed_by = NULL,
     dismissed_reason = NULL
 WHERE id = ?
-RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason
+RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note
 `
 
 func (q *Queries) UndismissPayment(ctx context.Context, id int64) (Payment, error) {
@@ -3119,6 +3304,7 @@ func (q *Queries) UndismissPayment(ctx context.Context, id int64) (Payment, erro
 		&i.DismissedAt,
 		&i.DismissedBy,
 		&i.DismissedReason,
+		&i.PublicNote,
 	)
 	return i, err
 }
@@ -3806,7 +3992,7 @@ ON CONFLICT(kind, kind_id) DO UPDATE SET
     identification = excluded.identification,
     raw_data = excluded.raw_data,
     staff_comment = excluded.staff_comment
-RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason
+RETURNING id, user_id, date, amount, kind, kind_id, local_account, remote_account, identification, raw_data, staff_comment, created_at, project_id, dismissed_at, dismissed_by, dismissed_reason, public_note
 `
 
 type UpsertPaymentParams struct {
@@ -3856,6 +4042,7 @@ func (q *Queries) UpsertPayment(ctx context.Context, arg UpsertPaymentParams) (P
 		&i.DismissedAt,
 		&i.DismissedBy,
 		&i.DismissedReason,
+		&i.PublicNote,
 	)
 	return i, err
 }

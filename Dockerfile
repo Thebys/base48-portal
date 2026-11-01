@@ -24,7 +24,7 @@ FROM source AS test
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go vet ./cmd/server ./cmd/cron ./internal/... && \
-    go test ./internal/... ./cmd/server ./cmd/cron
+    go test ./internal/... ./cmd/server ./cmd/cron ./migrations
 
 FROM source AS builder
 ARG VERSION=dev

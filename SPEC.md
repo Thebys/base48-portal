@@ -21,7 +21,11 @@ konfigurace v `.env.example`, schéma v `migrations/`.
   (oprávnění nezávislá na stavu, zatím autodílna)
 - Nový člen dostane VS (`users.payments_id`) hned při prvním přihlášení
 - Fees vznikají 1. v měsíci pro `accepted` členy: `level_actual_amount`, jinak částka úrovně
-- Platby z FIO se párují podle VS na člena, jinak na fundraising projekt
+- Příchozí platby z FIO se párují podle VS na člena, jinak na fundraising projekt
+- Odchozí platby se jen zaznamenají: ke členovi nikdy, k projektu, když nesou jeho VS,
+  jinak je k projektu přiřadí admin. Členové u nich vidí datum, částku, projekt a
+  `public_note` (předvyplněný komentářem z banky)
+- K projektu patří platba jen přes `payments.project_id`; VS projektu rozhoduje jen o přiřazení
 - Bilance = platby s VS člena − fees
 
 ## Tech stack
@@ -35,7 +39,7 @@ konfigurace v `.env.example`, schéma v `migrations/`.
 ```
 cmd/
 ├── server/     # Web server
-├── cron/       # portal-cron: daemon, sync, fees, debt-emails, bar-debt-emails, report
+├── cron/       # portal-cron: daemon, sync, fio-backfill, fees, debt-emails, bar-debt-emails, report
 ├── import/     # Import ze staré databáze
 └── test/       # Ad-hoc test skripty
 
@@ -50,7 +54,9 @@ internal/
 ├── handler/    # HTTP handlery
 ├── keycloak/   # Keycloak Admin API
 ├── migrate/    # Migrace při startu serveru
-└── qrpay/      # QR platební kódy (SPAYD)
+├── money/      # Čtení částek zadaných v portálu
+├── qrpay/      # QR platební kódy (SPAYD)
+└── unmatched/  # Nespárované příchozí platby (admin i portal-cron report)
 
 web/            # Šablony (vč. e-mailů) a statické soubory
 migrations/     # SQL migrace

@@ -239,6 +239,26 @@ Bez toho umí sync cyklus (běží á 2 minuty) zaplnit disk.
 databáze nedostupná. Používá to jak `HEALTHCHECK` v image, tak `depends_on`
 u cron služby. Endpoint je veřejný a neobsahuje žádná data.
 
+### Starší odchozí platby z FIO
+
+Sync čte 85 dní zpátky. Odchozí platby starší než to (třeba po nasazení nebo
+po delším výpadku) doplní `fio-backfill`. Zapíše jen odchozí platby, chybějící
+příchozí jen vypíše, protože mění bilance členů. Výpis jiného účtu, než ze
+kterého portál čte, odmítne.
+
+FIO vydá víc než 90 dní jen do 10 minut od povolení historie
+v internetbankingu a jeden dotaz na token za 30 s. Sync ho používá každé
+2 minuty, takže na 409 stačí chvíli počkat a zkusit to znovu.
+
+```bash
+# po povolení historie v internetbankingu
+docker compose exec -T cron /app/portal-cron fio-backfill 2026-02-01
+
+# nebo z výpisu uloženého dřív (token se rozbalí až v kontejneru)
+docker compose exec -T cron sh -c 'wget -qO- "https://fioapi.fio.cz/v1/rest/periods/$BANK_FIO_TOKEN/2026-02-01/2026-11-01/transactions.json"' > vypis.json
+docker compose exec -T cron /app/portal-cron fio-backfill - < vypis.json
+```
+
 ## Zálohování a obnova
 
 V image je `sqlite3`, takže online záloha jde bez odstavení:
