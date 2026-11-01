@@ -68,6 +68,8 @@
 
     <p class="mb-8 text-sm text-gray-600">Ruční upozornění na příspěvky a jejich nastavení jsou v <a href="/admin/emails/reminders" class="underline">E-mailech → Upozornění</a>.</p>
 
+    {{ template "finance-history" .Finance }}
+
     <!-- Unmatched payments -->
     <details class="bg-white shadow rounded-lg mb-8">
         <summary class="px-6 py-4 cursor-pointer flex flex-wrap items-center justify-between gap-2">

@@ -228,3 +228,23 @@ func TestMemberPreview(t *testing.T) {
 		t.Error("the picker does not link to the member preview")
 	}
 }
+
+// The finance chart belongs to the finance page. It once moved to the
+// reminders page with the manual reminders, where it had no data to draw.
+func TestFinanceChartStaysOnFinance(t *testing.T) {
+	_, do := emailEnv(t)
+	code, finance, _ := do(http.MethodGet, "/admin/finance", "")
+	if code != http.StatusOK {
+		t.Fatalf("finance: status %d: %s", code, finance)
+	}
+	if !strings.Contains(finance, `id="fin-history"`) {
+		t.Error("the finance page lost its chart")
+	}
+	if !strings.Contains(finance, `/admin/emails/reminders`) {
+		t.Error("the finance page does not link to the reminders")
+	}
+	_, reminders, _ := do(http.MethodGet, "/admin/emails/reminders", "")
+	if strings.Contains(reminders, `id="fin-history"`) {
+		t.Error("the reminders page draws the finance chart")
+	}
+}

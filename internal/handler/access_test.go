@@ -71,6 +71,7 @@ func newAccessEnv(t *testing.T) *accessEnv {
 	r.Get("/admin/emails/templates", h.RequireAdmin(h.AdminEmailTemplatesHandler))
 	r.Post("/admin/emails/templates", h.RequireAdmin(h.AdminEmailTemplatesHandler))
 	r.Get("/admin/emails/reminders", h.RequireAdmin(h.AdminEmailRemindersHandler))
+	r.Get("/admin/finance", h.RequireAdmin(h.AdminFinanceHandler))
 	r.Get("/admin/emails/member/{id}", h.RequireAdmin(h.AdminEmailMemberPreviewHandler))
 	r.Get("/admin/emails/{id}", h.RequireAdmin(h.AdminEmailDetailHandler))
 	r.Post("/api/admin/email/cancel", h.RequireAdmin(h.AdminCancelEmailHandler))
