@@ -2,6 +2,7 @@ package fio
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -55,5 +56,39 @@ func TestFetchReturnsTheAccountTheTokenReads(t *testing.T) {
 	}
 	if len(res.Transactions) != 1 || res.Transactions[0].VariableSymbol != "709" || res.Transactions[0].Amount != 1000 {
 		t.Errorf("Transactions = %+v", res.Transactions)
+	}
+}
+
+func TestErrorsLeaveTheTokenOut(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Překročen limit", http.StatusConflict)
+	}))
+	c := NewClient("secret-token")
+	c.baseURL = srv.URL
+
+	_, err := c.FetchTransactionsByPeriod(context.Background(), "2026-01-01", "2026-02-01")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict {
+		t.Fatalf("err = %v, want an APIError with 409", err)
+	}
+
+	// Nothing listens there any more: the transport error names the URL.
+	srv.Close()
+	_, err = c.FetchTransactionsByPeriod(context.Background(), "2026-01-01", "2026-02-01")
+	if err == nil || strings.Contains(err.Error(), "secret-token") {
+		t.Fatalf("err = %v, want an error without the token", err)
+	}
+}
+
+func TestParseStatementReadsASavedStatement(t *testing.T) {
+	res, err := ParseStatement(strings.NewReader(statement))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Account.AccountID != "2003436319" || len(res.Transactions) != 1 || res.Transactions[0].ID != 26962199069 {
+		t.Fatalf("ParseStatement = %+v", res)
+	}
+	if _, err := ParseStatement(strings.NewReader("<html>")); err == nil {
+		t.Fatal("ParseStatement took HTML for a statement")
 	}
 }

@@ -3,9 +3,11 @@ package fio
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"time"
 )
 
@@ -112,48 +114,66 @@ func (c *Client) FetchTransactionsByID(ctx context.Context, year int, idFrom int
 // SetLastDownloadDate sets a checkpoint for future "since last download" calls
 // date should be in format "YYYY-MM-DD"
 func (c *Client) SetLastDownloadDate(ctx context.Context, date string) error {
-	url := fmt.Sprintf("%s/set-last-date/%s/%s/", c.baseURL, c.token, date)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	resp, err := c.get(ctx, fmt.Sprintf("%s/set-last-date/%s/%s/", c.baseURL, c.token, date))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
+	resp.Body.Close()
 	return nil
 }
 
-// fetchTransactions is a helper that performs the actual HTTP request and parsing
-func (c *Client) fetchTransactions(ctx context.Context, url string) (*FetchResult, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
+// APIError is an answer from FIO other than 200. FIO says 409 to a second
+// request within 30 seconds, and 422 to one reaching more than 90 days back
+// unless the account owner has just allowed that in internet banking.
+type APIError struct {
+	Status int
+	Body   string
+}
 
+func (e *APIError) Error() string {
+	return fmt.Sprintf("API error (status %d): %s", e.Status, e.Body)
+}
+
+// get sends a GET to a FIO URL. Every FIO URL carries the token, and Go puts
+// the URL into request and transport errors, so those are reported without
+// it: they end up in the cron log.
+func (c *Client) get(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, errors.New("failed to create request")
+	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		var ue *neturl.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+		return nil, &APIError{Status: resp.StatusCode, Body: string(body)}
 	}
+	return resp, nil
+}
 
-	body, err := io.ReadAll(resp.Body)
+// fetchTransactions requests a statement and parses it.
+func (c *Client) fetchTransactions(ctx context.Context, url string) (*FetchResult, error) {
+	resp, err := c.get(ctx, url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return ParseStatement(resp.Body)
+}
+
+// ParseStatement reads a statement in FIO's JSON format, as the API sends it
+// or as saved from it to a file.
+func ParseStatement(r io.Reader) (*FetchResult, error) {
+	body, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read statement: %w", err)
 	}
 
 	var result TransactionList
