@@ -176,35 +176,35 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-4 py-2 text-left">
+                            <th class="px-3 py-2 text-left">
                                 <input type="checkbox" id="debt-select-all" onchange="toggleAllDebt(this)"
                                        class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                             </th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Člen</th>
-                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Bilance</th>
-                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Příspěvek</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Šablona</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Naposledy</th>
+                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Člen</th>
+                            <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Bilance</th>
+                            <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Příspěvek</th>
+                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Šablona</th>
+                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Naposledy</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         {{ range .DebtCandidates }}
                         <tr class="{{ template "reminder-row" .Tier }}">
-                            <td class="px-4 py-2">
+                            <td class="px-3 py-2">
                                 <input type="checkbox" class="debt-check rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                        value="{{.UserID}}" data-blocked="{{.Blocked}}" onchange="updateDebtSelection()">
                             </td>
-                            <td class="px-4 py-2 text-sm text-gray-900 whitespace-nowrap">
+                            <td class="px-3 py-2 text-sm text-gray-900 whitespace-nowrap">
                                 <a href="/admin/users/{{.UserID}}" class="hover:underline">{{.UserID}} - {{.Name}}</a>
                                 <a href="/admin/emails/member/{{.UserID}}" class="ml-1 text-xs underline">náhled</a>
-                                <span class="text-xs text-gray-400 ml-1">{{.Email}}{{ if eq .Locale "en" }} · EN{{ end }}</span>
+                                <span class="block text-xs text-gray-500">{{.Email}}{{ if eq .Locale "en" }} <span class="flag flag-en ml-1" title="Dostává e-maily anglicky"></span>{{ end }}</span>
                             </td>
-                            <td class="px-4 py-2 text-sm text-right whitespace-nowrap {{ if lt .Balance 0 }}text-red-600 font-medium{{ else }}text-gray-900{{ end }}">{{.Balance}} Kč <span class="block text-xs text-gray-500 font-normal">zaplaceno do konce {{.PaidThrough}}</span></td>
-                            <td class="px-4 py-2 text-sm text-right text-gray-500 whitespace-nowrap">{{.MonthlyFee}} Kč</td>
-                            <td class="px-4 py-2 text-sm whitespace-nowrap">
+                            <td class="px-3 py-2 text-sm text-right whitespace-nowrap {{ if lt .Balance 0 }}text-red-600 font-medium{{ else }}text-gray-900{{ end }}">{{.Balance}} Kč <span class="block text-xs text-gray-500 font-normal">zaplaceno do konce {{.PaidThrough}}</span></td>
+                            <td class="px-3 py-2 text-sm text-right text-gray-500 whitespace-nowrap">{{.MonthlyFee}} Kč</td>
+                            <td class="px-3 py-2 text-sm whitespace-nowrap">
                                 {{ template "reminder-tier" .Tier }}
                             </td>
-                            <td class="px-4 py-2 text-sm whitespace-nowrap">
+                            <td class="px-3 py-2 text-sm whitespace-nowrap">
                                 {{ if .Blocked }}
                                 <span class="text-amber-700">⚠ {{.BlockReason}}</span>
                                 {{ else if .LastRemindedAt.IsZero }}

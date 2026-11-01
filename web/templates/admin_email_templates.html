@@ -4,6 +4,10 @@
 
     <div class="flex flex-col lg:flex-row gap-6">
         <nav class="lg:w-64 flex-shrink-0" aria-label="Šablony">
+            <div class="email-lang-switch bg-white shadow rounded-lg mb-3" role="group" aria-label="Jazyk šablon">
+                <a href="/admin/emails/templates?t={{.Spec.Key}}&amp;lang=cs{{if .Scenario}}&amp;s={{.Scenario}}{{end}}" lang="cs"{{if eq .Lang "cs"}} class="is-active" aria-current="true"{{end}}><span class="flag flag-cs" aria-hidden="true"></span>Čeština</a>
+                <a href="/admin/emails/templates?t={{.Spec.Key}}&amp;lang=en{{if .Scenario}}&amp;s={{.Scenario}}{{end}}" lang="en"{{if eq .Lang "en"}} class="is-active" aria-current="true"{{end}}><span class="flag flag-en" aria-hidden="true"></span>English</a>
+            </div>
             <ul class="bg-white shadow rounded-lg divide-y divide-gray-200">
                 {{range .Templates}}
                 <li>
@@ -14,11 +18,6 @@
                 </li>
                 {{end}}
             </ul>
-            <p class="mt-3 text-sm">
-                Jazyk:
-                <a href="/admin/emails/templates?t={{.Spec.Key}}&amp;lang=cs" class="{{if eq .Lang "cs"}}font-semibold{{else}}hover:underline{{end}}">čeština</a> ·
-                <a href="/admin/emails/templates?t={{.Spec.Key}}&amp;lang=en" class="{{if eq .Lang "en"}}font-semibold{{else}}hover:underline{{end}}">English</a>
-            </p>
         </nav>
 
         <form method="post" action="/admin/emails/templates" class="flex-1 min-w-0 space-y-6" data-template-form{{if .Unsaved}} data-unsaved{{end}}>
@@ -26,7 +25,7 @@
             <input type="hidden" name="lang" value="{{.Lang}}">
 
             <section class="bg-white shadow rounded-lg p-6">
-                <h2 class="text-lg font-medium text-gray-900">{{.Spec.Label}} <span class="text-sm font-normal text-gray-500">({{if eq .Lang "en"}}English{{else}}čeština{{end}})</span></h2>
+                <h2 class="text-lg font-medium text-gray-900">{{.Spec.Label}} <span class="ml-1 inline-flex items-center gap-1.5 text-sm font-normal text-gray-500"><span class="flag flag-{{.Lang}}" aria-hidden="true"></span>{{if eq .Lang "en"}}English{{else}}čeština{{end}}</span></h2>
                 <p class="mt-1 text-sm text-gray-600"><strong>Kdy se posílá:</strong> {{.Spec.When}}</p>
                 {{if .Spec.Placeholders}}
                 <details class="mt-2 text-sm text-gray-600">

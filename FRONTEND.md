@@ -70,6 +70,10 @@ usages. Consequences worth knowing:
 own colours, carry no Tailwind colour utility inside, and must stay light in both
 themes. Do not tokenise them.
 
+The language flags (`.flag-cs`, `.flag-en` in `admin.css`) are identities, not
+palette: they carry their own hexes inside an SVG data URI and look the same in
+both themes.
+
 The emails in `web/templates/email/` are not pages: mail clients take inline
 styles only, so they carry their own hex colours and no classes. What they share
 (the frame, the footer, the payment box of the membership reminders) is in

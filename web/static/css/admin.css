@@ -1185,3 +1185,65 @@ main :has(> table) {
     font-weight: 600;
     box-shadow: inset 3px 0 0 var(--ink);
 }
+
+/* The language switches every template at once, so it sits above the list
+   and is styled like it: the same card and type, and the active language is
+   bold with the bar under it. The other flag stays faded until hovered. */
+.email-lang-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+}
+.email-lang-switch a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    color: var(--ink-2);
+    text-decoration: none;
+}
+.email-lang-switch a + a {
+    border-left: 1px solid var(--line);
+}
+.email-lang-switch a:hover {
+    color: var(--ink);
+    background: var(--surface-muted);
+}
+.email-lang-switch a:not(.is-active) .flag {
+    opacity: 0.45;
+}
+.email-lang-switch a:hover .flag {
+    opacity: 1;
+}
+.email-lang-switch a.is-active {
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: inset 0 -3px 0 var(--ink);
+}
+
+/* ===== Language flags ===== */
+/* A language shown as its flag: <span class="flag flag-cs" aria-hidden="true">.
+   Flags keep their own colours in both themes, so their hexes are a
+   deliberate exception to the token rule (FRONTEND.md, "Deliberately not
+   themed"). The ring keeps the white of the Czech flag visible on a white
+   card. The 2:1 British flag is cropped to 3:2 around its centre. */
+.flag {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 1.125rem;
+    height: 0.75rem;
+    border-radius: 2px;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    box-shadow: 0 0 0 1px var(--line);
+    vertical-align: -0.05em;
+}
+.flag-cs {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 4'><path fill='%23d7141a' d='M0 0h6v4H0z'/><path fill='%23fff' d='M0 0h6v2H0z'/><path fill='%2311457e' d='M0 0l3 2-3 2z'/></svg>");
+}
+.flag-en {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 30'><clipPath id='t'><path d='M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z'/></clipPath><path fill='%23012169' d='M0 0h60v30H0z'/><path stroke='%23fff' stroke-width='6' d='M0,0 L60,30 M60,0 L0,30'/><path stroke='%23c8102e' stroke-width='4' clip-path='url(%23t)' d='M0,0 L60,30 M60,0 L0,30'/><path stroke='%23fff' stroke-width='10' d='M30,0 v30 M0,15 h60'/><path stroke='%23c8102e' stroke-width='6' d='M30,0 v30 M0,15 h60'/></svg>");
+}
