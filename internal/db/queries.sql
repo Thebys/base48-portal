@@ -299,7 +299,12 @@ SELECT DISTINCT level FROM system_logs ORDER BY level;
 -- ============================================================================
 
 -- name: ListProjects :many
-SELECT * FROM projects ORDER BY id DESC;
+-- Open projects first, newest first; closed ones after them.
+SELECT * FROM projects ORDER BY archived_at IS NOT NULL, id DESC;
+
+-- name: SetProjectArchived :execrows
+-- archived_at NULL opens a closed project again.
+UPDATE projects SET archived_at = ? WHERE id = ?;
 
 -- name: GetProject :one
 SELECT * FROM projects WHERE id = ? LIMIT 1;

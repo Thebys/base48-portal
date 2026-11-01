@@ -32,8 +32,13 @@ func (p projectSummary) Remaining() float64 {
 	return p.Raised - p.Spent
 }
 
-// listProjectSummaries loads every project, newest first, with three queries
-// in total however many projects there are.
+// Covered is what the association paid beyond what the project raised.
+func (p projectSummary) Covered() float64 {
+	return max(p.Spent-p.Raised, 0)
+}
+
+// listProjectSummaries loads every project, open ones first, newest first,
+// with three queries in total however many projects there are.
 func (h *Handler) listProjectSummaries(ctx context.Context) ([]projectSummary, error) {
 	projects, err := h.queries.ListProjects(ctx)
 	if err != nil {

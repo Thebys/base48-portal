@@ -14,9 +14,30 @@ import (
 // projectView is a project as the fundraising page shows it.
 type projectView struct {
 	projectSummary
-	PrimaryVS  string
-	SpentShare int // how much of what was raised is spent, 0-100, for the bar
-	Payments   []projectPaymentView
+	PrimaryVS string
+	Bar       projectBar
+	Payments  []projectPaymentView
+	Manage    bool // the admin's controls
+}
+
+// projectBar splits the larger of raised and spent into what was spent from
+// the money raised, what is left of it, and what the association covered
+// beyond it, each as a share of the bar in percent. The page draws it once
+// something is spent: a bar of nothing but money left reads as a goal met.
+type projectBar struct {
+	Spent, Left, Covered float64
+}
+
+func newProjectBar(raised, spent float64) projectBar {
+	whole := max(raised, spent)
+	if whole <= 0 {
+		return projectBar{}
+	}
+	return projectBar{
+		Spent:   min(spent, raised) / whole * 100,
+		Left:    max(raised-spent, 0) / whole * 100,
+		Covered: max(spent-raised, 0) / whole * 100,
+	}
 }
 
 // projectPaymentView is a payment of a project. Members see date, amount and
@@ -91,17 +112,21 @@ func (h *Handler) renderProjects(w http.ResponseWriter, r *http.Request, user *a
 		byProject[p.ProjectID.Int64] = append(byProject[p.ProjectID.Int64], view)
 	}
 
-	projects := make([]projectView, len(summaries))
-	for i, s := range summaries {
-		projects[i] = projectView{projectSummary: s, Payments: byProject[s.ID]}
-		if len(s.VSList) > 0 {
-			projects[i].PrimaryVS = s.VSList[0].VS
+	var open, closed []projectView
+	for _, s := range summaries {
+		view := projectView{
+			projectSummary: s,
+			Bar:            newProjectBar(s.Raised, s.Spent),
+			Payments:       byProject[s.ID],
+			Manage:         manage,
 		}
-		switch {
-		case s.Raised > 0:
-			projects[i].SpentShare = int(min(100, s.Spent/s.Raised*100))
-		case s.Spent > 0:
-			projects[i].SpentShare = 100
+		if len(s.VSList) > 0 {
+			view.PrimaryVS = s.VSList[0].VS
+		}
+		if s.ArchivedAt.Valid {
+			closed = append(closed, view)
+		} else {
+			open = append(open, view)
 		}
 	}
 
@@ -110,11 +135,12 @@ func (h *Handler) renderProjects(w http.ResponseWriter, r *http.Request, user *a
 		title = "Správa projektů"
 	}
 	h.render(w, "projects.html", map[string]interface{}{
-		"Title":    title,
-		"User":     user,
-		"DBUser":   dbUser,
-		"Access":   acc,
-		"Manage":   manage,
-		"Projects": projects,
+		"Title":  title,
+		"User":   user,
+		"DBUser": dbUser,
+		"Access": acc,
+		"Manage": manage,
+		"Open":   open,
+		"Closed": closed,
 	})
 }

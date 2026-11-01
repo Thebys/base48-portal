@@ -35,9 +35,9 @@ func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
 	page := rec.Body.String()
 	nbsp := " "
 	for _, want := range []string{
-		"25" + nbsp + "462,10 Kč",          // left: 50 000 - 22 977,90 - 1 560
-		"vybráno 50" + nbsp + "000 Kč",     // raised
-		"utraceno 24" + nbsp + "537,90 Kč", // spent
+		"50" + nbsp + "000 Kč", // raised
+		"utraceno <b>24" + nbsp + "537,90 Kč</b>",
+		"zbývá <b>25" + nbsp + "462,10 Kč</b>", // 50 000 - 22 977,90 - 1 560
 		"-22" + nbsp + "977,90 Kč",
 		"Doplatek zvedáku", // the approved note
 		">výdaj<",          // an expense without a note
@@ -73,6 +73,60 @@ func TestFundraisingShowsWhatWasSpentAndOnWhat(t *testing.T) {
 		if !strings.Contains(adminPage, want) {
 			t.Errorf("admin page lacks %q", want)
 		}
+	}
+}
+
+func TestClosedProjectsMoveDown(t *testing.T) {
+	e := newAccessEnv(t)
+	member, _ := e.user("member", "accepted", nil)
+	admin, _ := e.user("admin", "accepted", []string{"memberportal_admin"})
+	for _, query := range []string{
+		`INSERT INTO projects (id, name) VALUES (31, 'Narozeniny'), (32, 'Energie')`,
+		`INSERT INTO project_vs (project_id, vs, note) VALUES (31, '2025', 'primary'), (32, '2024', 'primary')`,
+		`INSERT INTO payments (date, amount, kind, kind_id, local_account, remote_account, identification, project_id)
+		 VALUES ('2025-08-10', '1000', 'fio', 'gift', 'FIO', '1/0800', '2025', 31),
+		        ('2025-09-01', '-1500', 'fio', 'cake', 'FIO', '2/0800', '', 31)`,
+	} {
+		if _, err := e.database.Exec(query); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+
+	if rec := e.do(member, http.MethodPost, "/api/admin/projects/archive", `{"project_id":31,"archived":true}`); rec.Code != http.StatusForbidden {
+		t.Fatalf("a member closed a project: %d", rec.Code)
+	}
+	if rec := e.do(admin, http.MethodPost, "/api/admin/projects/archive", `{"project_id":31,"archived":true}`); rec.Code != http.StatusOK {
+		t.Fatalf("closing a project = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := e.do(admin, http.MethodPost, "/api/admin/projects/archive", `{"project_id":99,"archived":true}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("closing a missing project = %d", rec.Code)
+	}
+
+	page := e.do(member, http.MethodGet, "/projects", "").Body.String()
+	open, closed, found := strings.Cut(page, "Uzavřené projekty (1)")
+	if !found {
+		t.Fatal("no section of closed projects")
+	}
+	if !strings.Contains(open, "Energie") || strings.Contains(open, "Narozeniny") {
+		t.Error("the open list is not just the open project")
+	}
+	if !strings.Contains(closed, "Narozeniny") || !strings.Contains(closed, "uzavřeno") {
+		t.Error("the closed project is not among the closed ones")
+	}
+	// No QR code to give to a closed project; what it spent still shows,
+	// with what the association paid on top.
+	if strings.Contains(closed, `data-vs="2025"`) {
+		t.Error("a closed project still offers its QR code")
+	}
+	if !strings.Contains(closed, "doplatil spolek <b>500 Kč</b>") {
+		t.Error("the closed project lost its overspending")
+	}
+
+	if rec := e.do(admin, http.MethodPost, "/api/admin/projects/archive", `{"project_id":31,"archived":false}`); rec.Code != http.StatusOK {
+		t.Fatalf("opening a project = %d", rec.Code)
+	}
+	if page := e.do(member, http.MethodGet, "/projects", "").Body.String(); strings.Contains(page, "Uzavřené projekty") {
+		t.Error("the project stayed closed")
 	}
 }
 

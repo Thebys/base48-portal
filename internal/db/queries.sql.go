@@ -591,7 +591,7 @@ func (q *Queries) CreateLog(ctx context.Context, arg CreateLogParams) (SystemLog
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (name, payments_id, description)
 VALUES (?, ?, ?)
-RETURNING id, name, payments_id, description
+RETURNING id, name, payments_id, description, archived_at
 `
 
 type CreateProjectParams struct {
@@ -608,6 +608,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Name,
 		&i.PaymentsID,
 		&i.Description,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -1083,7 +1084,7 @@ func (q *Queries) GetPaymentByKindAndID(ctx context.Context, arg GetPaymentByKin
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, name, payments_id, description FROM projects WHERE id = ? LIMIT 1
+SELECT id, name, payments_id, description, archived_at FROM projects WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
@@ -1094,12 +1095,13 @@ func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
 		&i.Name,
 		&i.PaymentsID,
 		&i.Description,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const getProjectByPaymentsID = `-- name: GetProjectByPaymentsID :one
-SELECT p.id, p.name, p.payments_id, p.description FROM projects p
+SELECT p.id, p.name, p.payments_id, p.description, p.archived_at FROM projects p
 JOIN project_vs pv ON p.id = pv.project_id
 WHERE pv.vs = ? LIMIT 1
 `
@@ -1113,6 +1115,7 @@ func (q *Queries) GetProjectByPaymentsID(ctx context.Context, vs string) (Projec
 		&i.Name,
 		&i.PaymentsID,
 		&i.Description,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -2679,12 +2682,13 @@ func (q *Queries) ListProjectVS(ctx context.Context, projectID int64) ([]Project
 
 const listProjects = `-- name: ListProjects :many
 
-SELECT id, name, payments_id, description FROM projects ORDER BY id DESC
+SELECT id, name, payments_id, description, archived_at FROM projects ORDER BY archived_at IS NOT NULL, id DESC
 `
 
 // ============================================================================
 // PROJECTS (Fundraising / Special VS)
 // ============================================================================
+// Open projects first, newest first; closed ones after them.
 func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 	rows, err := q.db.QueryContext(ctx, listProjects)
 	if err != nil {
@@ -2699,6 +2703,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.Name,
 			&i.PaymentsID,
 			&i.Description,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -3382,6 +3387,24 @@ type RevokeSessionParams struct {
 func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) error {
 	_, err := q.db.ExecContext(ctx, revokeSession, arg.ID, arg.ExpiresAt)
 	return err
+}
+
+const setProjectArchived = `-- name: SetProjectArchived :execrows
+UPDATE projects SET archived_at = ? WHERE id = ?
+`
+
+type SetProjectArchivedParams struct {
+	ArchivedAt sql.NullTime `json:"archived_at"`
+	ID         int64        `json:"id"`
+}
+
+// archived_at NULL opens a closed project again.
+func (q *Queries) SetProjectArchived(ctx context.Context, arg SetProjectArchivedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setProjectArchived, arg.ArchivedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const unassignPaymentsByProjectVS = `-- name: UnassignPaymentsByProjectVS :execrows

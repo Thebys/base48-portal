@@ -633,10 +633,11 @@
                 if (data.projects && data.projects.length > 0) {
                     select.innerHTML = '<option value="">-- Vyber projekt --</option>';
                     data.projects.forEach(project => {
-                        select.add(new Option(`${project.name} (VS: ${project.payments_id || 'N/A'})`, project.id));
+                        const vs = project.vs_list.length ? `, VS ${project.vs_list[0].vs}` : '';
+                        select.add(new Option(`${project.name}${vs}${project.archived ? ', uzavřený' : ''}`, project.id));
                     });
                 } else {
-                    select.innerHTML = '<option value="">Žádné projekty (vytvořte v /admin/projects)</option>';
+                    select.innerHTML = '<option value="">Žádné projekty (vytvoř je ve Správě projektů)</option>';
                 }
             } catch (error) {
                 document.getElementById('projectSelect').innerHTML = '<option value="">Chyba načítání projektů</option>';

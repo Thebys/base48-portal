@@ -93,6 +93,7 @@ type Project struct {
 	Name        string         `json:"name"`
 	PaymentsID  sql.NullString `json:"payments_id"`
 	Description sql.NullString `json:"description"`
+	ArchivedAt  sql.NullTime   `json:"archived_at"`
 }
 
 type ProjectV struct {

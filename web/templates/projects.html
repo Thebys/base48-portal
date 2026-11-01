@@ -36,13 +36,31 @@
     .vs-tag small { font-family: inherit; font-weight: 400; opacity: .8; }
 
     .money { text-align: right; }
-    .money-left { font-size: 24px; font-weight: 700; line-height: 1.2; white-space: nowrap; color: var(--money-positive); }
-    .money-left.over { color: var(--money-negative); }
+    .money-raised { font-size: 24px; font-weight: 700; line-height: 1.2; white-space: nowrap; color: var(--ink); }
     .money-label { font-size: 12px; color: var(--ink-3); }
-    .money-flow { margin-top: 2px; font-size: 13px; color: var(--ink-2); }
-    .money-flow span { white-space: nowrap; }
-    .spent-bar { grid-column: 1 / -1; height: 6px; margin-top: 6px; overflow: hidden; border-radius: 3px; background: var(--surface-muted); }
-    .spent-bar > span { display: block; height: 100%; background: var(--money-negative); }
+
+    /* What was raised, split into spent and left (or spent and what the
+       association covered on top): a thin bar with the figures beside it. */
+    .split-wrap { grid-column: 1 / -1; margin-top: 4px; }
+    .split { display: flex; gap: 2px; height: 8px; }
+    .split .part { min-width: 3px; }
+    .split .part:first-child { border-radius: 4px 0 0 4px; }
+    .split .part:last-child { border-radius: 0 4px 4px 0; }
+    .split .part:only-child { border-radius: 4px; }
+    .part.spent, .key.spent { background: var(--ink-4); }
+    .part.left, .key.left { background: var(--chart-3); }
+    .part.covered, .key.covered { background: var(--chart-2); }
+    .split-legend { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 6px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-3); }
+    .split-legend li { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .split-legend b { font-weight: 600; color: var(--ink); }
+    .split-legend .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+    .split-none { font-size: 13px; color: var(--ink-3); }
+
+    .project.closed .project-name { color: var(--ink-2); }
+    .project.closed .money-raised { color: var(--ink-2); }
+    .closed-tag { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 12px; font-size: 12px; background: var(--tint-gray-bg); color: var(--tint-gray-fg); }
+    .closed-projects { margin-top: 24px; }
+    .closed-projects > summary { margin-bottom: 12px; font-size: 15px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
 
     .project-body > * { padding: 16px 20px; border-top: 1px solid var(--line); }
     .project-desc { font-size: 14px; color: var(--ink-2); white-space: pre-line; }
@@ -77,9 +95,7 @@
     .p-what { grid-area: what; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
     .p-what .sub { display: block; font-size: 12px; color: var(--ink-3); }
     .p-vs { grid-area: vs; align-self: end; font-family: 'Courier New', monospace; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
-    .p-amount { grid-area: amount; text-align: right; font-weight: 600; white-space: nowrap; }
-    .payment.in .p-amount { color: var(--money-positive); }
-    .payment.out .p-amount { color: var(--money-negative); }
+    .p-amount { grid-area: amount; text-align: right; font-weight: 600; white-space: nowrap; color: var(--ink); }
 
     /* Admin controls */
     .manage { display: flex; flex-direction: column; gap: 10px; background: var(--surface-sunken); }
@@ -100,7 +116,7 @@
         .fr-head h1 { font-size: 24px; }
         .project > summary { grid-template-columns: 1fr; padding: 14px 14px 12px; }
         .money { text-align: left; }
-        .money-left { font-size: 20px; }
+        .money-raised { font-size: 20px; }
         .project-body > * { padding: 14px; }
         .qr { flex-direction: column; align-items: center; text-align: center; }
         .qr-amount { justify-content: center; }
@@ -140,89 +156,15 @@
     </div>
     {{ end }}
 
-    {{ range .Projects }}{{ $p := . }}
-    <details class="project">
-        <summary>
-            <div>
-                <div class="project-name">{{.Name}}</div>
-                <div class="project-vs">
-                    VS: {{ range $i, $vs := .VSList }}<span class="vs-tag{{ if eq $i 0 }} primary{{ end }}"{{ if $vs.Note }} title="{{$vs.Note}}"{{ end }}>{{$vs.VS}}</span>{{ else }}–{{ end }}
-                </div>
-            </div>
-            <div class="money">
-                <div class="money-left{{ if lt .Remaining 0.0 }} over{{ end }}">{{fmtKc .Remaining}} Kč</div>
-                <div class="money-label">{{ if lt .Remaining 0.0 }}přečerpáno, rozdíl doplatil spolek{{ else }}zbývá{{ end }}</div>
-                <div class="money-flow"><span>vybráno {{fmtKc .Raised}} Kč</span> · <span>utraceno {{fmtKc .Spent}} Kč</span></div>
-            </div>
-            {{ if gt .Spent 0.0 }}<div class="spent-bar" title="Utraceno {{.SpentShare}} % vybraného"><span style="width: {{.SpentShare}}%"></span></div>{{ end }}
-        </summary>
+    {{ range .Open }}{{ template "project" . }}{{ else }}
+    <div class="empty">Zatím nejsou žádné otevřené projekty.</div>
+    {{ end }}
 
-        <div class="project-body">
-            {{ if .Description.Valid }}<p class="project-desc">{{.Description.String}}</p>{{ end }}
-
-            {{ if $.Manage }}
-            <div class="manage">
-                <div class="manage-row">
-                    <span class="manage-label">VS</span>
-                    {{ range .VSList }}<span class="vs-tag">{{.VS}}{{ if .Note }} <small>{{.Note}}</small>{{ end }}{{ if gt (len $p.VSList) 1 }}<button type="button" class="vs-remove" title="Odebrat VS" data-project="{{$p.ID}}" data-vs="{{.VS}}" onclick="removeVS(this)">×</button>{{ end }}</span>{{ end }}
-                </div>
-                <form class="manage-row" data-project="{{.ID}}" onsubmit="addVS(event)">
-                    <input name="vs" required inputmode="numeric" pattern="[0-9]{1,10}" title="1 až 10 číslic" placeholder="další VS" size="10">
-                    <input name="note" maxlength="100" placeholder="poznámka, např. překlep" class="grow">
-                    <button type="submit" class="btn btn-sm btn-secondary">Přidat VS</button>
-                </form>
-                <div class="manage-row">
-                    {{ if .Payments }}<span class="muted">Projekt s platbami nejde smazat.</span>
-                    {{ else }}<button type="button" class="btn btn-sm btn-danger" data-project="{{.ID}}" data-name="{{.Name}}" onclick="deleteProject(this)">Smazat projekt</button>{{ end }}
-                    <span class="status" aria-live="polite"></span>
-                </div>
-            </div>
-            {{ end }}
-
-            {{ if .PrimaryVS }}
-            <div class="qr" data-vs="{{.PrimaryVS}}" data-msg="{{.Name}}">
-                <a class="qr-link" href="/api/qr?vs={{.PrimaryVS}}&amp;msg={{.Name}}" target="_blank" title="Otevřít v bankovní aplikaci">
-                    <img class="qr-img" src="/api/qr?vs={{.PrimaryVS}}&amp;msg={{.Name}}" alt="QR platba" width="150" height="150">
-                </a>
-                <div class="qr-info">
-                    <p><strong>QR platba</strong></p>
-                    <p>VS: <strong>{{.PrimaryVS}}</strong></p>
-                    <p class="qr-amount-text">Bez předvyplněné částky.</p>
-                    <div class="qr-amount">
-                        <input type="number" min="1" step="1" placeholder="Kč" aria-label="Částka v Kč">
-                        <button type="button" class="btn btn-sm btn-primary" onclick="setQRAmount(this)">Nastavit částku</button>
-                        <button type="button" class="btn btn-sm btn-secondary" onclick="resetQR(this)">Reset</button>
-                    </div>
-                </div>
-            </div>
-            {{ end }}
-
-            <div class="payments">
-                {{ if .Payments }}
-                <h3>Platby</h3>
-                <ul class="payment-list">
-                    {{ range .Payments }}
-                    <li class="payment {{ if .Outgoing }}out{{ else }}in{{ end }}">
-                        <span class="p-date">{{.Date.Format "02.01.2006"}}</span>
-                        <span class="p-what">
-                            {{ if .Outgoing }}{{ if .Note }}{{.Note}}{{ else }}<span class="muted">výdaj</span>{{ end }}{{ if .RemoteAccount }}<span class="sub">{{.RemoteAccount}}</span>{{ end }}
-                            {{ else if .RemoteAccount }}{{.RemoteAccount}}
-                            {{ else }}<span class="muted">příspěvek</span>{{ end }}
-                            {{ if .StaffComment }}<span class="sub" title="Interní komentář">{{.StaffComment}}</span>{{ end }}
-                        </span>
-                        <span class="p-vs">{{ if .VS }}VS {{.VS}}{{ end }}</span>
-                        <span class="p-amount">{{ if not .Outgoing }}+{{ end }}{{fmtKc .Value}} Kč</span>
-                    </li>
-                    {{ end }}
-                </ul>
-                {{ else }}
-                <div class="empty">Zatím žádné platby.</div>
-                {{ end }}
-            </div>
-        </div>
+    {{ if .Closed }}
+    <details class="closed-projects">
+        <summary>Uzavřené projekty ({{ len .Closed }})</summary>
+        {{ range .Closed }}{{ template "project" . }}{{ end }}
     </details>
-    {{ else }}
-    <div class="empty">Zatím nejsou žádné fundraisingové projekty.</div>
     {{ end }}
 </div>
 
@@ -321,6 +263,18 @@ async function removeVS(button) {
     }
 }
 
+async function archiveProject(button) {
+    try {
+        await send('POST', '/api/admin/projects/archive', {
+            project_id: Number(button.dataset.project),
+            archived: button.dataset.archived === 'true',
+        });
+        location.reload();
+    } catch (error) {
+        fail(button.closest('.manage'), error);
+    }
+}
+
 async function deleteProject(button) {
     if (!confirm(`Smazat projekt „${button.dataset.name}“?`)) return;
     try {
@@ -332,4 +286,105 @@ async function deleteProject(button) {
 }
 </script>
 {{ end }}
+{{ end }}
+
+{{/* One project, for members or, with .Manage, for admins. */}}
+{{ define "project" }}{{ $p := . }}
+<details class="project{{ if .ArchivedAt.Valid }} closed{{ end }}">
+    <summary>
+        <div>
+            <div class="project-name">{{.Name}}</div>
+            <div class="project-vs">
+                {{ if .ArchivedAt.Valid }}<span class="closed-tag">uzavřeno {{.ArchivedAt.Time.Format "1/2006"}}</span>{{ end }}
+                VS: {{ range $i, $vs := .VSList }}<span class="vs-tag{{ if eq $i 0 }} primary{{ end }}"{{ if $vs.Note }} title="{{$vs.Note}}"{{ end }}>{{$vs.VS}}</span>{{ else }}–{{ end }}
+            </div>
+        </div>
+        <div class="money">
+            <div class="money-raised">{{fmtKc .Raised}} Kč</div>
+            <div class="money-label">vybráno</div>
+        </div>
+        {{ if gt .Spent 0.0 }}
+        <div class="split-wrap">
+            <div class="split" aria-hidden="true">
+                {{- if gt .Bar.Spent 0.0 }}<span class="part spent" style="flex-grow: {{printf "%.3f" .Bar.Spent}}"></span>{{ end -}}
+                {{- if gt .Bar.Left 0.0 }}<span class="part left" style="flex-grow: {{printf "%.3f" .Bar.Left}}"></span>{{ end -}}
+                {{- if gt .Bar.Covered 0.0 }}<span class="part covered" style="flex-grow: {{printf "%.3f" .Bar.Covered}}"></span>{{ end -}}
+            </div>
+            <ul class="split-legend">
+                <li><i class="key spent"></i>utraceno <b>{{fmtKc .Spent}} Kč</b></li>
+                {{ if gt .Covered 0.0 }}<li><i class="key covered"></i>doplatil spolek <b>{{fmtKc .Covered}} Kč</b></li>
+                {{ else }}<li><i class="key left"></i>zbývá <b>{{fmtKc .Remaining}} Kč</b></li>{{ end }}
+            </ul>
+        </div>
+        {{ else if gt .Raised 0.0 }}
+        <p class="split-wrap split-none">Zatím nic neutraceno.</p>
+        {{ end }}
+    </summary>
+
+    <div class="project-body">
+        {{ if .Description.Valid }}<p class="project-desc">{{.Description.String}}</p>{{ end }}
+
+        {{ if .Manage }}
+        <div class="manage">
+            <div class="manage-row">
+                <span class="manage-label">VS</span>
+                {{ range .VSList }}<span class="vs-tag">{{.VS}}{{ if .Note }} <small>{{.Note}}</small>{{ end }}{{ if gt (len $p.VSList) 1 }}<button type="button" class="vs-remove" title="Odebrat VS" data-project="{{$p.ID}}" data-vs="{{.VS}}" onclick="removeVS(this)">×</button>{{ end }}</span>{{ end }}
+            </div>
+            <form class="manage-row" data-project="{{.ID}}" onsubmit="addVS(event)">
+                <input name="vs" required inputmode="numeric" pattern="[0-9]{1,10}" title="1 až 10 číslic" placeholder="další VS" size="10">
+                <input name="note" maxlength="100" placeholder="poznámka, např. překlep" class="grow">
+                <button type="submit" class="btn btn-sm btn-secondary">Přidat VS</button>
+            </form>
+            <div class="manage-row">
+                {{ if .ArchivedAt.Valid }}<button type="button" class="btn btn-sm btn-secondary" data-project="{{.ID}}" data-archived="false" onclick="archiveProject(this)">Znovu otevřít</button>
+                {{ else }}<button type="button" class="btn btn-sm btn-secondary" data-project="{{.ID}}" data-archived="true" onclick="archiveProject(this)" title="Projekt zůstane na stránce mezi uzavřenými, bez QR kódu">Uzavřít projekt</button>{{ end }}
+                {{ if .Payments }}<span class="muted">Projekt s platbami nejde smazat.</span>
+                {{ else }}<button type="button" class="btn btn-sm btn-danger" data-project="{{.ID}}" data-name="{{.Name}}" onclick="deleteProject(this)">Smazat projekt</button>{{ end }}
+                <span class="status" aria-live="polite"></span>
+            </div>
+        </div>
+        {{ end }}
+
+        {{ if and .PrimaryVS (not .ArchivedAt.Valid) }}
+        <div class="qr" data-vs="{{.PrimaryVS}}" data-msg="{{.Name}}">
+            <a class="qr-link" href="/api/qr?vs={{.PrimaryVS}}&amp;msg={{.Name}}" target="_blank" title="Otevřít v bankovní aplikaci">
+                <img class="qr-img" src="/api/qr?vs={{.PrimaryVS}}&amp;msg={{.Name}}" alt="QR platba" width="150" height="150">
+            </a>
+            <div class="qr-info">
+                <p><strong>QR platba</strong></p>
+                <p>VS: <strong>{{.PrimaryVS}}</strong></p>
+                <p class="qr-amount-text">Bez předvyplněné částky.</p>
+                <div class="qr-amount">
+                    <input type="number" min="1" step="1" placeholder="Kč" aria-label="Částka v Kč">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="setQRAmount(this)">Nastavit částku</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="resetQR(this)">Reset</button>
+                </div>
+            </div>
+        </div>
+        {{ end }}
+
+        <div class="payments">
+            {{ if .Payments }}
+            <h3>Platby</h3>
+            <ul class="payment-list">
+                {{ range .Payments }}
+                <li class="payment {{ if .Outgoing }}out{{ else }}in{{ end }}">
+                    <span class="p-date">{{.Date.Format "02.01.2006"}}</span>
+                    <span class="p-what">
+                        {{ if .Outgoing }}{{ if .Note }}{{.Note}}{{ else }}<span class="muted">výdaj</span>{{ end }}{{ if .RemoteAccount }}<span class="sub">{{.RemoteAccount}}</span>{{ end }}
+                        {{ else if .RemoteAccount }}{{.RemoteAccount}}
+                        {{ else }}<span class="muted">příspěvek</span>{{ end }}
+                        {{ if .StaffComment }}<span class="sub" title="Interní komentář">{{.StaffComment}}</span>{{ end }}
+                    </span>
+                    <span class="p-vs">{{ if .VS }}VS {{.VS}}{{ end }}</span>
+                    <span class="p-amount">{{ if not .Outgoing }}+{{ end }}{{fmtKc .Value}} Kč</span>
+                </li>
+                {{ end }}
+            </ul>
+            {{ else }}
+            <div class="empty">Zatím žádné platby.</div>
+            {{ end }}
+        </div>
+    </div>
+</details>
 {{ end }}

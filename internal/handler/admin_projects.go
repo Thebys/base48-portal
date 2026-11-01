@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/base48/member-portal/internal/db"
 )
@@ -28,6 +29,7 @@ type ProjectResponse struct {
 	Raised      float64  `json:"raised"`
 	Spent       float64  `json:"spent"`
 	Remaining   float64  `json:"remaining"`
+	Archived    bool     `json:"archived"`
 }
 
 // AdminProjectsAPIHandler returns all projects with what they raised and spent.
@@ -50,6 +52,7 @@ func (h *Handler) AdminProjectsAPIHandler(w http.ResponseWriter, r *http.Request
 			Raised:      p.Raised,
 			Spent:       p.Spent,
 			Remaining:   p.Remaining(),
+			Archived:    p.ArchivedAt.Valid,
 		}
 	}
 
@@ -215,6 +218,50 @@ func (h *Handler) AdminDeleteProjectHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	h.jsonSuccess(w, "Project deleted successfully")
+}
+
+// AdminArchiveProjectHandler closes a project, or opens a closed one again.
+// A closed project stays on the page for the record, below the open ones and
+// without its QR code.
+// POST /api/admin/projects/archive  {"project_id": N, "archived": true}
+func (h *Handler) AdminArchiveProjectHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ProjectID int64 `json:"project_id"`
+		Archived  bool  `json:"archived"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+
+	at := sql.NullTime{Time: time.Now(), Valid: req.Archived}
+	n, err := h.queries.SetProjectArchived(ctx, db.SetProjectArchivedParams{ArchivedAt: at, ID: req.ProjectID})
+	if err != nil {
+		log.Printf("[Projects] archive project %d: %v", req.ProjectID, err)
+		h.jsonError(w, "Failed to save", http.StatusInternalServerError)
+		return
+	}
+	if n == 0 {
+		h.jsonError(w, "Project not found", http.StatusNotFound)
+		return
+	}
+
+	// best-effort audit log
+	action := "opened"
+	if req.Archived {
+		action = "closed"
+	}
+	admin, _ := h.queries.GetUserByKeycloakID(ctx, sql.NullString{String: h.auth.GetUser(r).ID, Valid: true})
+	h.queries.CreateLog(ctx, db.CreateLogParams{
+		Subsystem: "admin",
+		Level:     "info",
+		UserID:    sql.NullInt64{Int64: admin.ID, Valid: admin.ID != 0},
+		Message:   fmt.Sprintf("Admin %s %s project #%d", admin.Email, action, req.ProjectID),
+		Metadata:  logMetadata(map[string]interface{}{"project_id": req.ProjectID, "archived": req.Archived}),
+	})
+
+	h.jsonSuccess(w, "Uloženo")
 }
 
 // AddProjectVSRequest is the request body for adding a VS to a project
