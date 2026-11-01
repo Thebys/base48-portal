@@ -255,11 +255,8 @@ type PaymentResponse struct {
 }
 
 // AdminProjectPaymentsHandler returns payments for a project
-// GET /api/admin/projects/{id}/payments
+// GET /api/admin/projects/payments?project_id=N
 func (h *Handler) AdminProjectPaymentsHandler(w http.ResponseWriter, r *http.Request) {
-	_ = r // auth enforced by RequireAdmin middleware
-
-	// Parse project ID from query
 	projectIDStr := r.URL.Query().Get("project_id")
 	if projectIDStr == "" {
 		h.jsonError(w, "Missing project_id parameter", http.StatusBadRequest)
@@ -280,7 +277,6 @@ func (h *Handler) AdminProjectPaymentsHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Convert to response format
 	paymentResponses := make([]PaymentResponse, len(payments))
 	for i, p := range payments {
 		paymentResponses[i] = PaymentResponse{
@@ -311,8 +307,6 @@ type AddProjectVSRequest struct {
 // AdminAddProjectVSHandler adds a VS identifier to a project
 // POST /api/admin/projects/vs
 func (h *Handler) AdminAddProjectVSHandler(w http.ResponseWriter, r *http.Request) {
-	_ = r // auth enforced by RequireAdmin middleware
-
 	var req AddProjectVSRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.jsonError(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
@@ -367,8 +361,6 @@ type RemoveProjectVSRequest struct {
 // AdminRemoveProjectVSHandler removes a VS identifier from a project
 // DELETE /api/admin/projects/vs
 func (h *Handler) AdminRemoveProjectVSHandler(w http.ResponseWriter, r *http.Request) {
-	_ = r // auth enforced by RequireAdmin middleware
-
 	var req RemoveProjectVSRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.jsonError(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
@@ -377,7 +369,7 @@ func (h *Handler) AdminRemoveProjectVSHandler(w http.ResponseWriter, r *http.Req
 
 	ctx := r.Context()
 
-	// Check if project has more than one VS
+	// A project keeps at least one symbol.
 	vsList, err := h.queries.ListProjectVS(ctx, req.ProjectID)
 	if err != nil {
 		h.jsonError(w, "Failed to check VS count: "+err.Error(), http.StatusInternalServerError)
@@ -389,7 +381,6 @@ func (h *Handler) AdminRemoveProjectVSHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Remove VS from project
 	err = h.queries.RemoveProjectVS(ctx, db.RemoveProjectVSParams{
 		ProjectID: req.ProjectID,
 		Vs:        req.VS,
