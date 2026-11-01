@@ -358,14 +358,12 @@ func (h *Handler) AdminUndismissPaymentHandler(w http.ResponseWriter, r *http.Re
 
 // UpdatePaymentRequest is the request body for updating a payment
 type UpdatePaymentRequest struct {
-	PaymentID    int64   `json:"payment_id"`
-	VS           string  `json:"vs"`
-	Message      string  `json:"message"`
-	Comment      string  `json:"comment"`
-	StaffComment string  `json:"staff_comment"`
-	AssignType   string  `json:"assign_type"` // "user", "project", "unmatched"
-	UserID       *int64  `json:"user_id"`
-	ProjectID    *int64  `json:"project_id"`
+	PaymentID    int64  `json:"payment_id"`
+	VS           string `json:"vs"`
+	StaffComment string `json:"staff_comment"`
+	AssignType   string `json:"assign_type"` // "user", "project", "unmatched"
+	UserID       *int64 `json:"user_id"`
+	ProjectID    *int64 `json:"project_id"`
 }
 
 // AdminUpdatePaymentHandler updates payment data and optionally assigns it
@@ -516,7 +514,6 @@ func (h *Handler) AdminUpdatePaymentHandler(w http.ResponseWriter, r *http.Reque
 			"payment_id":    payment.ID,
 			"amount":        payment.Amount,
 			"vs":            identification,
-			"message":       req.Message,
 			"staff_comment": req.StaffComment,
 		}
 	}

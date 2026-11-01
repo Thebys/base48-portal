@@ -276,7 +276,7 @@
                         <td class="account">{{.Payment.RemoteAccount}}</td>
                         <td class="reason">Bez VS - manuální přiřazení nutné</td>
                         <td>
-                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}', '', '')">
+                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}')">
                                 Správa
                             </button>
                         </td>
@@ -325,7 +325,7 @@
                         <td class="account">{{.Payment.RemoteAccount}}</td>
                         <td class="reason">Uživatel s payments_id '{{.Payment.Identification}}' neexistuje</td>
                         <td>
-                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}', '', '')">
+                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}')">
                                 Správa
                             </button>
                         </td>
@@ -374,7 +374,7 @@
                         <td class="account">{{.Payment.RemoteAccount}}</td>
                         <td class="reason">Uživatel s tímto payments_id existuje, ale platba není přiřazena!</td>
                         <td>
-                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}', '', '')">
+                            <button class="btn btn-sm btn-primary" onclick="managePayment({{.Payment.ID}}, '{{.Payment.Amount}}', '{{.Payment.Date.Format "02.01.2006"}}', '{{.Payment.RemoteAccount}}', '{{.Payment.Identification}}')">
                                 Správa
                             </button>
                         </td>
@@ -460,14 +460,6 @@
                             <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; color: #374151;">Variabilní symbol:</label>
                             <input type="text" id="editVS" placeholder="např. 108" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: 'Courier New', monospace;">
                         </div>
-                        <div>
-                            <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; color: #374151;">Zpráva pro příjemce:</label>
-                            <input type="text" id="editMessage" placeholder="např. dar na energie" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                        </div>
-                        <div>
-                            <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; color: #374151;">Komentář:</label>
-                            <input type="text" id="editComment" placeholder="volitelný komentář" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                        </div>
                     </div>
                 </div>
 
@@ -548,7 +540,7 @@
         let selectedProjectId = null;
         let currentPaymentId = null;
 
-        function managePayment(paymentId, amount, date, account, vs, message, comment) {
+        function managePayment(paymentId, amount, date, account, vs) {
             currentPaymentId = paymentId;
             selectedUserId = null;
             selectedProjectId = null;
@@ -561,8 +553,6 @@
 
             // Set editable fields
             document.getElementById('editVS').value = vs || '';
-            document.getElementById('editMessage').value = message || '';
-            document.getElementById('editComment').value = comment || '';
             document.getElementById('staffComment').value = '';
 
             // Reset assign type
@@ -715,8 +705,6 @@
         async function confirmAssignment() {
             const assignType = document.querySelector('input[name="assignType"]:checked');
             const vs = document.getElementById('editVS').value.trim();
-            const message = document.getElementById('editMessage').value.trim();
-            const comment = document.getElementById('editComment').value.trim();
             const staffComment = document.getElementById('staffComment').value.trim();
 
             // Handle dismiss separately
@@ -765,8 +753,6 @@
             const payload = {
                 payment_id: currentPaymentId,
                 vs: vs,
-                message: message,
-                comment: comment,
                 staff_comment: staffComment,
                 assign_type: assignType ? assignType.value : 'unmatched',
                 user_id: selectedUserId,
