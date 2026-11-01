@@ -673,6 +673,7 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 		"fmtNum":      formatNumber,
 		"fmtCZK":      formatCentsAsCZK,
 		"fmtCZKWhole": formatCentsAsWholeCZK,
+		"fmtKc":       formatCrowns,
 		"initials":    initials,
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseFiles(

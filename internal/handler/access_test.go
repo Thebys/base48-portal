@@ -65,6 +65,8 @@ func newAccessEnv(t *testing.T) *accessEnv {
 	r.Post("/api/admin/users/{id}/access", h.RequireAdmin(h.AdminGrantAccessHandler))
 	r.Delete("/api/admin/users/{id}/access/{scope}", h.RequireAdmin(h.AdminRevokeAccessHandler))
 	r.Post("/api/admin/workshop/reservations", h.RequireAdmin(h.AdminCreateReservationHandler))
+	r.Get("/admin/payments/outgoing", h.RequireAdmin(h.AdminOutgoingPaymentsHandler))
+	r.Post("/api/admin/payments/outgoing", h.RequireAdmin(h.AdminAssignOutgoingHandler))
 
 	return &accessEnv{t: t, h: h, sessions: store, database: database, router: r}
 }

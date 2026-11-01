@@ -243,15 +243,15 @@ func (h *Handler) AdminDeleteProjectHandler(w http.ResponseWriter, r *http.Reque
 	h.jsonSuccess(w, "Project deleted successfully")
 }
 
-// PaymentResponse is the JSON response for a payment
+// PaymentResponse is a project payment as the admin page gets it.
 type PaymentResponse struct {
-	ID            int64  `json:"id"`
-	Date          string `json:"date"`
-	Amount        string `json:"amount"`
-	RemoteAccount string `json:"remote_account"`
+	ID             int64  `json:"id"`
+	Date           string `json:"date"`
+	Amount         string `json:"amount"` // negative for an expense
+	RemoteAccount  string `json:"remote_account"`
 	Identification string `json:"identification"`
-	Message       string `json:"message"`
-	Comment       string `json:"comment"`
+	Note           string `json:"note"`    // what members see of an expense
+	Comment        string `json:"comment"` // staff comment
 }
 
 // AdminProjectPaymentsHandler returns payments for a project
@@ -289,7 +289,7 @@ func (h *Handler) AdminProjectPaymentsHandler(w http.ResponseWriter, r *http.Req
 			Amount:         p.Amount,
 			RemoteAccount:  p.RemoteAccount,
 			Identification: p.Identification,
-			Message:        "",  // Not in Payment model
+			Note:           p.PublicNote.String,
 			Comment:        p.StaffComment.String,
 		}
 	}

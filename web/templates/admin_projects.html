@@ -173,6 +173,20 @@
         color: var(--accent-green);
         margin-right: 20px;
         white-space: nowrap;
+        text-align: right;
+    }
+
+    .project-balance.negative {
+        color: var(--accent-red, #dc2626);
+    }
+
+    .amount-in { color: var(--accent-green); font-weight: 600; white-space: nowrap; }
+    .amount-out { color: var(--accent-red, #dc2626); font-weight: 600; white-space: nowrap; }
+
+    .project-flow {
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--ink-3);
     }
 
     /* The inset is one knob. `width: 100%` next to a horizontal margin makes the
@@ -311,7 +325,10 @@
                 <h1>🏗️ Správa projektů a fundraising</h1>
                 <p class="subtitle">Projekty se speciálním VS pro sběr příspěvků</p>
             </div>
-            <button class="btn btn-primary" onclick="openCreateModal()">+ Nový projekt</button>
+            <div style="display: flex; gap: 10px;">
+                <a class="btn btn-secondary" href="/admin/payments/outgoing?unassigned=1">Přiřadit výdaje</a>
+                <button class="btn btn-primary" onclick="openCreateModal()">+ Nový projekt</button>
+            </div>
         </div>
     </div>
 
@@ -353,6 +370,9 @@
 </div>
 
 <script>
+// kc(n) is an amount in crowns as Czech text: "22 977,9".
+const kc = n => (Number(n) || 0).toLocaleString('cs-CZ', { maximumFractionDigits: 2 });
+
 async function loadProjects() {
     try {
         const response = await fetch('/api/admin/projects');
@@ -363,7 +383,6 @@ async function loadProjects() {
         if (data.projects && data.projects.length > 0) {
             container.innerHTML = '';
             data.projects.forEach(project => {
-                const balance = project.remaining || 0;
 
                 // Build VS tags HTML
                 let vsTagsHtml = '';
@@ -418,8 +437,9 @@ async function loadProjects() {
                                 </div>
                             </div>
                             <div style="display: flex; align-items: center; gap: 15px;">
-                                <div class="project-balance">
-                                    ${balance.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kč
+                                <div class="project-balance ${esc(project.remaining < 0 ? 'negative' : '')}" title="Zbývá">
+                                    ${esc(kc(project.remaining))} Kč
+                                    <div class="project-flow">vybráno ${esc(kc(project.raised))} · utraceno ${esc(kc(project.spent))}</div>
                                 </div>
                                 <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteProject(${project.id}, ${jsArg(project.name)})">
                                     Smazat
@@ -478,6 +498,7 @@ async function loadProjectPayments(projectId) {
                             <th>Částka</th>
                             <th>Odesílatel</th>
                             <th>VS</th>
+                            <th>Popis pro členy</th>
                             <th>Komentář</th>
                         </tr>
                     </thead>
@@ -489,10 +510,11 @@ async function loadProjectPayments(projectId) {
                     <tr>
                         <td>#${payment.id}</td>
                         <td>${esc(payment.date)}</td>
-                        <td style="color: #059669; font-weight: 600;">+${esc(payment.amount)} Kč</td>
+                        <td class="${esc(Number(payment.amount) < 0 ? 'amount-out' : 'amount-in')}">${esc(kc(payment.amount))} Kč</td>
                         <td>${esc(payment.remote_account)}</td>
                         <td><span class="vs">${esc(payment.identification || '-')}</span></td>
-                        <td style="font-size: 13px; color: #6b7280;">${esc(payment.comment || '-')}</td>
+                        <td style="font-size: 13px;">${esc(payment.note || '-')}</td>
+                        <td style="font-size: 13px; color: var(--ink-3);">${esc(payment.comment || '-')}</td>
                     </tr>
                 `;
             });

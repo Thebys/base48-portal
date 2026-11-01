@@ -2,9 +2,20 @@ package handler
 
 import (
 	"context"
+	"math"
 
 	"github.com/base48/member-portal/internal/db"
 )
+
+// formatCrowns formats an amount in crowns the Czech way: "44 000" when it is
+// whole, "22 977,90" when it is not.
+func formatCrowns(v float64) string {
+	cents := int64(math.Round(v * 100))
+	if cents%100 == 0 {
+		return formatCentsAsWholeCZK(cents)
+	}
+	return formatCentsAsCZK(cents)
+}
 
 // projectSummary is a project with its symbols and what it raised and spent.
 // Admin and member pages build their views from it.
