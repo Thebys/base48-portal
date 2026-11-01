@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 
+	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/migrate"
@@ -15,7 +17,8 @@ import (
 )
 
 // barTestClient wires a client against a migrated throwaway database and the
-// shipped templates. No SMTP host, so nothing leaves the machine.
+// shipped templates. No SMTP host, so nothing leaves the machine. The FIO sync
+// has already recorded the payment account, as it has in production.
 func barTestClient(t *testing.T) (*Client, *sql.DB) {
 	t.Helper()
 	database, err := sql.Open("sqlite", "file:"+t.TempDir()+"/test.db")
@@ -31,7 +34,13 @@ func barTestClient(t *testing.T) (*Client, *sql.DB) {
 		WebRoot:      "../../web",
 		BaseURL:      "https://portal.base48.cz",
 	}
-	return New(cfg, db.New(database), nil), database
+	q := db.New(database)
+	if _, err := bank.Record(context.Background(), q, bank.Account{
+		IBAN: "CZ6620100000002003436319", BIC: "FIOBCZPPXXX", Number: "2003436319", BankCode: "2010",
+	}, time.Now()); err != nil {
+		t.Fatalf("record payment account: %v", err)
+	}
+	return New(cfg, q), database
 }
 
 // seedBarMember inserts a user and, unless linked is false, a bar account with

@@ -28,10 +28,9 @@ type Config struct {
 	// assignments are refused instead of sent.
 	KeycloakReadOnly bool
 
-	// FIO Bank
+	// FIO Bank. The token also decides the account members pay into: the sync
+	// records the account it reads (package bank).
 	BankFIOToken string
-	BankIBAN     string
-	BankBIC      string
 
 	// Session
 	SessionSecret string
@@ -47,15 +46,22 @@ type Config struct {
 	SMTPSkipTLS  bool   // Skip STARTTLS (for local relays like Postfix without TLS)
 
 	// Email system
-	EmailEnabled  bool   // Global email toggle
-	BankAccountCZ string // Czech bank account number for payment emails
+	EmailEnabled bool // Global email toggle
 
 	// RevBank
 	RevbankAPIKey string
 
 	// Paths
 	WebRoot string // Base directory for web assets (templates, static files)
+
+	// RetiredEnv lists variables that are still set but no longer read, so the
+	// processes can say so at startup.
+	RetiredEnv []string
 }
+
+// retiredEnv are variables earlier versions read. The payment account now
+// comes from the FIO sync, which is why the bank ones went.
+var retiredEnv = []string{"BANK_IBAN", "BANK_BIC", "BANK_ACCOUNT_CZ"}
 
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -74,8 +80,6 @@ func Load() (*Config, error) {
 		KeycloakServiceAccountClientID:     getEnv("KEYCLOAK_SERVICE_ACCOUNT_CLIENT_ID", ""),
 		KeycloakServiceAccountClientSecret: getEnv("KEYCLOAK_SERVICE_ACCOUNT_CLIENT_SECRET", ""),
 		BankFIOToken:                       getEnv("BANK_FIO_TOKEN", ""),
-		BankIBAN:                           getEnv("BANK_IBAN", ""),
-		BankBIC:                            getEnv("BANK_BIC", ""),
 		SessionSecret:                      getEnv("SESSION_SECRET", ""),
 		SMTPHost:                           getEnv("SMTP_HOST", ""),
 		SMTPPort:                           getEnvInt("SMTP_PORT", 587),
@@ -86,9 +90,14 @@ func Load() (*Config, error) {
 		SMTPReplyTo:                        getEnv("SMTP_REPLY_TO", "rada@lists.base48.cz"),
 		SMTPSkipTLS:                        getEnvBool("SMTP_SKIP_TLS", false),
 		EmailEnabled:                       getEnvBool("EMAIL_ENABLED", false),
-		BankAccountCZ:                      getEnv("BANK_ACCOUNT_CZ", "2800691518/2010"),
 		RevbankAPIKey:                      getEnv("REVBANK_API_KEY", ""),
 		WebRoot:                            getEnv("WEB_ROOT", "web"),
+	}
+
+	for _, key := range retiredEnv {
+		if os.Getenv(key) != "" {
+			cfg.RetiredEnv = append(cfg.RetiredEnv, key)
+		}
 	}
 
 	// Validate required fields

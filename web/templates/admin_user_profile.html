@@ -160,6 +160,12 @@
                     <p class="mt-2 text-sm {{if lt .Balance 0.0}}text-red-600 font-medium{{else}}text-gray-600{{end}}">
                         Částka: {{printf "%.0f" .QRAmount}} Kč{{if lt .Balance 0.0}} (doplatek dluhu){{end}}
                     </p>
+                    {{with .PaymentAccount}}
+                    <p class="mt-2 text-sm text-gray-600">
+                        Číslo účtu: <span class="font-mono font-medium text-gray-900">{{.Domestic}}</span><br>
+                        IBAN: <span class="font-mono">{{.PrettyIBAN}}</span>
+                    </p>
+                    {{end}}
                 </div>
             </div>
         </div>

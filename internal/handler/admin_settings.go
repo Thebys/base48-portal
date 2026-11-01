@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
 )
@@ -118,7 +119,6 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"SMTPReachable":  smtpReachable,
 		"SMTPSkipTLS":    h.config.SMTPSkipTLS,
 		"EmailEnabled":   h.config.EmailEnabled,
-		"BankAccountCZ":  h.config.BankAccountCZ,
 		"RecentEmails":   emailViews,
 		"OutboxCounts":   countsMap,
 		"SentToday":      sentToday,
@@ -129,8 +129,20 @@ func (h *Handler) AdminSettingsHandler(w http.ResponseWriter, r *http.Request) {
 		"BarDebt":                 barDebt,
 		"BarDebtorsNow":           len(barDebtors),
 	}
+	h.addPaymentAccountView(ctx, data, time.Now())
 
 	h.render(w, "admin_settings.html", data)
+}
+
+// addPaymentAccountView adds what the settings page shows about the account
+// members pay into: the account the FIO sync last recorded and how fresh that is.
+func (h *Handler) addPaymentAccountView(ctx context.Context, data map[string]interface{}, now time.Time) {
+	acc, known := bank.Load(ctx, h.queries)
+	data["FIOConfigured"] = h.config.BankFIOToken != ""
+	data["PaymentAccount"] = acc
+	data["PaymentAccountKnown"] = known
+	data["PaymentAccountStale"] = known && acc.Stale(now)
+	data["PaymentAccountCheckedAt"] = acc.CheckedAt.Local().Format("2. 1. 2006 15:04")
 }
 
 // AdminTestEmailHandler sends test email (uses SendTemplated — bypasses outbox and EMAIL_ENABLED)
@@ -446,12 +458,21 @@ func (h *Handler) buildEmailTestData(ctx context.Context, emailType, lang, name,
 	labels := email.EmailLabels(lang)
 
 	data = map[string]interface{}{
-		"Name":          name,
-		"Username":      username,
-		"PortalURL":     h.config.BaseURL,
-		"BankAccountCZ": h.config.BankAccountCZ,
-		"Content":       content,
-		"Labels":        labels,
+		"Name":      name,
+		"Username":  username,
+		"PortalURL": h.config.BaseURL,
+		"Content":   content,
+		"Labels":    labels,
+	}
+
+	// Debt reminders carry payment details. Like the real ones, they cannot be
+	// rendered before the FIO sync has recorded the account.
+	if emailType == "negative_balance" || emailType == "debt_warning" {
+		acc, ok := bank.Load(ctx, h.queries)
+		if !ok {
+			return "", nil, bank.ErrUnknown
+		}
+		email.AddPaymentAccount(data, acc)
 	}
 
 	switch emailType {

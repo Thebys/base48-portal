@@ -17,6 +17,7 @@ import (
 
 	"github.com/base48/member-portal/internal/access"
 	"github.com/base48/member-portal/internal/auth"
+	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
@@ -34,7 +35,6 @@ type Handler struct {
 	config         *config.Config
 	serviceAccount *auth.ServiceAccountClient
 	emailClient    *email.Client
-	qrpayService   *qrpay.Service
 	webRoot        string
 	buildDate      string
 }
@@ -60,15 +60,9 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 		}
 	}
 
-	// Initialize QR payment service
-	qrService := qrpay.NewService(cfg.BankIBAN, cfg.BankBIC)
-	if !qrService.IsConfigured() {
-		fmt.Println("⚠ WARNING: BANK_IBAN not configured - QR payment codes will be unavailable")
-	}
-
-	// Initialize email client (with QR service for payment codes in emails)
+	// Initialize email client
 	// 24h delay gives admin time to review/cancel before delivery
-	emailClient := email.New(cfg, queries, qrService)
+	emailClient := email.New(cfg, queries)
 	emailClient.DefaultDelay = 24 * time.Hour
 
 	// Note: templates is set to nil, we'll parse on each request
@@ -81,10 +75,20 @@ func New(authenticator *auth.Authenticator, database *sql.DB, cfg *config.Config
 		config:         cfg,
 		serviceAccount: serviceAccount,
 		emailClient:    emailClient,
-		qrpayService:   qrService,
 		webRoot:        cfg.WebRoot,
 		buildDate:      buildDate,
 	}, nil
+}
+
+// paymentQR returns a QR generator for the account the FIO sync last recorded,
+// together with that account. ok is false until a sync has recorded one.
+// Read per request, so a new account shows up without a restart.
+func (h *Handler) paymentQR(ctx context.Context) (svc *qrpay.Service, acc bank.Account, ok bool) {
+	acc, ok = bank.Load(ctx, h.queries)
+	if !ok {
+		return nil, bank.Account{}, false
+	}
+	return qrpay.NewService(acc.IBAN, acc.BIC), acc, true
 }
 
 // getUserBalanceMap batch-fetches balances for all users in a single query.
@@ -533,8 +537,9 @@ func (h *Handler) QRPaymentHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if h.qrpayService == nil || !h.qrpayService.IsConfigured() {
-		http.Error(w, "QR payment service not configured", http.StatusServiceUnavailable)
+	qrService, _, ok := h.paymentQR(r.Context())
+	if !ok {
+		http.Error(w, "payment account not known yet (waiting for the FIO sync)", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -542,7 +547,7 @@ func (h *Handler) QRPaymentHandler(w http.ResponseWriter, r *http.Request) {
 		msg = "CLENSKY PRISPEVEK BASE48"
 	}
 
-	png, err := h.qrpayService.GeneratePaymentPNG(qrpay.GenerateParams{
+	png, err := qrService.GeneratePaymentPNG(qrpay.GenerateParams{
 		Amount:         amount,
 		VariableSymbol: vs,
 		Message:        msg,

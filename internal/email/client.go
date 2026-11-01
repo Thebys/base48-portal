@@ -19,16 +19,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
-	"github.com/base48/member-portal/internal/qrpay"
 )
 
 // Client handles email sending with templates, outbox, and logging
 type Client struct {
 	config       *config.Config
 	queries      *db.Queries
-	qrpayService *qrpay.Service
 	DefaultDelay time.Duration // If set, emails are scheduled instead of sent immediately
 
 	// alwaysSchedule parks every email in the outbox even when DefaultDelay is
@@ -47,12 +46,13 @@ type SendParams struct {
 	Data         interface{}
 }
 
-// New creates a new email client
-func New(cfg *config.Config, queries *db.Queries, qrService *qrpay.Service) *Client {
+// New creates a new email client. Payment details come from the account the
+// FIO sync recorded (package bank), read whenever an email is rendered, so
+// every process renders the same details and none can be built without them.
+func New(cfg *config.Config, queries *db.Queries) *Client {
 	return &Client{
-		config:       cfg,
-		queries:      queries,
-		qrpayService: qrService,
+		config:  cfg,
+		queries: queries,
 	}
 }
 
@@ -236,6 +236,7 @@ func EmailLabels(lang string) map[string]string {
 			"username_label":       "Username:",
 			"payment_heading":      "Payment details:",
 			"account_label":        "Account number:",
+			"iban_label":           "IBAN:",
 			"vs_label":             "Variable symbol:",
 			"payment_message_label": "Payment reference:",
 			"payment_ref_text":     "Base48 membership fee",
@@ -249,7 +250,6 @@ func EmailLabels(lang string) map[string]string {
 			"current_debt_label":   "Current debt:",
 			"monthly_fee_label":    "Monthly fee:",
 			"or_partial":           "(or at least a portion)",
-			"bank_name":            "Fio bank",
 			"vs_reminder":          "Important: Use your variable symbol (%s) so we can automatically match the payment to your account.",
 			"debt_payment_ref":     "Membership fee payment",
 			"bar_balance_label":    "Bar balance:",
@@ -263,6 +263,7 @@ func EmailLabels(lang string) map[string]string {
 		"username_label":       "Uživatelské jméno:",
 		"payment_heading":      "Platební údaje:",
 		"account_label":        "Číslo účtu:",
+		"iban_label":           "IBAN:",
 		"vs_label":             "Variabilní symbol:",
 		"payment_message_label": "Zpráva pro příjemce:",
 		"payment_ref_text":     "Členský příspěvek Base48",
@@ -276,7 +277,6 @@ func EmailLabels(lang string) map[string]string {
 		"current_debt_label":   "Aktuální dluh:",
 		"monthly_fee_label":    "Měsíční příspěvek:",
 		"or_partial":           "(nebo alespoň část)",
-		"bank_name":            "Fio banka",
 		"vs_reminder":          "Důležité: Použij svůj variabilní symbol (%s), ať můžeme platbu automaticky přiřadit k\u00a0tvému účtu.",
 		"debt_payment_ref":     "Úhrada členského příspěvku",
 		"bar_balance_label":    "Zůstatek na baru:",
@@ -711,11 +711,9 @@ func (c *Client) logEmail(ctx context.Context, params SendParams, err error) err
 
 // generateEmailQR builds a URL to the /api/qr endpoint for embedding in emails.
 // Uses max(abs(debtAmount), minAmount) so the QR is never for less than minAmount.
-// Returns empty string if QR service is not available or user has no PaymentsID.
+// Returns empty string if the user has no PaymentsID. The endpoint encodes the
+// recorded account, so callers check that one is known (see debtReminderData).
 func (c *Client) generateEmailQR(user *db.User, debtAmount float64, minAmount float64) string {
-	if c.qrpayService == nil || !c.qrpayService.IsConfigured() {
-		return ""
-	}
 	if !user.PaymentsID.Valid || user.PaymentsID.String == "" {
 		return ""
 	}
@@ -727,9 +725,6 @@ func (c *Client) generateEmailQR(user *db.User, debtAmount float64, minAmount fl
 // GenerateQRForEmail builds a URL to the /api/qr endpoint.
 // Intended for test/preview handlers that need to attach QR to template data.
 func (c *Client) GenerateQRForEmail(vs string, amount float64) string {
-	if c.qrpayService == nil || !c.qrpayService.IsConfigured() {
-		return ""
-	}
 	if vs == "" {
 		return ""
 	}
@@ -896,27 +891,39 @@ func MonthlyFee(actualAmount, levelAmount string) float64 {
 	return fee
 }
 
+// AddPaymentAccount puts the account members pay into into template data.
+func AddPaymentAccount(data map[string]interface{}, acc bank.Account) {
+	data["BankAccount"] = acc.Domestic()
+	data["BankIBAN"] = acc.PrettyIBAN()
+	data["BankBIC"] = acc.BIC
+}
+
 // debtReminderData builds the template data for a membership debt reminder.
 // The QR amount is max(abs(balance), monthlyFee) — never less than one
-// month's fee.
-func (c *Client) debtReminderData(ctx context.Context, user *db.User, tier string, balance, monthlyFee float64) map[string]interface{} {
+// month's fee. A reminder without payment details is useless, so it fails
+// with bank.ErrUnknown until the FIO sync has recorded the account.
+func (c *Client) debtReminderData(ctx context.Context, user *db.User, tier string, balance, monthlyFee float64) (map[string]interface{}, error) {
+	acc, ok := bank.Load(ctx, c.queries)
+	if !ok {
+		return nil, bank.ErrUnknown
+	}
 	lang := userLang(user)
 	data := map[string]interface{}{
-		"Name":          displayName(user),
-		"Balance":       balance,
-		"AbsBalance":    math.Abs(balance),
-		"MonthlyFee":    monthlyFee,
-		"PaymentsID":    user.PaymentsID.String,
-		"PortalURL":     c.config.BaseURL,
-		"BankAccountCZ": c.config.BankAccountCZ,
-		"Content":       c.LoadContentBlocks(ctx, tier, lang),
-		"Labels":        EmailLabels(lang),
+		"Name":       displayName(user),
+		"Balance":    balance,
+		"AbsBalance": math.Abs(balance),
+		"MonthlyFee": monthlyFee,
+		"PaymentsID": user.PaymentsID.String,
+		"PortalURL":  c.config.BaseURL,
+		"Content":    c.LoadContentBlocks(ctx, tier, lang),
+		"Labels":     EmailLabels(lang),
 	}
+	AddPaymentAccount(data, acc)
 	if qr := c.generateEmailQR(user, balance, monthlyFee); qr != "" {
 		data["PaymentQRCode"] = qr
 		data["QRAmount"] = math.Max(math.Abs(balance), monthlyFee)
 	}
-	return data
+	return data, nil
 }
 
 // SendDebtReminder queues the email for the given debt tier. The cron job and
@@ -926,7 +933,10 @@ func (c *Client) SendDebtReminder(ctx context.Context, user *db.User, tier strin
 	if tier != TierDebtWarning && tier != TierNegativeBalance {
 		return fmt.Errorf("unknown debt tier: %q", tier)
 	}
-	data := c.debtReminderData(ctx, user, tier, balance, monthlyFee)
+	data, err := c.debtReminderData(ctx, user, tier, balance, monthlyFee)
+	if err != nil {
+		return err
+	}
 	return c.QueueEmail(ctx, SendParams{
 		UserID:       sql.NullInt64{Int64: user.ID, Valid: true},
 		Recipient:    user.Email,

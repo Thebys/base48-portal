@@ -341,6 +341,14 @@ Prázdný FIO token. Buď je to záměr (test overlay), nebo chybí v `.env`.
 Přeskočí se jen stahování plateb; role dluhu i odesílání naplánovaných mailů
 běží dál.
 
+**Nastavení → Platební účet je „Neznámý" nebo „Neověřený"**
+Číslo účtu v QR kódech, upomínkách a na profilu bere portál z hlavičky FIO
+výpisu, tedy z účtu, který čte `BANK_FIO_TOKEN`. „Neznámý" znamená, že ještě
+neproběhl žádný úspěšný sync: nejsou QR kódy a upomínky na dluh se nezařadí.
+„Neověřený" znamená, že sync přes den účet nepotvrdil a portál uvádí naposledy
+ověřený. V obou případech hledej příčinu v logu cronu (`docker compose logs
+cron`). Účet se mění výměnou tokenu, změnu pak najdeš v systémovém logu.
+
 **Maily se neodesílají / `smtp dial: connection refused`**
 `SMTP_HOST` je `localhost` nebo `127.0.0.1`. Uvnitř kontejneru to je kontejner
 sám, ne host. Patří tam `host.docker.internal` (compose ho mapuje na bridge

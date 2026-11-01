@@ -42,6 +42,7 @@ cmd/
 internal/
 ├── access/     # Kdo smí co: stav členství + oprávnění
 ├── auth/       # Keycloak OIDC + Service Account
+├── bank/       # Platební účet (zaznamenaný FIO syncem)
 ├── config/     # Environment konfigurace
 ├── db/         # sqlc: queries.sql → queries.sql.go
 ├── email/      # Šablony, outbox, SMTP

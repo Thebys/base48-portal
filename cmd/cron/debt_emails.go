@@ -7,10 +7,10 @@ import (
 	"log"
 	"time"
 
+	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
-	"github.com/base48/member-portal/internal/qrpay"
 )
 
 // runDebtEmails checks all accepted members' balances and queues debt warning
@@ -24,8 +24,19 @@ import (
 //
 //	portal-cron debt-emails
 func runDebtEmails(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
-	qrService := qrpay.NewService(cfg.BankIBAN, cfg.BankBIC)
-	emailClient := email.New(cfg, queries, qrService)
+	// Every reminder would fail the same way; say it once, where an admin looks.
+	// The admin can queue them by hand once the FIO sync has run.
+	if _, ok := bank.Load(ctx, queries); !ok {
+		log.Printf("✗ Debt emails not queued: %v", bank.ErrUnknown)
+		queries.CreateLog(ctx, db.CreateLogParams{
+			Subsystem: "cron",
+			Level:     "error",
+			Message:   "Debt emails not queued: " + bank.ErrUnknown.Error(),
+		})
+		return 1
+	}
+
+	emailClient := email.New(cfg, queries)
 	emailClient.DefaultDelay = 72 * time.Hour // Queue into outbox; admin has 72h to review/cancel
 
 	log.Println("Checking member balances for debt emails...")

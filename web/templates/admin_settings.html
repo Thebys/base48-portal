@@ -9,6 +9,68 @@
         </div>
     </div>
 
+    <!-- Payment Account Section -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <details class="group" open>
+            <summary class="cursor-pointer list-none">
+                <div class="flex flex-wrap justify-between items-center gap-2 p-6 hover:bg-gray-50 transition-colors">
+                    <div>
+                        <h2 class="text-lg font-medium text-gray-900">Platební účet</h2>
+                        <p class="mt-1 text-sm text-gray-500">Účet, na který členové platí. Uvádí se v QR kódech, upomínkách a na profilu</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{if not .PaymentAccountKnown}}
+                        <span class="badge badge-danger">Neznámý</span>
+                        {{else if .PaymentAccountStale}}
+                        <span class="badge badge-warning">Neověřený</span>
+                        {{else}}
+                        <span class="badge badge-success">Ověřený</span>
+                        {{end}}
+                        <span class="text-xs text-gray-400 transition-transform duration-200 group-open:rotate-180">▼</span>
+                    </div>
+                </div>
+            </summary>
+            <div class="border-t border-gray-200 px-6 pb-6 pt-4">
+                <div class="space-y-4">
+                    {{if .PaymentAccountKnown}}
+                    <dl class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">Číslo účtu</dt>
+                            <dd class="mt-1 text-sm text-gray-900 font-mono font-bold">{{.PaymentAccount.Domestic}}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">IBAN</dt>
+                            <dd class="mt-1 text-sm text-gray-900 font-mono">{{.PaymentAccount.PrettyIBAN}}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-sm font-medium text-gray-500">BIC</dt>
+                            <dd class="mt-1 text-sm text-gray-900 font-mono">{{if .PaymentAccount.BIC}}{{.PaymentAccount.BIC}}{{else}}–{{end}}</dd>
+                        </div>
+                    </dl>
+                    <p class="text-sm text-gray-700">Naposledy ověřeno FIO syncem {{.PaymentAccountCheckedAt}}</p>
+                    {{end}}
+
+                    {{if not .PaymentAccountKnown}}
+                    <div class="rounded-md bg-red-50 p-4 text-sm text-red-700">
+                        Účet zatím není známý, zaznamená ho první úspěšný FIO sync. Do té doby se nezobrazují QR kódy a upomínky na dluh se nezařazují ani neodesílají.
+                        {{if not .FIOConfigured}}<br><strong>BANK_FIO_TOKEN není nastavený</strong>, takže sync banku vůbec nečte.{{end}}
+                    </div>
+                    {{else if .PaymentAccountStale}}
+                    <div class="rounded-md bg-yellow-50 p-4 text-sm text-yellow-800">
+                        Poslední ověření je starší než den, FIO sync nejspíš selhává. Portál dál uvádí naposledy ověřený účet. Příčinu najdeš v logu cronu.
+                        {{if not .FIOConfigured}}<br><strong>BANK_FIO_TOKEN není nastavený.</strong>{{end}}
+                    </div>
+                    {{end}}
+
+                    <p class="text-xs text-gray-500">
+                        Účet se tady nemění. Určuje ho FIO token (<code>BANK_FIO_TOKEN</code> ve vaultu): portál uvádí právě ten účet, ze kterého čte platby.
+                        Po výměně tokenu se nový účet projeví při dalším syncu a změna se zapíše do systémového logu.
+                    </p>
+                </div>
+            </div>
+        </details>
+    </div>
+
     <!-- Emergency Banner Section -->
     <div class="bg-white shadow rounded-lg mb-6">
         <details class="group" open>
@@ -299,8 +361,7 @@ SMTP_PORT=1025
 SMTP_USERNAME=
 SMTP_PASSWORD=
 SMTP_FROM=Base48 &lt;noreply@base48.cz&gt;
-EMAIL_ENABLED=true
-BANK_ACCOUNT_CZ=2800691518/2010</pre>
+EMAIL_ENABLED=true</pre>
                             </div>
                         </div>
                     </div>

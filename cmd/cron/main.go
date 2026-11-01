@@ -32,6 +32,9 @@ func main() {
 	if cfg.KeycloakReadOnly {
 		log.Printf("ℹ KEYCLOAK_READ_ONLY: Keycloak is read-only, role changes are not written")
 	}
+	if len(cfg.RetiredEnv) > 0 {
+		log.Printf("ℹ %s set but no longer used: the payment account comes from the FIO sync", strings.Join(cfg.RetiredEnv, ", "))
+	}
 
 	database, err := sql.Open("sqlite", cfg.DatabaseURL)
 	if err != nil {

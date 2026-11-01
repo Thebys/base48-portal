@@ -18,7 +18,6 @@ import (
 	"github.com/base48/member-portal/internal/auth"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/email"
-	"github.com/base48/member-portal/internal/qrpay"
 )
 
 // accessEnv is a handler on a throwaway database with a session store that
@@ -38,13 +37,12 @@ func newAccessEnv(t *testing.T) *accessEnv {
 	cfg := &config.Config{WebRoot: "../../web", BaseURL: "https://portal.base48.cz"}
 	store := auth.NewSessionStore(&config.Config{SessionSecret: "access-test-session-key"})
 	h := &Handler{
-		auth:         auth.NewWithStore(cfg, store, queries),
-		db:           database,
-		queries:      queries,
-		config:       cfg,
-		emailClient:  email.New(cfg, queries, qrpay.NewService("", "")),
-		qrpayService: qrpay.NewService("", ""),
-		webRoot:      "../../web",
+		auth:        auth.NewWithStore(cfg, store, queries),
+		db:          database,
+		queries:     queries,
+		config:      cfg,
+		emailClient: email.New(cfg, queries),
+		webRoot:     "../../web",
 	}
 
 	// Same paths as cmd/server/main.go.

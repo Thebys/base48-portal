@@ -49,6 +49,17 @@ type Transaction struct {
 type FetchResult struct {
 	Transactions   []Transaction
 	ClosingBalance float64
+	Account        AccountInfo
+}
+
+// AccountInfo is the account the token reads, as the statement header
+// describes it. The token itself says nothing about the account; this is the
+// only place the number comes from.
+type AccountInfo struct {
+	AccountID string // 2003436319
+	BankID    string // 2010
+	IBAN      string // CZ6620100000002003436319
+	BIC       string // FIOBCZPPXXX
 }
 
 // TransactionList represents the response from FIO API
@@ -233,9 +244,16 @@ func (c *Client) fetchTransactions(ctx context.Context, url string) (*FetchResul
 		transactions = append(transactions, tx)
 	}
 
+	info := result.AccountStatement.Info
 	return &FetchResult{
 		Transactions:   transactions,
-		ClosingBalance: result.AccountStatement.Info.ClosingBalance,
+		ClosingBalance: info.ClosingBalance,
+		Account: AccountInfo{
+			AccountID: info.AccountID,
+			BankID:    info.BankID,
+			IBAN:      info.IBAN,
+			BIC:       info.BIC,
+		},
 	}, nil
 }
 

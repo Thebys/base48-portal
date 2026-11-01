@@ -172,7 +172,8 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 	// Generate QR payment code if user has PaymentsID (variable symbol) and has debt
 	var paymentQRCode string
 	var qrAmount float64
-	if h.qrpayService.IsConfigured() && targetDBUser.PaymentsID.Valid && targetDBUser.PaymentsID.String != "" {
+	qrService, paymentAccount, accountKnown := h.paymentQR(ctx)
+	if accountKnown && targetDBUser.PaymentsID.Valid && targetDBUser.PaymentsID.String != "" {
 		// Generate QR for debt repayment or monthly fee
 		var qrMessage string
 
@@ -196,7 +197,7 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 		}
 
 		if qrAmount > 0 {
-			qrCode, err := h.qrpayService.GeneratePaymentQR(qrpay.GenerateParams{
+			qrCode, err := qrService.GeneratePaymentQR(qrpay.GenerateParams{
 				Amount:         qrAmount,
 				VariableSymbol: targetDBUser.PaymentsID.String,
 				Message:        qrMessage,
@@ -238,6 +239,9 @@ func (h *Handler) buildProfileData(ctx context.Context, targetDBUser *db.User, t
 		"IsAdminView":        false, // Default, will be overridden if admin view
 		"PaymentQRCode":      template.URL(paymentQRCode), // Mark as safe URL for template
 		"QRAmount":           qrAmount,
+	}
+	if accountKnown {
+		data["PaymentAccount"] = paymentAccount
 	}
 
 	// RevBank bar balance (if user has a username)

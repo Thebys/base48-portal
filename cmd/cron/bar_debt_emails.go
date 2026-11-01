@@ -29,7 +29,7 @@ func runBarDebtEmails(ctx context.Context, cfg *config.Config, queries *db.Queri
 	log.Printf("Checking bar balances (debt above %d Kč, interval %d days, delay %dh)...",
 		settings.ThresholdCZK, settings.IntervalDays, settings.DelayHours)
 
-	emailClient := email.New(cfg, queries, nil)
+	emailClient := email.New(cfg, queries)
 	res, err := emailClient.QueueBarDebtReminders(ctx, settings)
 	if err != nil {
 		log.Printf("Bar debt emails failed: %v", err)

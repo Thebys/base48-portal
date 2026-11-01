@@ -5,12 +5,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/base48/member-portal/internal/qrpay"
+	"time"
 )
 
 func TestQRPaymentRefusesWhatIsNoPayment(t *testing.T) {
-	h := &Handler{qrpayService: qrpay.NewService("CZ6620100000002003436319", "FIOBCZPPXXX")}
+	q, _ := testQueries(t)
+	recordPaymentAccount(t, q, time.Now())
+	h := &Handler{queries: q}
 	get := func(query string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		h.QRPaymentHandler(rec, httptest.NewRequest(http.MethodGet, "/api/qr?"+query, nil))

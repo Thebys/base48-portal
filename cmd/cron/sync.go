@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/base48/member-portal/internal/auth"
+	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/db"
 	"github.com/base48/member-portal/internal/email"
@@ -70,6 +71,23 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 	}
 
 	transactions := result.Transactions
+
+	// The statement says which account the token reads. That account is what
+	// members are told to pay into (QR codes, reminders, profile), so the two
+	// cannot drift apart. A header we cannot use keeps the last good account.
+	localAccount := "FIO"
+	account, err := bank.Record(ctx, queries, bank.Account{
+		IBAN:     result.Account.IBAN,
+		BIC:      result.Account.BIC,
+		Number:   result.Account.AccountID,
+		BankCode: result.Account.BankID,
+	}, time.Now())
+	if err != nil {
+		log.Printf("⚠ FIO statement header names no usable account, keeping the last one: %v", err)
+	} else {
+		localAccount = account.Domestic()
+		log.Printf("Payment account (from FIO): %s", localAccount)
+	}
 
 	// Cache FIO closing balance
 	queries.UpsertSetting(ctx, db.UpsertSettingParams{
@@ -215,7 +233,7 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 				Amount:         fmt.Sprintf("%.2f", tx.Amount),
 				Kind:           "fio",
 				KindID:         fmt.Sprintf("%d", tx.ID),
-				LocalAccount:   "FIO", // Could be parsed from API info
+				LocalAccount:   localAccount,
 				RemoteAccount:  remoteAccount,
 				Identification: variableSymbol,
 				RawData:        sql.NullString{String: string(rawDataJSON), Valid: true},
@@ -272,7 +290,7 @@ func syncFIO(ctx context.Context, cfg *config.Config, queries *db.Queries) int {
 					Amount:         fmt.Sprintf("%.2f", tx.Amount),
 					Kind:           "fio",
 					KindID:         fmt.Sprintf("%d", tx.ID),
-					LocalAccount:   "FIO",
+					LocalAccount:   localAccount,
 					RemoteAccount:  remoteAccount,
 					Identification: variableSymbol,
 					RawData:        sql.NullString{String: string(rawDataJSON), Valid: true},
@@ -486,6 +504,6 @@ func updateDebtStatus(ctx context.Context, cfg *config.Config, queries *db.Queri
 }
 
 func processScheduledEmails(ctx context.Context, cfg *config.Config, queries *db.Queries) {
-	emailClient := email.New(cfg, queries, nil)
+	emailClient := email.New(cfg, queries)
 	emailClient.ProcessPendingEmails(ctx)
 }

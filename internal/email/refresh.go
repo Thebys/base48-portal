@@ -67,7 +67,11 @@ func (c *Client) refreshDebtReminder(ctx context.Context, entry *db.EmailOutbox)
 		return false
 	}
 
-	data := c.debtReminderData(ctx, &user, tier, float64(balance), monthlyFee)
+	data, err := c.debtReminderData(ctx, &user, tier, float64(balance), monthlyFee)
+	if err != nil {
+		log.Printf("[Email] debt: holding outbox #%d: %v", entry.ID, err)
+		return false
+	}
 	c.rerender(ctx, entry, TemplateFileForTier(tier), data)
 	return true
 }

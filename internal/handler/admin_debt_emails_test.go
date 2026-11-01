@@ -13,7 +13,6 @@ import (
 
 	"github.com/base48/member-portal/internal/config"
 	"github.com/base48/member-portal/internal/email"
-	"github.com/base48/member-portal/internal/qrpay"
 )
 
 // seedMember creates an accepted member on a fee level, optionally with a
@@ -220,21 +219,22 @@ func TestDebtReminderHistoryIgnoresOtherTemplates(t *testing.T) {
 // testHandlerWithEmail wires a handler against a throwaway database and a real
 // email client pointed at the shipped templates. No SMTP host is configured, so
 // nothing leaves the machine — the reminders land in the outbox, which is
-// exactly what the manual sender is supposed to produce.
+// exactly what the manual sender is supposed to produce. The FIO sync has
+// already recorded the payment account.
 func testHandlerWithEmail(t *testing.T) (*Handler, *sql.DB) {
 	t.Helper()
 
 	queries, database := testQueries(t)
+	recordPaymentAccount(t, queries, time.Now())
 	cfg := &config.Config{
-		EmailEnabled:  true,
-		WebRoot:       "../../web",
-		BaseURL:       "https://portal.base48.cz",
-		BankAccountCZ: "2800691518/2010",
+		EmailEnabled: true,
+		WebRoot:      "../../web",
+		BaseURL:      "https://portal.base48.cz",
 	}
 	return &Handler{
 		queries:     queries,
 		config:      cfg,
-		emailClient: email.New(cfg, queries, qrpay.NewService("", "")),
+		emailClient: email.New(cfg, queries),
 	}, database
 }
 

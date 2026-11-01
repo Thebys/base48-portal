@@ -3,10 +3,12 @@ package email
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/base48/member-portal/internal/bank"
 	"github.com/base48/member-portal/internal/db"
 )
 
@@ -130,5 +132,55 @@ func TestDebtRefreshCancelsForSuspendedMember(t *testing.T) {
 	}
 	if c.refreshBeforeSend(context.Background(), &entry) {
 		t.Fatal("a suspended member must not get a fee reminder")
+	}
+}
+
+// The cron worker re-renders a reminder just before it leaves. It used to be
+// built without the QR service, so every reminder it sent lost its QR code.
+// Payment details now come from the recorded account in every process.
+func TestDebtRefreshKeepsPaymentDetails(t *testing.T) {
+	c, database := barTestClient(t)
+	user := seedDebtor(t, database, "qr", 2)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+
+	worker := New(c.config, c.queries) // what cmd/cron builds for the outbox
+	if !worker.refreshBeforeSend(context.Background(), &entry) {
+		t.Fatal("still in debt, should be sent")
+	}
+	_, _, html := outboxState(t, database, entry.ID)
+	for _, want := range []string{"/api/qr?vs=VSqr", "2003436319/2010", "CZ66 2010 0000 0020 0343 6319", "FIOBCZPPXXX"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("re-rendered reminder lacks %q", want)
+		}
+	}
+	if strings.Contains(html, "2800691518") {
+		t.Error("re-rendered reminder quotes the account that never existed")
+	}
+}
+
+// Without a recorded account a reminder can be neither queued nor sent: it
+// would tell the member to pay without saying where.
+func TestDebtReminderWaitsForPaymentAccount(t *testing.T) {
+	c, database := barTestClient(t)
+	user := seedDebtor(t, database, "early", 2)
+	entry := queueDebt(t, c, database, user, TierNegativeBalance, -2000)
+
+	if _, err := database.Exec(`DELETE FROM settings WHERE key = 'bank_account'`); err != nil {
+		t.Fatal(err)
+	}
+
+	u, err := c.queries.GetUserByID(context.Background(), user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Scheduled(0).SendDebtReminder(context.Background(), &u, TierNegativeBalance, -2000, 1000); !errors.Is(err, bank.ErrUnknown) {
+		t.Errorf("queueing without an account: err = %v, want bank.ErrUnknown", err)
+	}
+
+	if c.refreshBeforeSend(context.Background(), &entry) {
+		t.Fatal("a reminder without payment details must not be sent")
+	}
+	if status, _, _ := outboxState(t, database, entry.ID); status != "pending" {
+		t.Errorf("status = %q, want it left pending for a later pass", status)
 	}
 }
