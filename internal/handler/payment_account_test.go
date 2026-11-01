@@ -127,9 +127,7 @@ func TestSettingsShowThePaymentAccount(t *testing.T) {
 // {{with}} over a value the profile builder sets when the account is known.
 func TestProfileTemplatesParse(t *testing.T) {
 	for _, name := range []string{"profile.html", "admin_user_profile.html"} {
-		_, err := template.New("").Funcs(template.FuncMap{
-			"fmtNum": formatNumber, "fmtCZK": formatCentsAsCZK, "fmtCZKWhole": formatCentsAsWholeCZK, "initials": initials,
-		}).ParseFiles(filepath.Join("../../web/templates", "layout.html"), filepath.Join("../../web/templates", name))
+		_, err := template.New("").Funcs((&Handler{}).templateFuncs()).ParseFiles(filepath.Join("../../web/templates", "layout.html"), filepath.Join("../../web/templates", name))
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 		}

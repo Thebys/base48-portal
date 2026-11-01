@@ -37,6 +37,7 @@ type Handler struct {
 	emailClient    *email.Client
 	webRoot        string
 	buildDate      string
+	assets         assets // fingerprints for asset links
 }
 
 // New creates a new Handler instance
@@ -669,14 +670,7 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 	}
 
 	// Parse templates fresh each time to avoid name conflicts
-	funcMap := template.FuncMap{
-		"fmtNum":      formatNumber,
-		"fmtCZK":      formatCentsAsCZK,
-		"fmtCZKWhole": formatCentsAsWholeCZK,
-		"fmtKc":       formatCrowns,
-		"initials":    initials,
-	}
-	tmpl, err := template.New("").Funcs(funcMap).ParseFiles(
+	tmpl, err := template.New("").Funcs(h.templateFuncs()).ParseFiles(
 		filepath.Join(h.webRoot, "templates", "layout.html"),
 		filepath.Join(h.webRoot, "templates", name),
 	)
@@ -692,5 +686,17 @@ func (h *Handler) render(w http.ResponseWriter, name string, data interface{}) {
 	// Execute the layout template (which includes the specific page)
 	if err := tmpl.ExecuteTemplate(w, "layout.html", data); err != nil {
 		http.Error(w, fmt.Sprintf("Template execution error: %v", err), http.StatusInternalServerError)
+	}
+}
+
+// templateFuncs are the functions every page template may call.
+func (h *Handler) templateFuncs() template.FuncMap {
+	return template.FuncMap{
+		"fmtNum":      formatNumber,
+		"fmtCZK":      formatCentsAsCZK,
+		"fmtCZKWhole": formatCentsAsWholeCZK,
+		"fmtKc":       formatCrowns,
+		"initials":    initials,
+		"asset":       h.assetURL,
 	}
 }

@@ -188,6 +188,17 @@ func TestWhoGetsWhichPage(t *testing.T) {
 	}
 }
 
+func TestPagesLinkFingerprintedAssets(t *testing.T) {
+	e := newAccessEnv(t)
+	member, _ := e.user("member", "accepted", nil)
+	page := e.do(member, http.MethodGet, "/finance", "").Body.String()
+	for _, asset := range []string{"/static/css/theme.css?v=", "/static/js/nav.js?v=", "/static/js/finance-chart.js?v="} {
+		if !strings.Contains(page, asset) {
+			t.Errorf("page lacks %s", asset)
+		}
+	}
+}
+
 func TestNavigationFollowsAccess(t *testing.T) {
 	e := newAccessEnv(t)
 
